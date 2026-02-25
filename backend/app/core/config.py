@@ -18,6 +18,14 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str
 
+    @property
+    def DATABASE_URL(self) -> str:
+        """Construct PostgreSQL database URL"""
+        return (
+            f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
     class Config:
         env_file = ".env"
 

@@ -6,10 +6,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.router import api_router
+from app.db.base import Base
+from app.db.session import engine
+
+# Create database tables
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title=settings.PROJECT_NAME,
-    version=settings.VERSION,
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
     description="InvisiThreat - Intelligent DevSecOps Platform",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -19,7 +24,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=[settings.FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,7 +38,7 @@ async def root():
     """Root endpoint"""
     return {
         "message": "InvisiThreat API",
-        "version": settings.VERSION,
+        "version": settings.APP_VERSION,
         "docs": "/api/docs"
     }
 
