@@ -1,0 +1,10 @@
+"""
+Main API router
+"""
+from fastapi import APIRouter
+from app.api import health
+
+api_router = APIRouter()
+
+# Include sub-routers
+api_router.include_router(health.router, prefix="/health", tags=["health"])
