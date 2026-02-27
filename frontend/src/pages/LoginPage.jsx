@@ -55,70 +55,107 @@ export default function LoginPage() {
   return (
     <AuthLayout
       imageContent={
-        <p className="text-white text-3xl font-light leading-tight">
-          Be a Part of<br />Something <span className="font-bold">Beautiful</span>
-        </p>
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, rgba(255,107,43,0.6), transparent)' }} />
+            <span className="text-brand-orange text-xs font-semibold tracking-widest uppercase">DevSecOps</span>
+          </div>
+          <p className="text-white text-3xl font-light leading-tight mb-3">
+            Be a Part of<br />Something{' '}
+            <span className="font-bold shimmer-text">Beautiful</span>
+          </p>
+          <p className="text-white/30 text-sm leading-relaxed">
+            Intelligent threat detection for your entire pipeline.
+          </p>
+        </div>
       }
     >
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-7">
         {/* Header */}
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold text-white mb-1">Login</h1>
-          <p className="text-sm text-gray-400">Enter your credentials to access your account</p>
+        <div>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-4"
+            style={{ background: 'rgba(255,107,43,0.08)', border: '1px solid rgba(255,107,43,0.15)' }}>
+            <div className="w-1.5 h-1.5 rounded-full bg-brand-orange animate-pulse" />
+            <span className="text-brand-orange-light text-xs font-medium">Secure Access</span>
+          </div>
+          <h1 className="text-4xl font-bold text-white mb-2">Welcome back</h1>
+          <p className="text-base text-white/35">Sign in to your InvisiThreat account</p>
         </div>
 
         {/* Server error */}
         <Alert type="error" message={serverError} />
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-          <InputField
-            label="Email"
-            type="email"
-            value={form.email}
-            onChange={handleChange('email')}
-            placeholder="you@example.com"
-            error={errors.email}
-            autoComplete="email"
-            disabled={loading}
-          />
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+          <div className="animate-slide-up">
+            <InputField
+              label="Email"
+              type="email"
+              value={form.email}
+              onChange={handleChange('email')}
+              placeholder="you@example.com"
+              error={errors.email}
+              autoComplete="email"
+              disabled={loading}
+            />
+          </div>
 
-          <InputField
-            label="Password"
-            type="password"
-            value={form.password}
-            onChange={handleChange('password')}
-            placeholder="••••••••"
-            error={errors.password}
-            autoComplete="current-password"
-            disabled={loading}
-          />
+          <div className="animate-slide-up animation-delay-200">
+            <InputField
+              label="Password"
+              type="password"
+              value={form.password}
+              onChange={handleChange('password')}
+              placeholder="••••••••"
+              error={errors.password}
+              autoComplete="current-password"
+              disabled={loading}
+            />
+          </div>
 
-          {/* Remember me */}
-          <label className="flex items-center gap-2.5 cursor-pointer select-none w-fit">
-            <div
-              onClick={() => setRememberMe(!rememberMe)}
-              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors cursor-pointer
-                ${rememberMe ? 'bg-brand-yellow border-brand-yellow' : 'border-brand-border bg-transparent hover:border-gray-400'}`}
-            >
-              {rememberMe && (
-                <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-            </div>
-            <span className="text-sm text-gray-400">Remember me</span>
-          </label>
+          {/* Remember me + Forgot */}
+          <div className="flex items-center justify-between animate-slide-up animation-delay-400">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <div
+                onClick={() => setRememberMe(!rememberMe)}
+                className="w-4 h-4 rounded-md flex items-center justify-center transition-all duration-200 cursor-pointer"
+                style={{
+                  background: rememberMe ? 'linear-gradient(135deg, #FF6B2B, #E84D0E)' : 'transparent',
+                  border: rememberMe ? '1px solid #FF6B2B' : '1px solid rgba(255,255,255,0.15)',
+                  boxShadow: rememberMe ? '0 0 10px rgba(255,107,43,0.3)' : 'none',
+                }}
+              >
+                {rememberMe && (
+                  <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </div>
+              <span className="text-xs text-white/40">Remember me</span>
+            </label>
+            <button type="button" className="text-xs text-brand-orange/70 hover:text-brand-orange transition-colors">
+              Forgot password?
+            </button>
+          </div>
 
-          <Button type="submit" loading={loading}>
-            Login
-          </Button>
+          <div className="animate-slide-up animation-delay-600 mt-1">
+            <Button type="submit" loading={loading}>
+              Sign In
+            </Button>
+          </div>
         </form>
 
+        {/* Divider */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-brand-border" />
+          <span className="text-xs text-white/20">or</span>
+          <div className="flex-1 h-px bg-brand-border" />
+        </div>
+
         {/* Link to signup */}
-        <p className="text-center text-sm text-gray-500">
+        <p className="text-center text-sm text-white/30">
           Not a member?{' '}
-          <Link to="/signup" className="text-brand-yellow hover:underline font-medium">
+          <Link to="/signup" className="text-brand-orange hover:text-brand-orange-light transition-colors font-semibold">
             Create an account
           </Link>
         </p>

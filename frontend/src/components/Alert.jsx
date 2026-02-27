@@ -5,9 +5,9 @@ export default function Alert({ type = 'error', message }) {
   if (!message) return null
 
   const styles = {
-    error: 'bg-red-500/10 border border-red-500/30 text-red-400',
-    success: 'bg-green-500/10 border border-green-500/30 text-green-400',
-    info: 'bg-blue-500/10 border border-blue-500/30 text-blue-400',
+    error: 'bg-red-500/8 border border-red-500/20 text-red-400',
+    success: 'bg-brand-orange/8 border border-brand-orange/20 text-brand-orange-light',
+    info: 'bg-white/5 border border-white/10 text-white/60',
   }
 
   const icons = {

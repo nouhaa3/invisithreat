@@ -55,7 +55,7 @@ export default function SignupPage() {
     }
   }
 
-  /* Password strength indicator */
+  /* Password strength */
   const getStrength = () => {
     const p = form.password
     if (!p) return 0
@@ -68,97 +68,138 @@ export default function SignupPage() {
   }
   const strength = getStrength()
   const strengthLabel = ['', 'Weak', 'Fair', 'Good', 'Strong'][strength]
-  const strengthColors = ['', 'bg-red-500', 'bg-yellow-500', 'bg-blue-400', 'bg-green-500']
+  const strengthGradients = [
+    '',
+    'linear-gradient(90deg, #ef4444, #f87171)',
+    'linear-gradient(90deg, #f97316, #fb923c)',
+    'linear-gradient(90deg, #3b82f6, #60a5fa)',
+    'linear-gradient(90deg, #FF6B2B, #FF8C5A)',
+  ]
 
   return (
     <AuthLayout
       imageContent={
-        <p className="text-white text-3xl font-light leading-tight">
-          Join the Future of <span className="font-bold">DevSecOps</span>
-        </p>
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, rgba(255,107,43,0.6), transparent)' }} />
+            <span className="text-brand-orange text-xs font-semibold tracking-widest uppercase">Join Us</span>
+          </div>
+          <p className="text-white text-3xl font-light leading-tight mb-3">
+            Secure Your{' '}
+            <span className="font-bold shimmer-text">Pipeline</span><br />
+            from Day One
+          </p>
+          <p className="text-white/30 text-sm leading-relaxed">Detect. Protect. Deploy with confidence.</p>
+        </div>
       }
     >
       <div className="flex flex-col gap-5">
         {/* Header */}
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold text-white mb-1">Create Account</h1>
-          <p className="text-sm text-gray-400">Start securing your DevOps pipeline today</p>
+        <div>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-4"
+            style={{ background: 'rgba(255,107,43,0.08)', border: '1px solid rgba(255,107,43,0.15)' }}>
+            <div className="w-1.5 h-1.5 rounded-full bg-brand-orange animate-pulse" />
+            <span className="text-brand-orange-light text-xs font-medium">New Account</span>
+          </div>
+          <h1 className="text-4xl font-bold text-white mb-2">Create Account</h1>
+          <p className="text-base text-white/35">Start securing your DevOps pipeline today</p>
         </div>
 
         {/* Server error */}
         <Alert type="error" message={serverError} />
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-          <InputField
-            label="Full Name"
-            type="text"
-            value={form.nom}
-            onChange={handleChange('nom')}
-            placeholder="John Doe"
-            error={errors.nom}
-            autoComplete="name"
-            disabled={loading}
-          />
-
-          <InputField
-            label="Email"
-            type="email"
-            value={form.email}
-            onChange={handleChange('email')}
-            placeholder="you@example.com"
-            error={errors.email}
-            autoComplete="email"
-            disabled={loading}
-          />
-
-          <div className="flex flex-col gap-1.5">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+          <div className="animate-slide-up">
             <InputField
-              label="Password"
+              label="Full Name"
+              type="text"
+              value={form.nom}
+              onChange={handleChange('nom')}
+              placeholder="John Doe"
+              error={errors.nom}
+              autoComplete="name"
+              disabled={loading}
+            />
+          </div>
+
+          <div className="animate-slide-up animation-delay-200">
+            <InputField
+              label="Email"
+              type="email"
+              value={form.email}
+              onChange={handleChange('email')}
+              placeholder="you@example.com"
+              error={errors.email}
+              autoComplete="email"
+              disabled={loading}
+            />
+          </div>
+
+          <div className="animate-slide-up animation-delay-400">
+            <div className="flex flex-col gap-1.5">
+              <InputField
+                label="Password"
+                type="password"
+                value={form.password}
+                onChange={handleChange('password')}
+                placeholder="••••••••"
+                error={errors.password}
+                autoComplete="new-password"
+                disabled={loading}
+              />
+              {/* Strength bar */}
+              {form.password && (
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1 flex-1">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="h-1 flex-1 rounded-full transition-all duration-500"
+                        style={{
+                          background: i <= strength ? strengthGradients[strength] : 'rgba(255,255,255,0.06)',
+                          boxShadow: i <= strength && strength === 4 ? '0 0 6px rgba(255,107,43,0.5)' : 'none',
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-xs" style={{ color: strength === 4 ? '#FF8C5A' : strength === 3 ? '#60a5fa' : '#fb923c' }}>
+                    {strengthLabel}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="animate-slide-up animation-delay-600">
+            <InputField
+              label="Confirm Password"
               type="password"
-              value={form.password}
-              onChange={handleChange('password')}
+              value={form.confirmPassword}
+              onChange={handleChange('confirmPassword')}
               placeholder="••••••••"
-              error={errors.password}
+              error={errors.confirmPassword}
               autoComplete="new-password"
               disabled={loading}
             />
-            {/* Strength bar */}
-            {form.password && (
-              <div className="flex items-center gap-2 mt-1">
-                <div className="flex gap-1 flex-1">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div
-                      key={i}
-                      className={`h-1 flex-1 rounded-full transition-all duration-300 ${i <= strength ? strengthColors[strength] : 'bg-brand-border'}`}
-                    />
-                  ))}
-                </div>
-                <span className="text-xs text-gray-400">{strengthLabel}</span>
-              </div>
-            )}
           </div>
 
-          <InputField
-            label="Confirm Password"
-            type="password"
-            value={form.confirmPassword}
-            onChange={handleChange('confirmPassword')}
-            placeholder="••••••••"
-            error={errors.confirmPassword}
-            autoComplete="new-password"
-            disabled={loading}
-          />
-
-          <Button type="submit" loading={loading} className="mt-1">
-            Create Account
-          </Button>
+          <div className="animate-slide-up animation-delay-800 mt-1">
+            <Button type="submit" loading={loading}>
+              Create Account
+            </Button>
+          </div>
         </form>
 
+        {/* Divider */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-brand-border" />
+          <span className="text-xs text-white/20">or</span>
+          <div className="flex-1 h-px bg-brand-border" />
+        </div>
+
         {/* Link to login */}
-        <p className="text-center text-sm text-gray-500">
+        <p className="text-center text-sm text-white/30">
           Already have an account?{' '}
-          <Link to="/login" className="text-brand-yellow hover:underline font-medium">
+          <Link to="/login" className="text-brand-orange hover:text-brand-orange-light transition-colors font-semibold">
             Sign in
           </Link>
         </p>

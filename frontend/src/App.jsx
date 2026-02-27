@@ -6,7 +6,7 @@ import Dashboard from './pages/Dashboard'
 
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth()
-  if (isLoading) return <div className="flex items-center justify-center min-h-screen bg-brand-dark"><div className="w-8 h-8 border-2 border-brand-yellow border-t-transparent rounded-full animate-spin" /></div>
+  if (isLoading) return <div className="flex items-center justify-center min-h-screen" style={{background:'#080808'}}><div className="w-8 h-8 rounded-full animate-spin" style={{border:'2px solid rgba(255,107,43,0.2)', borderTop:'2px solid #FF6B2B'}} /></div>
   return isAuthenticated ? children : <Navigate to="/login" replace />
 }
 
