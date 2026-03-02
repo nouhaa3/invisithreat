@@ -130,15 +130,6 @@ async def get_current_active_user(
 ) -> User:
     """
     Verify that current user is active
-    
-    Args:
-        current_user: User from get_current_user dependency
-    
-    Returns:
-        Active user object
-    
-    Raises:
-        HTTPException: If user is inactive
     """
     if not current_user.is_active:
         raise HTTPException(
@@ -146,3 +137,28 @@ async def get_current_active_user(
             detail="Inactive user"
         )
     return current_user
+
+
+def require_role(*allowed_roles: str):
+    """
+    Dependency factory — restrict a route to users whose role name is in allowed_roles.
+
+    Usage:
+        @router.get("/admin-only")
+        async def admin_only(user = Depends(require_role("Admin"))):
+            ...
+    """
+    async def _check(current_user: User = Depends(get_current_user)) -> User:
+        role_name = current_user.role.name if current_user.role else None
+        if role_name not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied. Required role(s): {', '.join(allowed_roles)}",
+            )
+        return current_user
+    return _check
+
+
+# Convenience shortcuts
+require_admin = require_role("Admin")
+require_developer_or_admin = require_role("Admin", "Developer", "Security Manager")

@@ -19,12 +19,39 @@ class ScanStatus(str, enum.Enum):
     failed = "failed"
 
 
+class ProjectLanguage(str, enum.Enum):
+    python = "Python"
+    javascript = "JavaScript"
+    typescript = "TypeScript"
+    java = "Java"
+    csharp = "C#"
+    go = "Go"
+    php = "PHP"
+    ruby = "Ruby"
+    other = "Other"
+
+
+class ProjectAnalysisType(str, enum.Enum):
+    sast = "SAST"
+    secrets = "Secrets"
+    dependencies = "Dependencies"
+    full = "Full (SAST + Secrets + Dependencies)"
+
+
+class ProjectVisibility(str, enum.Enum):
+    private = "private"
+    public = "public"
+
+
 class Project(Base):
     __tablename__ = "projects"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
+    language = Column(String, nullable=True, default="Other")
+    analysis_type = Column(String, nullable=True, default="SAST")
+    visibility = Column(String, nullable=True, default="private")
     owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 

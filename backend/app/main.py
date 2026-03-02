@@ -16,6 +16,22 @@ from app.models import scan as scan_models  # noqa: F401
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# ─── Lightweight column migration (idempotent) ───────────────────────────────
+# Adds new columns to existing tables without Alembic, safe to run every boot.
+def _run_migrations():
+    from sqlalchemy import text
+    migrations = [
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS language VARCHAR DEFAULT 'Other'",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS analysis_type VARCHAR DEFAULT 'SAST'",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS visibility VARCHAR DEFAULT 'private'",
+    ]
+    with engine.connect() as conn:
+        for stmt in migrations:
+            conn.execute(text(stmt))
+        conn.commit()
+
+_run_migrations()
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,

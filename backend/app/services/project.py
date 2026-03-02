@@ -11,6 +11,9 @@ def create_project(db: Session, owner: User, data: ProjectCreate) -> Project:
         id=uuid.uuid4(),
         name=data.name,
         description=data.description,
+        language=data.language or "Other",
+        analysis_type=data.analysis_type or "SAST",
+        visibility=data.visibility or "private",
         owner_id=owner.id,
     )
     db.add(project)
@@ -36,6 +39,12 @@ def update_project(db: Session, project_id: uuid.UUID, user: User, data: Project
         project.name = data.name
     if data.description is not None:
         project.description = data.description
+    if data.language is not None:
+        project.language = data.language
+    if data.analysis_type is not None:
+        project.analysis_type = data.analysis_type
+    if data.visibility is not None:
+        project.visibility = data.visibility
     db.commit()
     db.refresh(project)
     return project
@@ -55,6 +64,9 @@ def enrich_project(db: Session, project: Project) -> dict:
         "id": project.id,
         "name": project.name,
         "description": project.description,
+        "language": project.language,
+        "analysis_type": project.analysis_type,
+        "visibility": project.visibility,
         "owner_id": project.owner_id,
         "created_at": project.created_at,
         "scan_count": len(scans),

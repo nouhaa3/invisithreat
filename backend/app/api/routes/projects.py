@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from app.db.session import get_db
-from app.core.jwt import get_current_user
+from app.core.jwt import get_current_user, require_admin
 from app.core.config import settings
 from app.models.user import User
 from app.schemas.scan import (
@@ -17,9 +17,21 @@ from app.services.project import (
 from app.services.github_scanner import run_github_scan
 import uuid, secrets
 from datetime import datetime, UTC
+from app.models.scan import Project as ProjectModel
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
+
+# ─── Admin Routes ──────────────────────────────────────────────────────────────
+
+@router.get("/admin/all", response_model=List[ProjectResponse], tags=["Admin"])
+async def admin_list_all_projects(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Admin only — list every project across all users."""
+    projects = db.query(ProjectModel).order_by(ProjectModel.created_at.desc()).all()
+    return [enrich_project(db, p) for p in projects]
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_new_project(
@@ -146,7 +158,6 @@ async def cli_upload_results(
     ).first()
     if not scan:
         raise HTTPException(status_code=401, detail="Invalid or expired upload token")
-    from datetime import datetime, UTC
     scan.results_json = payload.results_json
     scan.status = ScanStatus.completed if payload.status == "completed" else ScanStatus.failed
     scan.error_message = payload.error_message

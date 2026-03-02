@@ -82,6 +82,9 @@ export default function NewScanPage() {
   const [selectedProject, setSelectedProject] = useState(null)
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectDesc, setNewProjectDesc] = useState('')
+  const [newProjectLanguage, setNewProjectLanguage] = useState('Other')
+  const [newProjectAnalysis, setNewProjectAnalysis] = useState('SAST')
+  const [newProjectVisibility, setNewProjectVisibility] = useState('private')
   const [projectError, setProjectError] = useState('')
 
   // Step 1 - Method
@@ -133,7 +136,13 @@ export default function NewScanPage() {
     try {
       let project
       if (projectMode === 'new') {
-        project = await createProject({ name: newProjectName.trim(), description: newProjectDesc.trim() || null })
+        project = await createProject({
+            name: newProjectName.trim(),
+            description: newProjectDesc.trim() || null,
+            language: newProjectLanguage,
+            analysis_type: newProjectAnalysis,
+            visibility: newProjectVisibility,
+          })
       } else {
         project = selectedProject
       }
@@ -233,6 +242,61 @@ export default function NewScanPage() {
                         onFocus={e => { e.target.style.borderColor = 'rgba(255,107,43,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(255,107,43,0.1)' }}
                         onBlur={e => { e.target.style.borderColor = '#2a2a2a'; e.target.style.boxShadow = '' }}
                       />
+                    </div>
+                    {/* Language */}
+                    <div>
+                      <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">Language</label>
+                      <div className="flex flex-wrap gap-2">
+                        {['Python','JavaScript','TypeScript','Java','C#','Go','PHP','Ruby','Other'].map(lang => (
+                          <button key={lang} type="button"
+                            onClick={() => setNewProjectLanguage(lang)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                            style={{
+                              background: newProjectLanguage === lang ? 'rgba(255,107,43,0.12)' : 'rgba(255,255,255,0.03)',
+                              border: newProjectLanguage === lang ? '1px solid rgba(255,107,43,0.35)' : '1px solid rgba(255,255,255,0.07)',
+                              color: newProjectLanguage === lang ? '#FF8C5A' : 'rgba(255,255,255,0.35)',
+                            }}>{lang}</button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Analysis Type */}
+                    <div>
+                      <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">Analysis Type</label>
+                      <div className="flex flex-col gap-2">
+                        {[
+                          ['SAST', 'Static code analysis'],
+                          ['Secrets', 'Hardcoded credentials & tokens'],
+                          ['Dependencies', 'Vulnerable packages'],
+                          ['Full (SAST + Secrets + Dependencies)', 'Everything'],
+                        ].map(([val, desc]) => (
+                          <button key={val} type="button"
+                            onClick={() => setNewProjectAnalysis(val)}
+                            className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-left transition-all"
+                            style={{
+                              background: newProjectAnalysis === val ? 'rgba(255,107,43,0.08)' : 'rgba(255,255,255,0.02)',
+                              border: newProjectAnalysis === val ? '1px solid rgba(255,107,43,0.2)' : '1px solid rgba(255,255,255,0.05)',
+                            }}>
+                            <span className="text-sm font-medium" style={{ color: newProjectAnalysis === val ? '#FF8C5A' : 'rgba(255,255,255,0.6)' }}>{val}</span>
+                            <span className="text-xs text-white/25 ml-auto">{desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Visibility */}
+                    <div>
+                      <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">Visibility</label>
+                      <div className="flex gap-2">
+                        {[['private','Private'],['public','Public']].map(([val, lbl]) => (
+                          <button key={val} type="button"
+                            onClick={() => setNewProjectVisibility(val)}
+                            className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
+                            style={{
+                              background: newProjectVisibility === val ? 'rgba(255,107,43,0.1)' : 'rgba(255,255,255,0.03)',
+                              border: newProjectVisibility === val ? '1px solid rgba(255,107,43,0.25)' : '1px solid rgba(255,255,255,0.06)',
+                              color: newProjectVisibility === val ? '#FF8C5A' : 'rgba(255,255,255,0.35)',
+                            }}>{lbl}</button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ) : (
