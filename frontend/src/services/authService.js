@@ -18,12 +18,12 @@ export const login = async (email, password) => {
 /**
  * Register - JSON body with nom, email, password, role_name
  */
-export const register = async ({ nom, email, password }) => {
+export const register = async ({ nom, email, password, role_name = 'Developer' }) => {
   const response = await api.post('/api/auth/register', {
     nom,
     email,
     password,
-    role_name: 'Viewer',
+    role_name,
   })
   return response.data
 }

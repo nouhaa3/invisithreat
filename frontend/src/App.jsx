@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import Dashboard from './pages/Dashboard'
+import NewScanPage from './pages/NewScanPage'
+import ProjectDetail from './pages/ProjectDetail'
 
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth()
@@ -25,6 +27,8 @@ export default function App() {
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
           <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+          <Route path="/scans/new" element={<PrivateRoute><NewScanPage /></PrivateRoute>} />
+          <Route path="/projects/:id" element={<PrivateRoute><ProjectDetail /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>

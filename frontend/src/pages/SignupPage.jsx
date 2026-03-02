@@ -11,7 +11,7 @@ export default function SignupPage() {
   const navigate = useNavigate()
   const { loginSuccess } = useAuth()
 
-  const [form, setForm] = useState({ nom: '', email: '', password: '', confirmPassword: '' })
+  const [form, setForm] = useState({ nom: '', email: '', password: '', confirmPassword: '', role_name: 'Developer' })
   const [errors, setErrors] = useState({})
   const [serverError, setServerError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -42,7 +42,7 @@ export default function SignupPage() {
     setLoading(true)
     setServerError('')
     try {
-      const data = await register({ nom: form.nom, email: form.email, password: form.password })
+      const data = await register({ nom: form.nom, email: form.email, password: form.password, role_name: form.role_name })
       loginSuccess(data)
       navigate('/dashboard')
     } catch (err) {
@@ -180,6 +180,34 @@ export default function SignupPage() {
               autoComplete="new-password"
               disabled={loading}
             />
+          </div>
+
+          {/* Role */}
+          <div className="animate-slide-up animation-delay-700">
+            <label className="block text-xs font-medium text-white/50 mb-2 uppercase tracking-widest">Role</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: 'Developer',        label: 'Developer',         desc: 'Create & scan projects' },
+                { value: 'Security Manager', label: 'Security Manager',  desc: 'Review all findings' },
+                { value: 'Viewer',           label: 'Viewer',            desc: 'Read-only access' },
+                { value: 'Admin',            label: 'Admin',             desc: 'Full platform access' },
+              ].map(({ value, label, desc }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setForm(p => ({ ...p, role_name: value }))}
+                  disabled={loading}
+                  className="flex flex-col items-start px-3 py-2.5 rounded-xl text-left transition-all"
+                  style={{
+                    background: form.role_name === value ? 'rgba(255,107,43,0.08)' : 'rgba(255,255,255,0.02)',
+                    border: form.role_name === value ? '1px solid rgba(255,107,43,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                  }}
+                >
+                  <span className="text-xs font-semibold" style={{ color: form.role_name === value ? '#FF8C5A' : 'rgba(255,255,255,0.5)' }}>{label}</span>
+                  <span className="text-[10px] text-white/25 mt-0.5">{desc}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="animate-slide-up animation-delay-800 mt-1">

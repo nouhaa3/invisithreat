@@ -19,3 +19,4 @@ class User(Base):
 
     role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id"))
     role = relationship("Role", back_populates="users")
+    projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
