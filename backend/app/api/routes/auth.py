@@ -6,14 +6,20 @@ from typing import List
 from datetime import timedelta
 from app.db.session import get_db
 from app.schemas.auth import LoginResponse, Token, RefreshTokenRequest
-from app.schemas.user import UserCreate, UserWithRole, RoleUpdateRequest, UserProfileUpdateRequest, UserAdminResponse
+from app.schemas.user import UserCreate, UserWithRole, RoleUpdateRequest, UserProfileUpdateRequest, UserAdminResponse, ForgotPasswordRequest, VerifyResetCodeRequest, ResetPasswordRequest
 from app.services.auth import authenticate_user, register_user, get_user_with_role
 from app.core.jwt import create_access_token, create_refresh_token, decode_token, get_current_user, require_admin, create_action_token, decode_action_token
 from app.core.config import settings
-from app.core.email import notify_admin_new_request, notify_user_approved, notify_user_rejected
+from app.core.email import notify_admin_new_request, notify_user_approved, notify_user_rejected, notify_admin_reset_code
 from app.models.user import User
 from app.models.role import Role
 import uuid as _uuid
+import random
+import string
+from datetime import datetime, UTC, timedelta
+from passlib.context import CryptContext as _CryptContext
+
+_pwd_ctx = _CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -170,8 +176,71 @@ async def get_current_user_info(
     return UserWithRole(**user_with_role)
 
 
-# ─── Public one-click admin action links (embedded in emails) ────────────────
+# ─── Forgot password flow ────────────────────────────────────────────────────
 
+@router.post("/forgot-password", tags=["Authentication"])
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """Step 1 — request a reset code. A 6-digit code is emailed to the admin who relays it."""
+    user = db.query(User).filter(User.email == payload.email).first()
+    # Always return the same response to not leak whether the email exists
+    if not user or not user.is_active:
+        return {"message": "If this email is registered and active, the administrator has been notified."}
+    code = ''.join(random.choices(string.digits, k=6))
+    user.reset_code = code
+    user.reset_code_expires = datetime.now(UTC) + timedelta(minutes=30)
+    db.commit()
+    notify_admin_reset_code(user.nom, user.email, code)
+    return {"message": "If this email is registered and active, the administrator has been notified."}
+
+
+@router.post("/verify-reset-code", tags=["Authentication"])
+async def verify_reset_code(
+    payload: VerifyResetCodeRequest,
+    db: Session = Depends(get_db),
+):
+    """Step 2 — verify the 6-digit code and get a short-lived reset token."""
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user or not user.reset_code or not user.reset_code_expires:
+        raise HTTPException(status_code=400, detail="Invalid code or request expired")
+    if datetime.now(UTC) > user.reset_code_expires.replace(tzinfo=UTC):
+        raise HTTPException(status_code=400, detail="Code has expired. Please request a new one.")
+    if payload.code != user.reset_code:
+        raise HTTPException(status_code=400, detail="Incorrect code")
+    # Issue a short-lived reset token (10 min)
+    reset_token = create_action_token(str(user.id), "reset_password", expires_days=0)
+    # We override with a 10-minute token using timedelta directly
+    from jose import jwt as _jose_jwt
+    reset_token = _jose_jwt.encode(
+        {"sub": str(user.id), "type": "admin_action", "action": "reset_password",
+         "exp": datetime.now(UTC) + timedelta(minutes=10)},
+        settings.SECRET_KEY, algorithm="HS256"
+    )
+    # Invalidate the code immediately
+    user.reset_code = None
+    user.reset_code_expires = None
+    db.commit()
+    return {"reset_token": reset_token}
+
+
+@router.post("/reset-password", tags=["Authentication"])
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """Step 3 — set a new password using the reset token."""
+    user_id = decode_action_token(payload.reset_token, "reset_password")
+    user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.hashed_password = _pwd_ctx.hash(payload.new_password)
+    db.commit()
+    return {"message": "Password updated successfully"}
+
+
+# ─── Public one-click admin action links (embedded in emails) ────────────────
 def _html_page(title: str, icon: str, heading: str, body: str, color: str) -> str:
     return f"""<!DOCTYPE html>
 <html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>

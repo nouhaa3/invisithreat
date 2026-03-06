@@ -27,6 +27,8 @@ def _run_migrations():
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_pending BOOLEAN NOT NULL DEFAULT FALSE",
         # Users that existed before is_pending was introduced should not be treated as pending
         "UPDATE users SET is_pending = FALSE WHERE is_pending = TRUE AND date_creation < NOW() - INTERVAL '2 minutes'",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code VARCHAR",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code_expires TIMESTAMP",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

@@ -137,7 +137,7 @@ export default function LoginPage() {
               </div>
               <span className="text-xs text-white/40">Remember me</span>
             </label>
-            <button type="button" className="text-xs text-brand-orange/70 hover:text-brand-orange transition-colors">
+            <button type="button" onClick={() => navigate('/forgot-password')} className="text-xs text-brand-orange/70 hover:text-brand-orange transition-colors">
               Forgot password?
             </button>
           </div>

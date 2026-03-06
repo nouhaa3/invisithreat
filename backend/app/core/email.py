@@ -207,3 +207,49 @@ def notify_user_rejected(nom: str, email: str) -> bool:
         f"Please contact your organisation's admin for more information."
     )
     return _send(email, subject, html, plain)
+
+
+def notify_admin_reset_code(nom: str, email: str, code: str) -> bool:
+    """Send the 6-digit password reset code directly to the user."""
+    subject = "[InvisiThreat] Your password reset code"
+
+    html = f"""
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#080808;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 20px;">
+      <table width="560" style="background:#111111;border-radius:16px;border:1px solid rgba(255,255,255,0.06);overflow:hidden;">
+        <tr><td style="background:linear-gradient(135deg,#0a0015,#111);padding:32px 36px;border-bottom:1px solid rgba(139,92,246,0.2);">
+          <span style="font-size:22px;font-weight:700;color:#FF8C5A;">InvisiThreat</span>
+          <span style="font-size:12px;color:rgba(255,255,255,0.3);margin-left:12px;">Password Reset</span>
+        </td></tr>
+        <tr><td style="padding:36px;">
+          <h2 style="color:#fff;font-size:22px;margin:0 0 12px;">Hi {nom},</h2>
+          <p style="color:rgba(255,255,255,0.4);font-size:14px;line-height:1.7;margin:0 0 24px;">
+            We received a request to reset your InvisiThreat password.<br>
+            Use the code below to continue. It expires in <strong style="color:#fff;">30 minutes</strong>.
+          </p>
+          <div style="text-align:center;margin:24px 0;">
+            <span style="display:inline-block;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);border-radius:14px;padding:18px 40px;font-size:36px;font-weight:800;letter-spacing:10px;color:#a78bfa;">{code}</span>
+          </div>
+          <p style="color:rgba(255,255,255,0.25);font-size:12px;text-align:center;margin:0;">
+            If you didn't request this, you can safely ignore this email.
+          </p>
+        </td></tr>
+        <tr><td style="padding:20px 36px;border-top:1px solid rgba(255,255,255,0.05);">
+          <p style="color:rgba(255,255,255,0.2);font-size:12px;margin:0;text-align:center;">InvisiThreat · DevSecOps Platform</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+    plain = (
+        f"Hi {nom},\n\n"
+        f"Your InvisiThreat password reset code is: {code}\n\n"
+        f"This code expires in 30 minutes.\n"
+        f"If you didn't request this, ignore this email."
+    )
+    return _send(email, subject, html, plain)

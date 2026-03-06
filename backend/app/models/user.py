@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime, UTC
@@ -17,6 +17,8 @@ class User(Base):
     date_creation = Column(DateTime, default=lambda: datetime.now(UTC))
     is_active = Column(Boolean, default=False)   # activated by admin
     is_pending = Column(Boolean, default=True)    # waiting for admin approval
+    reset_code = Column(String, nullable=True)
+    reset_code_expires = Column(DateTime, nullable=True)
 
     role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id"))
     role = relationship("Role", back_populates="users")

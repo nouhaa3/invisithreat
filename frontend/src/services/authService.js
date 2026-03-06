@@ -65,3 +65,27 @@ export const getStoredUser = () => {
     return null
   }
 }
+
+/**
+ * Step 1 — request a reset code (admin will receive it by email)
+ */
+export const forgotPassword = async (email) => {
+  const response = await api.post('/api/auth/forgot-password', { email })
+  return response.data
+}
+
+/**
+ * Step 2 — verify the 6-digit code; returns { reset_token }
+ */
+export const verifyResetCode = async (email, code) => {
+  const response = await api.post('/api/auth/verify-reset-code', { email, code })
+  return response.data
+}
+
+/**
+ * Step 3 — set a new password using the reset token
+ */
+export const resetPassword = async (reset_token, new_password) => {
+  const response = await api.post('/api/auth/reset-password', { reset_token, new_password })
+  return response.data
+}
