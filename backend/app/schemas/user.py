@@ -35,6 +35,7 @@ class UserResponse(BaseModel):
     profile_picture: Optional[str] = None
     date_creation: datetime
     is_active: bool
+    is_pending: bool = True
     role_id: uuid.UUID
     
     model_config = ConfigDict(from_attributes=True)
@@ -44,3 +45,19 @@ class UserWithRole(UserResponse):
     """User response with role information"""
     role_name: str
     role_description: Optional[str] = None
+
+
+class RoleUpdateRequest(BaseModel):
+    """Payload to change a user's role (admin only)"""
+    role_name: str
+
+
+class UserProfileUpdateRequest(BaseModel):
+    """Payload to update a user's name or email (admin only)"""
+    nom: Optional[str] = Field(None, min_length=2, max_length=100)
+    email: Optional[EmailStr] = None
+
+
+class UserAdminResponse(UserWithRole):
+    """Extended user info for admin views"""
+    pass

@@ -24,6 +24,9 @@ def _run_migrations():
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS language VARCHAR DEFAULT 'Other'",
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS analysis_type VARCHAR DEFAULT 'SAST'",
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS visibility VARCHAR DEFAULT 'private'",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_pending BOOLEAN NOT NULL DEFAULT FALSE",
+        # Users that existed before is_pending was introduced should not be treated as pending
+        "UPDATE users SET is_pending = FALSE WHERE is_pending = TRUE AND date_creation < NOW() - INTERVAL '2 minutes'",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

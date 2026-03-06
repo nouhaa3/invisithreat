@@ -1,0 +1,209 @@
+﻿"""
+Email notification service — Gmail SMTP
+Uses Python built-in smtplib, no extra packages needed.
+"""
+import smtplib
+import logging
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+def _send(to: str, subject: str, html: str, text: str) -> bool:
+    """Low-level send — returns True on success, False on failure (never raises)."""
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        logger.warning("SMTP not configured — skipping email to %s", to)
+        return False
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"InvisiThreat <{settings.SMTP_USER}>"
+        msg["To"] = to
+        msg.attach(MIMEText(text, "plain", "utf-8"))
+        msg.attach(MIMEText(html, "html", "utf-8"))
+
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(settings.SMTP_USER, to, msg.as_string())
+        logger.info("Email sent to %s — %s", to, subject)
+        return True
+    except Exception as exc:
+        logger.error("Failed to send email to %s: %s", to, exc)
+        return False
+
+
+# ─── Templates ───────────────────────────────────────────────────────────────
+
+def notify_admin_new_request(nom: str, email: str, role_name: str, approve_token: str, reject_token: str) -> bool:
+    """Notify the admin that a new user is waiting for approval, with one-click approve/reject buttons."""
+    if not settings.ADMIN_EMAIL:
+        logger.warning("ADMIN_EMAIL not set — skipping admin notification")
+        return False
+
+    approve_url = f"{settings.BACKEND_URL}/api/auth/action/approve/{approve_token}"
+    reject_url  = f"{settings.BACKEND_URL}/api/auth/action/reject/{reject_token}"
+
+    subject = f"[InvisiThreat] New account request from {nom}"
+
+    html = f"""
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#080808;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 20px;">
+      <table width="560" style="background:#111111;border-radius:16px;border:1px solid rgba(255,255,255,0.06);overflow:hidden;">
+        <!-- Header -->
+        <tr><td style="background:linear-gradient(135deg,#1a0a00,#111);padding:32px 36px;border-bottom:1px solid rgba(255,107,43,0.15);">
+          <span style="font-size:22px;font-weight:700;color:#FF8C5A;">InvisiThreat</span>
+          <span style="font-size:12px;color:rgba(255,255,255,0.3);margin-left:12px;">Admin Notification</span>
+        </td></tr>
+        <!-- Body -->
+        <tr><td style="padding:36px;">
+          <p style="color:rgba(255,255,255,0.5);font-size:14px;margin:0 0 8px;">New account request</p>
+          <h2 style="color:#fff;font-size:24px;margin:0 0 24px;">Someone wants to join</h2>
+          <table width="100%" style="background:rgba(255,107,43,0.06);border:1px solid rgba(255,107,43,0.15);border-radius:12px;margin-bottom:28px;">
+            <tr><td style="padding:20px 24px;">
+              <table>
+                <tr>
+                  <td style="padding:4px 0;color:rgba(255,255,255,0.35);font-size:13px;width:80px;">Name</td>
+                  <td style="padding:4px 0;color:#fff;font-size:13px;font-weight:600;">{nom}</td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0;color:rgba(255,255,255,0.35);font-size:13px;">Email</td>
+                  <td style="padding:4px 0;color:#FF8C5A;font-size:13px;">{email}</td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0;color:rgba(255,255,255,0.35);font-size:13px;">Role</td>
+                  <td style="padding:4px 0;color:#a78bfa;font-size:13px;font-weight:600;">{role_name}</td>
+                </tr>
+              </table>
+            </td></tr>
+          </table>
+
+          <!-- One-click action buttons -->
+          <p style="color:rgba(255,255,255,0.4);font-size:13px;margin:0 0 16px;">Click a button to decide — no login required:</p>
+          <table cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="padding-right:12px;">
+                <a href="{approve_url}"
+                   style="display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-weight:700;font-size:14px;text-decoration:none;padding:13px 28px;border-radius:10px;">
+                  ✓ Approve
+                </a>
+              </td>
+              <td>
+                <a href="{reject_url}"
+                   style="display:inline-block;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);color:#f87171;font-weight:700;font-size:14px;text-decoration:none;padding:12px 28px;border-radius:10px;">
+                  ✕ Reject
+                </a>
+              </td>
+            </tr>
+          </table>
+          <p style="color:rgba(255,255,255,0.2);font-size:11px;margin-top:16px;">Links expire in 7 days.</p>
+        </td></tr>
+        <!-- Footer -->
+        <tr><td style="padding:20px 36px;border-top:1px solid rgba(255,255,255,0.05);">
+          <p style="color:rgba(255,255,255,0.2);font-size:12px;margin:0;">InvisiThreat · DevSecOps Platform</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+    plain = (
+        f"New account request on InvisiThreat\n\n"
+        f"Name:  {nom}\nEmail: {email}\nRole:  {role_name}\n\n"
+        f"APPROVE: {approve_url}\n\n"
+        f"REJECT:  {reject_url}\n\n"
+        f"Links expire in 7 days."
+    )
+    return _send(settings.ADMIN_EMAIL, subject, html, plain)
+
+
+def notify_user_approved(nom: str, email: str) -> bool:
+    """Tell the user their request was approved."""
+    subject = "[InvisiThreat] Your account has been approved! 🎉"
+    login_url = f"{settings.FRONTEND_URL}/login"
+
+    html = f"""
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#080808;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 20px;">
+      <table width="560" style="background:#111111;border-radius:16px;border:1px solid rgba(255,255,255,0.06);overflow:hidden;">
+        <tr><td style="background:linear-gradient(135deg,#001a0d,#111);padding:32px 36px;border-bottom:1px solid rgba(34,197,94,0.15);">
+          <span style="font-size:22px;font-weight:700;color:#4ade80;">InvisiThreat</span>
+        </td></tr>
+        <tr><td style="padding:40px 36px;text-align:center;">
+          <div style="width:56px;height:56px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);border-radius:50%;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:26px;">✓</div>
+          <h2 style="color:#fff;font-size:26px;margin:0 0 12px;">You're in, {nom}!</h2>
+          <p style="color:rgba(255,255,255,0.4);font-size:14px;line-height:1.6;margin:0 0 32px;">
+            Your InvisiThreat account has been approved by the administrator.<br>
+            You can now sign in and start securing your pipelines.
+          </p>
+          <a href="{login_url}" style="display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-weight:700;font-size:14px;text-decoration:none;padding:13px 32px;border-radius:10px;">
+            Sign In Now →
+          </a>
+        </td></tr>
+        <tr><td style="padding:20px 36px;border-top:1px solid rgba(255,255,255,0.05);">
+          <p style="color:rgba(255,255,255,0.2);font-size:12px;margin:0;text-align:center;">InvisiThreat · DevSecOps Platform</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+    plain = (
+        f"Hello {nom},\n\n"
+        f"Your InvisiThreat account has been approved.\n"
+        f"You can now log in at: {login_url}\n\n"
+        f"Welcome aboard!"
+    )
+    return _send(email, subject, html, plain)
+
+
+def notify_user_rejected(nom: str, email: str) -> bool:
+    """Tell the user their request was rejected."""
+    subject = "[InvisiThreat] Your account request was not approved"
+
+    html = f"""
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#080808;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 20px;">
+      <table width="560" style="background:#111111;border-radius:16px;border:1px solid rgba(255,255,255,0.06);overflow:hidden;">
+        <tr><td style="background:linear-gradient(135deg,#1a0000,#111);padding:32px 36px;border-bottom:1px solid rgba(239,68,68,0.15);">
+          <span style="font-size:22px;font-weight:700;color:#f87171;">InvisiThreat</span>
+        </td></tr>
+        <tr><td style="padding:40px 36px;text-align:center;">
+          <h2 style="color:#fff;font-size:24px;margin:0 0 16px;">Hello {nom},</h2>
+          <p style="color:rgba(255,255,255,0.4);font-size:14px;line-height:1.7;margin:0 0 20px;">
+            Unfortunately, your request to join <strong style="color:#fff;">InvisiThreat</strong> was not approved<br>
+            by the administrator at this time.
+          </p>
+          <p style="color:rgba(255,255,255,0.3);font-size:13px;margin:0;">
+            If you believe this is a mistake, please contact your organisation's security admin.
+          </p>
+        </td></tr>
+        <tr><td style="padding:20px 36px;border-top:1px solid rgba(255,255,255,0.05);">
+          <p style="color:rgba(255,255,255,0.2);font-size:12px;margin:0;text-align:center;">InvisiThreat · DevSecOps Platform</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+    plain = (
+        f"Hello {nom},\n\n"
+        f"Unfortunately, your request to join InvisiThreat was not approved.\n"
+        f"Please contact your organisation's admin for more information."
+    )
+    return _send(email, subject, html, plain)

@@ -39,9 +39,14 @@ def authenticate_user(db: Session, email: str, password: str) -> User:
         )
     
     if not user.is_active:
+        if getattr(user, 'is_pending', False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="PENDING_APPROVAL"
+            )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive"
+            detail="Your account has been deactivated. Please contact the administrator."
         )
     
     return user
@@ -77,14 +82,15 @@ def register_user(db: Session, user_data: UserCreate) -> User:
             detail=f"Role '{user_data.role_name}' not found"
         )
     
-    # Create new user
+    # Create new user — inactive and pending until admin approves
     new_user = User(
         id=uuid.uuid4(),
         nom=user_data.nom,
         email=user_data.email,
         hashed_password=hash_password(user_data.password),
         role_id=role.id,
-        is_active=True
+        is_active=False,
+        is_pending=True
     )
     
     db.add(new_user)
@@ -114,6 +120,7 @@ def get_user_with_role(db: Session, user: User) -> dict:
         "profile_picture": user.profile_picture,
         "date_creation": user.date_creation,
         "is_active": user.is_active,
+        "is_pending": user.is_pending if user.is_pending is not None else False,
         "role_id": user.role_id,
         "role_name": role.name if role else None,
         "role_description": role.description if role else None

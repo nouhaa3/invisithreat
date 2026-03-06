@@ -44,9 +44,13 @@ export default function LoginPage() {
       navigate('/dashboard')
     } catch (err) {
       const detail = err.response?.data?.detail
-      setServerError(
-        typeof detail === 'string' ? detail : 'Invalid email or password. Please try again.'
-      )
+      if (detail === 'PENDING_APPROVAL') {
+        setServerError('Your account is pending administrator approval. You will receive an email once it is reviewed.')
+      } else {
+        setServerError(
+          typeof detail === 'string' ? detail : 'Invalid email or password. Please try again.'
+        )
+      }
     } finally {
       setLoading(false)
     }

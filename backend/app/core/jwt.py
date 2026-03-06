@@ -54,6 +54,35 @@ def create_refresh_token(data: dict) -> str:
     return encoded_jwt
 
 
+def create_action_token(user_id: str, action: str, expires_days: int = 7) -> str:
+    """
+    Create a short-lived signed token for one-click admin actions (approve / reject).
+    action must be 'approve' or 'reject'.
+    """
+    expire = datetime.now(UTC) + timedelta(days=expires_days)
+    payload = {"sub": user_id, "action": action, "type": "admin_action", "exp": expire}
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def decode_action_token(token: str, expected_action: str) -> str:
+    """
+    Decode and validate an admin action token.
+    Returns the user_id (sub) on success, raises HTTPException otherwise.
+    """
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid or expired link.")
+    if payload.get("type") != "admin_action":
+        raise HTTPException(status_code=400, detail="Invalid token type.")
+    if payload.get("action") != expected_action:
+        raise HTTPException(status_code=400, detail="Action mismatch.")
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid token payload.")
+    return user_id
+
+
 def decode_token(token: str) -> dict:
     """
     Decode and validate JWT token

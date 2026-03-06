@@ -15,7 +15,8 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     profile_picture = Column(String, nullable=True)
     date_creation = Column(DateTime, default=lambda: datetime.now(UTC))
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=False)   # activated by admin
+    is_pending = Column(Boolean, default=True)    # waiting for admin approval
 
     role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id"))
     role = relationship("Role", back_populates="users")

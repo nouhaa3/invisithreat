@@ -18,6 +18,14 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int
 
     FRONTEND_URL: str
+    BACKEND_URL: str = "http://localhost:8000"
+
+    # Email (Gmail SMTP)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""      # Gmail App Password
+    ADMIN_EMAIL: str = ""         # admin's Gmail address to receive notifications
 
     @property
     def DATABASE_URL(self) -> str:

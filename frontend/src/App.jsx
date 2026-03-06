@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import NewScanPage from './pages/NewScanPage'
 import ProjectDetail from './pages/ProjectDetail'
 import EditProjectPage from './pages/EditProjectPage'
+import AdminPage from './pages/AdminPage'
 
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth()
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/scans/new" element={<PrivateRoute><NewScanPage /></PrivateRoute>} />
           <Route path="/projects/:id" element={<PrivateRoute><ProjectDetail /></PrivateRoute>} />
           <Route path="/projects/:id/edit" element={<PrivateRoute><EditProjectPage /></PrivateRoute>} />
+          <Route path="/admin" element={<PrivateRoute><AdminPage /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
