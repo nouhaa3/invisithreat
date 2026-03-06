@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.db.session import get_db
 from app.core.jwt import get_current_user, require_admin
+from app.core.permissions import require_permission, P
 from app.core.config import settings
 from app.models.user import User
 from app.schemas.scan import (
@@ -37,7 +38,7 @@ async def admin_list_all_projects(
 async def create_new_project(
     data: ProjectCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(P.MANAGE_OWN_PROJECTS)),
 ):
     project = create_project(db, current_user, data)
     return enrich_project(db, project)
@@ -46,7 +47,7 @@ async def create_new_project(
 @router.get("", response_model=List[ProjectResponse])
 async def list_projects(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(P.VIEW_SCAN_RESULTS)),
 ):
     projects = get_projects_for_user(db, current_user)
     return [enrich_project(db, p) for p in projects]
@@ -56,7 +57,7 @@ async def list_projects(
 async def get_one_project(
     project_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(P.VIEW_SCAN_RESULTS)),
 ):
     project = get_project(db, project_id, current_user)
     return enrich_project(db, project)
@@ -67,7 +68,7 @@ async def update_one_project(
     project_id: uuid.UUID,
     data: ProjectUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(P.MANAGE_OWN_PROJECTS)),
 ):
     project = update_project(db, project_id, current_user, data)
     return enrich_project(db, project)
@@ -77,7 +78,7 @@ async def update_one_project(
 async def delete_one_project(
     project_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(P.MANAGE_OWN_PROJECTS)),
 ):
     delete_project(db, project_id, current_user)
 
@@ -90,7 +91,7 @@ async def create_new_scan(
     data: ScanCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(P.RUN_SCAN)),
 ):
     project = get_project(db, project_id, current_user)
     if data.method not in ("cli", "github"):
@@ -115,7 +116,7 @@ async def create_new_scan(
 async def list_project_scans(
     project_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(P.VIEW_SCAN_RESULTS)),
 ):
     get_project(db, project_id, current_user)  # verify ownership
     return get_scans_for_project(db, project_id)
@@ -126,7 +127,7 @@ async def get_cli_upload_token(
     project_id: uuid.UUID,
     scan_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission(P.RUN_SCAN)),
 ):
     """
     Issue a one-time upload token for the CLI to send results back.

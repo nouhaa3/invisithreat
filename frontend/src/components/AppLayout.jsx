@@ -1,10 +1,12 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import usePermissions from '../hooks/usePermissions'
 
-const navItems = [
+const NAV_ITEMS = [
   {
     to: '/dashboard',
     label: 'Dashboard',
+    permission: 'view_dashboard',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
         <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -17,6 +19,7 @@ const navItems = [
   {
     to: '/scans/new',
     label: 'New Scan',
+    permission: 'run_scan',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
         <circle cx="11" cy="11" r="8" />
@@ -29,6 +32,7 @@ const navItems = [
 
 export default function AppLayout({ children }) {
   const { user, logout } = useAuth()
+  const { can: check, canManageUsers } = usePermissions()
   const navigate = useNavigate()
 
   const handleLogout = () => {
@@ -42,6 +46,8 @@ export default function AppLayout({ children }) {
     'Security Manager': '#a78bfa',
     Viewer: '#6b7280',
   }[user?.role_name] || '#6b7280'
+
+  const visibleNavItems = NAV_ITEMS.filter(item => check(item.permission))
 
   return (
     <div className="h-screen flex overflow-hidden" style={{ background: '#080808' }}>
@@ -66,7 +72,7 @@ export default function AppLayout({ children }) {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
-          {navItems.map(({ to, label, icon }) => (
+          {visibleNavItems.map(({ to, label, icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -96,8 +102,8 @@ export default function AppLayout({ children }) {
           {/* Divider */}
           <div className="my-2" style={{ height: '1px', background: 'rgba(255,255,255,0.04)' }} />
 
-          {/* Admin panel — only visible to Admin */}
-          {user?.role_name === 'Admin' && (
+          {/* Admin panel — only visible to users with MANAGE_USERS */}
+          {canManageUsers && (
             <NavLink
               to="/admin"
               className={({ isActive }) =>
