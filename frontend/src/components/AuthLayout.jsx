@@ -1,3 +1,5 @@
+import logo from '../assets/logo_invisithreat.png'
+
 /**
  * AuthLayout - WOW split layout with animated orange orbs + glassmorphism
  */
@@ -44,20 +46,12 @@ export default function AuthLayout({ children, imageContent }) {
 
           {/* Logo */}
           <div className="absolute top-7 left-7 z-10">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm"
-                style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 0 20px rgba(255,107,43,0.5)' }}>
-                IT
-              </div>
-              <span className="text-white/70 font-medium text-sm tracking-wide">InvisiThreat</span>
-            </div>
+            <img src={logo} alt="InvisiThreat" className="h-[50px] w-auto object-contain" />
           </div>
 
-          {/* Shield icon center */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 opacity-10">
-            <svg width="180" height="180" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth="0.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-            </svg>
+          {/* Logo center watermark */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+            <img src={logo} alt="" className="w-48 h-auto object-contain opacity-20" />
           </div>
 
           {/* Bottom text */}

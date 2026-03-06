@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import usePermissions from '../hooks/usePermissions'
+import logo from '../assets/logo_invisithreat.png'
 
 const NAV_ITEMS = [
   {
@@ -60,14 +61,8 @@ export default function AppLayout({ children }) {
         }}
       >
         {/* Logo */}
-        <div className="px-6 py-5 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 0 16px rgba(255,107,43,0.35)' }}
-          >
-            IT
-          </div>
-          <span className="text-white font-semibold text-base tracking-tight">InvisiThreat</span>
+        <div className="px-5 py-4 flex items-center" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+          <img src={logo} alt="InvisiThreat" className="h-[70px] w-auto object-contain" />
         </div>
 
         {/* Navigation */}
