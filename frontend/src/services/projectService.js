@@ -1,5 +1,12 @@
 import api from './api'
 
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+
+export const getDashboardStats = async () => {
+  const res = await api.get('/api/dashboard/stats')
+  return res.data
+}
+
 // ─── Projects ────────────────────────────────────────────────────────────────
 
 export const getProjects = async () => {
