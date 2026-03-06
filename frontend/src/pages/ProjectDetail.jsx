@@ -311,8 +311,11 @@ function ScanRow({ scan, onRescan, rescanning }) {
   return (
     <div style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
       {/* Row header */}
-      <button
+      <div
+        role={scan.status === 'completed' ? 'button' : undefined}
+        tabIndex={scan.status === 'completed' ? 0 : undefined}
         onClick={() => scan.status === 'completed' && setExpanded(v => !v)}
+        onKeyDown={e => e.key === 'Enter' && scan.status === 'completed' && setExpanded(v => !v)}
         className="w-full flex items-center justify-between px-5 py-4 text-left transition-colors"
         style={{ cursor: scan.status === 'completed' ? 'pointer' : 'default' }}
         onMouseEnter={e => { if (scan.status === 'completed') e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
@@ -396,7 +399,7 @@ function ScanRow({ scan, onRescan, rescanning }) {
             </svg>
           )}
         </div>
-      </button>
+      </div>
 
       {/* Expanded results */}
       {expanded && results && (
@@ -540,6 +543,9 @@ export default function ProjectDetail() {
 
   const hasActive = scans.some(s => s.status === 'pending' || s.status === 'running')
 
+  const isOwner = project?.user_role === 'owner'
+  const canEdit = isOwner || project?.user_role === 'editor'
+
   if (loading) {
     return (
       <AppLayout>
@@ -602,38 +608,61 @@ export default function ProjectDetail() {
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  onClick={() => navigate(`/projects/${project.id}/edit`)}
-                  className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-white/5 text-white/20 hover:text-white/60"
-                  style={{ border: '1px solid rgba(255,255,255,0.06)' }}
-                  title="Edit project"
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => navigate('/scans/new')}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98]"
-                  style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 14px rgba(255,107,43,0.2)' }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                  New Scan
-                </button>
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-red-500/10 text-white/20 hover:text-red-400"
-                  style={{ border: '1px solid rgba(255,255,255,0.06)' }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                    <path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                  </svg>
-                </button>
+                {isOwner && (
+                  <button
+                    onClick={() => navigate(`/projects/${project.id}/members`)}
+                    className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-white/5 text-white/20 hover:text-white/60"
+                    style={{ border: '1px solid rgba(255,255,255,0.06)' }}
+                    title="Manage members"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                  </button>
+                )}
+
+                {canEdit && (
+                  <button
+                    onClick={() => navigate('/scans/new')}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98]"
+                    style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 14px rgba(255,107,43,0.2)' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    New Scan
+                  </button>
+                )}
+
+                {isOwner && (
+                  <button
+                    onClick={() => navigate(`/projects/${project.id}/edit`)}
+                    className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-white/5 text-white/20 hover:text-white/60"
+                    style={{ border: '1px solid rgba(255,255,255,0.06)' }}
+                    title="Edit project"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                  </button>
+                )}
+
+                {isOwner && (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-red-500/10 text-white/20 hover:text-red-400"
+                    style={{ border: '1px solid rgba(255,255,255,0.06)' }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      <path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -803,6 +832,7 @@ export default function ProjectDetail() {
                 <p className="text-white/20 text-xs mb-5 text-center max-w-xs">
                   Start your first scan to detect vulnerabilities in this project.
                 </p>
+                {canEdit && (
                 <button
                   onClick={() => navigate('/scans/new')}
                   className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white"
@@ -810,10 +840,11 @@ export default function ProjectDetail() {
                 >
                   Start Scan
                 </button>
+                )}
               </div>
             ) : (
               scans.map(scan => (
-                <ScanRow key={scan.id} scan={scan} onRescan={handleRescan} rescanning={rescanning} />
+                <ScanRow key={scan.id} scan={scan} onRescan={canEdit ? handleRescan : null} rescanning={rescanning} />
               ))
             )}
           </div>

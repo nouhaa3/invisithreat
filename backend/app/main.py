@@ -12,6 +12,7 @@ from app.db.session import engine
 # Import all models so SQLAlchemy registers them before create_all
 from app.models import user, role  # noqa: F401
 from app.models import scan as scan_models  # noqa: F401
+from app.models import member  # noqa: F401
 
 # Create database tables
 Base.metadata.create_all(bind=engine)

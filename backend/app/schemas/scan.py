@@ -33,6 +33,7 @@ class ProjectResponse(BaseModel):
     created_at: datetime
     scan_count: int = 0
     last_scan_status: Optional[str] = None
+    user_role: Optional[str] = None  # "owner" | "editor" | "viewer"
 
     model_config = ConfigDict(from_attributes=True)
 

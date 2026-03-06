@@ -253,3 +253,71 @@ def notify_admin_reset_code(nom: str, email: str, code: str) -> bool:
         f"If you didn't request this, ignore this email."
     )
     return _send(email, subject, html, plain)
+
+
+def notify_project_invitation(
+    invitee_email: str,
+    invitee_nom: str | None,
+    inviter_nom: str,
+    project_name: str,
+    role: str,
+    registered: bool,
+    frontend_url: str,
+) -> bool:
+    """Send a project invitation email. Works for both registered users and new ones."""
+    action_url = f"{frontend_url}/login" if not registered else f"{frontend_url}/dashboard"
+    btn_label = "Create My Account" if not registered else "Go to Dashboard"
+    greeting = f"Hi {invitee_nom}," if invitee_nom else "Hello,"
+
+    subject = f"[InvisiThreat] {inviter_nom} invites you to join project \"{project_name}\""
+
+    html = f"""<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#080808;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 20px;">
+      <table width="560" style="background:#111111;border-radius:16px;border:1px solid rgba(255,255,255,0.06);overflow:hidden;">
+        <tr><td style="background:linear-gradient(135deg,#1a0a00,#111);padding:32px 36px;border-bottom:1px solid rgba(255,107,43,0.15);">
+          <span style="font-size:22px;font-weight:700;color:#FF8C5A;">InvisiThreat</span>
+          <span style="font-size:12px;color:rgba(255,255,255,0.3);margin-left:12px;">Project Invitation</span>
+        </td></tr>
+        <tr><td style="padding:36px;">
+          <p style="color:rgba(255,255,255,0.5);font-size:14px;margin:0 0 8px;">{greeting}</p>
+          <h2 style="color:#fff;font-size:22px;margin:0 0 20px;">You've been invited to a project</h2>
+          <table width="100%" style="background:rgba(255,107,43,0.06);border:1px solid rgba(255,107,43,0.15);border-radius:12px;margin-bottom:28px;">
+            <tr><td style="padding:20px 24px;">
+              <table>
+                <tr>
+                  <td style="padding:4px 0;color:rgba(255,255,255,0.35);font-size:13px;width:90px;">Project</td>
+                  <td style="padding:4px 0;color:#fff;font-size:14px;font-weight:700;">{project_name}</td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0;color:rgba(255,255,255,0.35);font-size:13px;">Invited by</td>
+                  <td style="padding:4px 0;color:#FF8C5A;font-size:13px;">{inviter_nom}</td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0;color:rgba(255,255,255,0.35);font-size:13px;">Your role</td>
+                  <td style="padding:4px 0;color:#a78bfa;font-size:13px;font-weight:600;">{role}</td>
+                </tr>
+              </table>
+            </td></tr>
+          </table>
+          {'<p style="color:rgba(255,255,255,0.4);font-size:13px;margin:0 0 20px;">You don\'t have an account yet. Create one to accept this invitation.</p>' if not registered else '<p style="color:rgba(255,255,255,0.4);font-size:13px;margin:0 0 20px;">You have been added to this project. Open your dashboard to start collaborating.</p>'}
+          <a href="{action_url}" style="display:inline-block;background:linear-gradient(135deg,#FF6B2B,#e85d1e);color:#fff;font-weight:700;font-size:14px;text-decoration:none;padding:13px 32px;border-radius:10px;">{btn_label}</a>
+        </td></tr>
+        <tr><td style="padding:20px 36px;border-top:1px solid rgba(255,255,255,0.05);">
+          <p style="color:rgba(255,255,255,0.2);font-size:12px;margin:0;text-align:center;">InvisiThreat · DevSecOps Platform</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+    plain = (
+        f"{greeting}\n\n"
+        f"{inviter_nom} has invited you to join the project \"{project_name}\" as {role}.\n\n"
+        f"{'Register at: ' if not registered else 'Open your dashboard: '}{action_url}\n\n"
+        "— InvisiThreat"
+    )
+    return _send(invitee_email, subject, html, plain)

@@ -46,3 +46,24 @@ export const getCLIToken = async (projectId, scanId) => {
   const res = await api.post(`/api/projects/${projectId}/scans/${scanId}/claim-token`)
   return res.data
 }
+
+// ─── Members ─────────────────────────────────────────────────────────────────
+
+export const getMembers = async (projectId) => {
+  const res = await api.get(`/api/projects/${projectId}/members`)
+  return res.data
+}
+
+export const inviteMember = async (projectId, email, role_projet = 'Viewer') => {
+  const res = await api.post(`/api/projects/${projectId}/members/invite`, { email, role_projet })
+  return res.data
+}
+
+export const updateMemberRole = async (projectId, userId, role_projet) => {
+  const res = await api.patch(`/api/projects/${projectId}/members/${userId}`, { role_projet })
+  return res.data
+}
+
+export const removeMember = async (projectId, userId) => {
+  await api.delete(`/api/projects/${projectId}/members/${userId}`)
+}

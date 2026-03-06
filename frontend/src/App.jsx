@@ -9,6 +9,7 @@ import NewScanPage from './pages/NewScanPage'
 import ProjectDetail from './pages/ProjectDetail'
 import EditProjectPage from './pages/EditProjectPage'
 import AdminPage from './pages/AdminPage'
+import ProjectMembersPage from './pages/ProjectMembersPage'
 
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth()
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="/scans/new" element={<PermissionRoute permission={PERMISSIONS.RUN_SCAN}><NewScanPage /></PermissionRoute>} />
           <Route path="/projects/:id" element={<PermissionRoute permission={PERMISSIONS.VIEW_SCAN_RESULTS}><ProjectDetail /></PermissionRoute>} />
           <Route path="/projects/:id/edit" element={<PermissionRoute permission={PERMISSIONS.MANAGE_OWN_PROJECTS}><EditProjectPage /></PermissionRoute>} />
+          <Route path="/projects/:id/members" element={<PermissionRoute permission={PERMISSIONS.MANAGE_PROJECT_MEMBERS}><ProjectMembersPage /></PermissionRoute>} />
           <Route path="/admin" element={<PermissionRoute permission={PERMISSIONS.MANAGE_USERS}><AdminPage /></PermissionRoute>} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

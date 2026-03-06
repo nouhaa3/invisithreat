@@ -11,7 +11,7 @@ from app.schemas.scan import (
     ScanCreate, ScanResponse, CLITokenResponse, CLIScanUpload
 )
 from app.services.project import (
-    create_project, get_projects_for_user, get_project,
+    create_project, get_projects_for_user, get_project, get_project_accessible,
     update_project, delete_project, enrich_project,
     create_scan, get_scans_for_project
 )
@@ -19,6 +19,7 @@ from app.services.github_scanner import run_github_scan
 import uuid, secrets
 from datetime import datetime, UTC
 from app.models.scan import Project as ProjectModel
+from app.models.member import ProjectMember as MemberModel
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -41,7 +42,7 @@ async def create_new_project(
     current_user: User = Depends(require_permission(P.MANAGE_OWN_PROJECTS)),
 ):
     project = create_project(db, current_user, data)
-    return enrich_project(db, project)
+    return enrich_project(db, project, "owner")
 
 
 @router.get("", response_model=List[ProjectResponse])
@@ -50,7 +51,14 @@ async def list_projects(
     current_user: User = Depends(require_permission(P.VIEW_SCAN_RESULTS)),
 ):
     projects = get_projects_for_user(db, current_user)
-    return [enrich_project(db, p) for p in projects]
+    memberships = {
+        m.project_id: m.role_projet.lower()
+        for m in db.query(MemberModel).filter(MemberModel.user_id == current_user.id).all()
+    }
+    return [
+        enrich_project(db, p, "owner" if p.owner_id == current_user.id else memberships.get(p.id, "viewer"))
+        for p in projects
+    ]
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -59,8 +67,8 @@ async def get_one_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(P.VIEW_SCAN_RESULTS)),
 ):
-    project = get_project(db, project_id, current_user)
-    return enrich_project(db, project)
+    project, user_role = get_project_accessible(db, project_id, current_user)
+    return enrich_project(db, project, user_role)
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
@@ -71,7 +79,7 @@ async def update_one_project(
     current_user: User = Depends(require_permission(P.MANAGE_OWN_PROJECTS)),
 ):
     project = update_project(db, project_id, current_user, data)
-    return enrich_project(db, project)
+    return enrich_project(db, project, "owner")
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -93,7 +101,9 @@ async def create_new_scan(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(P.RUN_SCAN)),
 ):
-    project = get_project(db, project_id, current_user)
+    project, user_role = get_project_accessible(db, project_id, current_user)
+    if user_role not in ("owner", "editor"):
+        raise HTTPException(status_code=403, detail="Only owners and editors can run scans")
     if data.method not in ("cli", "github"):
         raise HTTPException(status_code=400, detail="method must be 'cli' or 'github'")
     scan = create_scan(db, project, data.method, data.repo_url, data.repo_branch)
@@ -118,7 +128,7 @@ async def list_project_scans(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(P.VIEW_SCAN_RESULTS)),
 ):
-    get_project(db, project_id, current_user)  # verify ownership
+    get_project_accessible(db, project_id, current_user)  # verify access (owner or member)
     return get_scans_for_project(db, project_id)
 
 
