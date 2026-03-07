@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
+import Select from '../components/Select'
 import { getProject } from '../services/projectService'
 import { getMembers, inviteMember, updateMemberRole, removeMember } from '../services/projectService'
 
@@ -181,20 +182,12 @@ export default function ProjectMembersPage() {
                   '--tw-ring-color': '#FF6B2B',
                 }}
               />
-              <select
+              <Select
                 value={role}
-                onChange={e => setRole(e.target.value)}
-                className="px-3 py-2.5 rounded-xl text-sm text-white outline-none focus:ring-1"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  '--tw-ring-color': '#FF6B2B',
-                }}
-              >
-                {ROLES.map(r => (
-                  <option key={r} value={r} style={{ background: '#1a1a1a' }}>{r}</option>
-                ))}
-              </select>
+                options={ROLES}
+                onChange={setRole}
+                size="md"
+              />
               <button
                 type="submit"
                 disabled={inviting || !email.trim()}
@@ -269,20 +262,13 @@ export default function ProjectMembersPage() {
                       {isOwner ? (
                         <RoleBadge role="Owner" />
                       ) : (
-                        <select
+                        <Select
                           value={member.role_projet}
-                          onChange={e => handleRoleChange(member.user_id, e.target.value)}
-                          disabled={updatingId === member.user_id}
-                          className="px-2 py-1 rounded-lg text-xs text-white/70 outline-none transition-all"
-                          style={{
-                            background: 'rgba(255,255,255,0.05)',
-                            border: '1px solid rgba(255,255,255,0.08)',
-                          }}
-                        >
-                          {ROLES.map(r => (
-                            <option key={r} value={r} style={{ background: '#1a1a1a' }}>{r}</option>
-                          ))}
-                        </select>
+                          options={ROLES}
+                          loading={updatingId === member.user_id}
+                          onChange={v => handleRoleChange(member.user_id, v)}
+                          size="sm"
+                        />
                       )}
 
                       {/* Remove button */}

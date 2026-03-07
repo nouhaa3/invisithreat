@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
+import Select from '../components/Select'
 import { useAuth } from '../context/AuthContext'
 import {
   adminGetUsers,
@@ -380,25 +381,15 @@ export default function AdminPage() {
                       {isMe ? (
                         <RoleBadge role={u.role_name} />
                       ) : (
-                        <div className="relative w-[152px]">
-                          <select
+                        <div className="w-[152px]">
+                          <Select
                             value={u.role_name}
-                            disabled={changingRole[u.id]}
-                            onChange={e => handleRoleChange(u.id, e.target.value)}
-                            className="w-full appearance-none px-3 py-1.5 rounded-xl text-xs font-semibold outline-none cursor-pointer transition-all text-center"
-                            style={{
-                              background: ROLE_COLOR[u.role_name]?.bg || 'rgba(255,255,255,0.05)',
-                              border: `1px solid ${ROLE_COLOR[u.role_name]?.border || 'rgba(255,255,255,0.1)'}`,
-                              color:   ROLE_COLOR[u.role_name]?.color || '#fff',
-                            }}
-                          >
-                            {ROLES.map(r => <option key={r} value={r} style={{ background: '#1a1a1a', color: '#fff' }}>{r}</option>)}
-                          </select>
-                          {changingRole[u.id] && (
-                            <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                              <div className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" />
-                            </div>
-                          )}
+                            options={ROLES}
+                            loading={!!changingRole[u.id]}
+                            onChange={v => handleRoleChange(u.id, v)}
+                            size="sm"
+                            getOptionStyle={r => ROLE_COLOR[r]}
+                          />
                         </div>
                       )}
                     </div>
