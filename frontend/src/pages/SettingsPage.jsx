@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { updateMyProfile, changeMyPassword } from '../services/authService'
 import { listApiKeys, createApiKey, revokeApiKey } from '../services/apiKeyService'
 import { getMyAuditLogs } from '../services/auditLogService'
+import * as totpService from '../services/totpService'
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
@@ -33,7 +34,7 @@ function Field({ label, hint, children, className = '' }) {
   )
 }
 
-function TextInput({ value, onChange, type = 'text', placeholder, disabled, autoComplete, readOnly }) {
+function TextInput({ value, onChange, type = 'text', placeholder, disabled, autoComplete, readOnly, extraClassName }) {
   const base = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }
   return (
     <input
@@ -44,7 +45,7 @@ function TextInput({ value, onChange, type = 'text', placeholder, disabled, auto
       disabled={disabled}
       readOnly={readOnly}
       autoComplete={autoComplete}
-      className="w-full px-3.5 py-2.5 rounded-xl text-sm text-white outline-none transition-all disabled:opacity-40 read-only:opacity-60 read-only:cursor-default"
+      className={`w-full px-3.5 py-2.5 rounded-xl text-sm text-white outline-none transition-all disabled:opacity-40 read-only:opacity-60 read-only:cursor-default${extraClassName ? ' ' + extraClassName : ''}`}
       style={base}
       onFocus={e => { if (!readOnly) { e.target.style.border = '1px solid rgba(255,107,43,0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(255,107,43,0.08)' } }}
       onBlur={e => { e.target.style.border = base.border; e.target.style.boxShadow = 'none' }}
@@ -320,6 +321,205 @@ function ProfileTab({ user, updateUser }) {
 
 // ─── SECURITY ─────────────────────────────────────────────────────────────────
 
+function EyeIcon({ visible }) {
+  return visible
+    ? <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+    : <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+}
+
+function PasswordInput({ value, onChange, placeholder, autoComplete }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="relative">
+      <TextInput
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        extraClassName="pr-10"
+      />
+      <button
+        type="button"
+        onClick={() => setShow(s => !s)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+        tabIndex={-1}
+      >
+        <EyeIcon visible={show} />
+      </button>
+    </div>
+  )
+}
+
+// ─── TWO-FACTOR AUTH SECTION ───────────────────────────────────────────────────────
+
+function TwoFASection() {
+  const [enabled, setEnabled] = useState(null) // null = loading
+  const [step, setStep]       = useState('idle')  // idle | setup | disabling
+  const [setupData, setSetupData] = useState(null)
+  const [qrDataUrl, setQrDataUrl] = useState(null)
+  const [code, setCode]       = useState('')
+  const [saving, setSaving]   = useState(false)
+  const [toast, setToast]     = useState(null)
+
+  useEffect(() => {
+    totpService.getStatus()
+      .then(d => setEnabled(d.totp_enabled))
+      .catch(() => setEnabled(false))
+  }, [])
+
+  const handleSetup = async () => {
+    setSaving(true)
+    try {
+      const data = await totpService.setup()
+      setSetupData(data)
+      setQrDataUrl(data.qr_image)
+      setStep('setup')
+      setCode('')
+    } catch {
+      setToast({ type: 'error', msg: 'Failed to initialise 2FA setup.' })
+    } finally { setSaving(false) }
+  }
+
+  const handleEnable = async () => {
+    if (code.length !== 6) return
+    setSaving(true)
+    try {
+      await totpService.enable(code)
+      setEnabled(true); setStep('idle'); setSetupData(null); setQrDataUrl(null); setCode('')
+      setToast({ type: 'success', msg: '2FA enabled. Your account is now more secure.' })
+    } catch (err) {
+      setToast({ type: 'error', msg: err?.response?.data?.detail ?? 'Invalid code. Try again.' })
+    } finally { setSaving(false) }
+  }
+
+  const handleDisable = async () => {
+    if (code.length !== 6) return
+    setSaving(true)
+    try {
+      await totpService.disable(code)
+      setEnabled(false); setStep('idle'); setCode('')
+      setToast({ type: 'success', msg: '2FA has been disabled.' })
+    } catch (err) {
+      setToast({ type: 'error', msg: err?.response?.data?.detail ?? 'Invalid code.' })
+    } finally { setSaving(false) }
+  }
+
+  const cancel = () => { setStep('idle'); setCode(''); setSetupData(null); setQrDataUrl(null) }
+
+  if (enabled === null) return null
+
+  return (
+    <div>
+      <SectionHeader title="Two-Factor Authentication" subtitle="Add an extra layer of security to your account." />
+
+      {/* Status row */}
+      <div className="flex items-center gap-4 p-4 rounded-xl mb-4"
+        style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{
+            background: enabled ? 'rgba(34,197,94,0.08)' : 'rgba(96,165,250,0.08)',
+            border: `1px solid ${enabled ? 'rgba(34,197,94,0.15)' : 'rgba(96,165,250,0.15)'}`,
+          }}>
+          <svg width="18" height="18" fill="none" stroke={enabled ? '#4ade80' : '#60a5fa'} strokeWidth="1.8" viewBox="0 0 24 24">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            {enabled && <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />}
+          </svg>
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-white">Authenticator App (TOTP)</p>
+          <p className="text-xs text-white/35 mt-0.5">Google Authenticator, Authy or any TOTP-compatible app</p>
+        </div>
+        <Badge color={enabled ? 'green' : 'gray'}>{enabled ? 'Active' : 'Not enabled'}</Badge>
+      </div>
+
+      {/* — Disabled: start setup */}
+      {!enabled && step === 'idle' && (
+        <PrimaryBtn onClick={handleSetup} loading={saving}>Set up 2FA</PrimaryBtn>
+      )}
+
+      {/* — Setup flow: QR + verify */}
+      {!enabled && step === 'setup' && setupData && (
+        <div className="flex flex-col gap-5">
+          <div>
+            <p className="text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-3">Step 1 — Scan with your authenticator app</p>
+            <div className="flex flex-col items-center gap-4">
+              {qrDataUrl && (
+                <div className="p-3 rounded-xl"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <img src={qrDataUrl} alt="2FA QR Code" className="w-44 h-44 rounded" />
+                </div>
+              )}
+              <div className="flex flex-col gap-1.5 w-full">
+                <p className="text-xs text-white/35 text-center">Or enter the secret manually:</p>
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <code className="text-xs font-mono text-white/60 flex-1 break-all text-center">{setupData.secret}</code>
+                  <CopyBtn text={setupData.secret} />
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-3">Step 2 — Enter the 6-digit code to confirm</p>
+            <div className="flex gap-3" style={{ maxWidth: '100%' }}>
+              <TextInput
+                value={code}
+                onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                autoComplete="one-time-code"
+                extraClassName="text-center tracking-[0.4em] text-base font-mono"
+              />
+              <PrimaryBtn onClick={handleEnable} loading={saving} disabled={code.length !== 6}>Enable</PrimaryBtn>
+            </div>
+          </div>
+          {toast && <Toast {...toast} onDismiss={() => setToast(null)} />}
+          <button onClick={cancel} className="text-xs text-white/30 hover:text-white/50 transition-colors self-start">Cancel setup</button>
+        </div>
+      )}
+
+      {/* — Enabled: offer to disable */}
+      {enabled && step === 'idle' && (
+        <>
+          {toast && <Toast {...toast} onDismiss={() => setToast(null)} />}
+          <button
+            onClick={() => { setStep('disabling'); setCode('') }}
+            className="text-xs text-red-400/60 hover:text-red-400 transition-colors font-medium"
+          >
+            Disable 2FA
+          </button>
+        </>
+      )}
+
+      {/* — Disable confirmation */}
+      {enabled && step === 'disabling' && (
+        <div className="flex flex-col gap-3 max-w-md">
+          <p className="text-xs text-white/40">Enter your current TOTP code to confirm.</p>
+          <div className="flex gap-3">
+            <TextInput
+              value={code}
+              onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="000000"
+              autoComplete="one-time-code"
+              extraClassName="text-center tracking-[0.4em] text-base font-mono"
+            />
+            <button
+              onClick={handleDisable}
+              disabled={code.length !== 6 || saving}
+              className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-40"
+              style={{ color: '#f87171', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+            >
+              {saving ? '…' : 'Disable'}
+            </button>
+          </div>
+          {toast && <Toast {...toast} onDismiss={() => setToast(null)} />}
+          <button onClick={cancel} className="text-xs text-white/30 hover:text-white/50 transition-colors self-start">Cancel</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SecurityTab() {
   const [cur, setCur] = useState('')
   const [nw,  setNw]  = useState('')
@@ -360,10 +560,10 @@ function SecurityTab() {
         <SectionHeader title="Change Password" subtitle="Use a strong password with letters, numbers and symbols." />
         <form onSubmit={submit} className="flex flex-col gap-4 max-w-md">
           <Field label="Current Password">
-            <TextInput type="password" value={cur} onChange={e => setCur(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+            <PasswordInput value={cur} onChange={e => setCur(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
           </Field>
           <Field label="New Password">
-            <TextInput type="password" value={nw} onChange={e => setNw(e.target.value)} placeholder="Min. 8 characters" autoComplete="new-password" />
+            <PasswordInput value={nw} onChange={e => setNw(e.target.value)} placeholder="Min. 8 characters" autoComplete="new-password" />
           </Field>
           {nw.length > 0 && (
             <div className="flex items-center gap-2 -mt-1">
@@ -375,7 +575,7 @@ function SecurityTab() {
             </div>
           )}
           <Field label="Confirm New Password">
-            <TextInput type="password" value={cnf} onChange={e => setCnf(e.target.value)} placeholder="Repeat new password" autoComplete="new-password" />
+            <PasswordInput value={cnf} onChange={e => setCnf(e.target.value)} placeholder="Repeat new password" autoComplete="new-password" />
           </Field>
           {toast && <Toast {...toast} onDismiss={() => setToast(null)} />}
           <div className="flex justify-end">
@@ -385,20 +585,7 @@ function SecurityTab() {
       </div>
 
       {/* 2FA */}
-      <div>
-        <SectionHeader title="Two-Factor Authentication" subtitle="Add an extra layer of security to your account." />
-        <div className="flex items-center gap-4 p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.15)' }}>
-            <svg width="18" height="18" fill="none" stroke="#60a5fa" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-white">Authenticator App (TOTP)</p>
-            <p className="text-xs text-white/35 mt-0.5">Google Authenticator, Authy or any TOTP-compatible app</p>
-          </div>
-          <Badge color="gray">Coming Soon</Badge>
-        </div>
-      </div>
+      <TwoFASection />
 
       {/* Sessions */}
       <div>

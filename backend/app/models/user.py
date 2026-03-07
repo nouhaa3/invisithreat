@@ -19,6 +19,8 @@ class User(Base):
     is_pending = Column(Boolean, default=True)    # waiting for admin approval
     reset_code = Column(String, nullable=True)
     reset_code_expires = Column(DateTime, nullable=True)
+    totp_secret = Column(String, nullable=True)
+    totp_enabled = Column(Boolean, default=False)
 
     role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id"))
     role = relationship("Role", back_populates="users")

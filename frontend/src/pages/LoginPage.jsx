@@ -5,6 +5,7 @@ import InputField from '../components/InputField'
 import Button from '../components/Button'
 import Alert from '../components/Alert'
 import { login } from '../services/authService'
+import { verifyLogin as verifyTotpLogin } from '../services/totpService'
 import { useAuth } from '../context/AuthContext'
 
 export default function LoginPage() {
@@ -16,6 +17,13 @@ export default function LoginPage() {
   const [serverError, setServerError] = useState('')
   const [loading, setLoading] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
+
+  // 2FA step
+  const [totpStep, setTotpStep]   = useState(false)
+  const [totpToken, setTotpToken] = useState('')
+  const [totpCode, setTotpCode]   = useState('')
+  const [totpError, setTotpError] = useState('')
+  const [totpLoading, setTotpLoading] = useState(false)
 
   const validate = () => {
     const errs = {}
@@ -40,6 +48,11 @@ export default function LoginPage() {
     setServerError('')
     try {
       const data = await login(form.email, form.password)
+      if (data.totp_required) {
+        setTotpToken(data.totp_token)
+        setTotpStep(true)
+        return
+      }
       loginSuccess(data)
       navigate('/dashboard')
     } catch (err) {
@@ -54,6 +67,82 @@ export default function LoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleTotpSubmit = async (e) => {
+    e.preventDefault()
+    if (totpCode.length !== 6) return
+    setTotpLoading(true)
+    setTotpError('')
+    try {
+      const data = await verifyTotpLogin(totpToken, totpCode)
+      loginSuccess(data)
+      navigate('/dashboard')
+    } catch (err) {
+      setTotpError(err?.response?.data?.detail ?? 'Invalid code. Please try again.')
+    } finally {
+      setTotpLoading(false)
+    }
+  }
+
+  // ── 2FA step ────────────────────────────────────────────────────────────────
+  if (totpStep) {
+    return (
+      <AuthLayout
+        imageContent={
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, rgba(255,107,43,0.6), transparent)' }} />
+              <span className="text-brand-orange text-xs font-semibold tracking-widest uppercase">2FA</span>
+            </div>
+            <p className="text-white text-3xl font-light leading-tight mb-3">
+              One more<br /><span className="font-bold shimmer-text">step</span>
+            </p>
+            <p className="text-white/30 text-sm leading-relaxed">
+              Your account is protected with two-factor authentication.
+            </p>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-7">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-4"
+              style={{ background: 'rgba(255,107,43,0.08)', border: '1px solid rgba(255,107,43,0.15)' }}>
+              <div className="w-1.5 h-1.5 rounded-full bg-brand-orange animate-pulse" />
+              <span className="text-brand-orange-light text-xs font-medium">Authenticator Required</span>
+            </div>
+            <h1 className="text-4xl font-bold text-white mb-2">Verify identity</h1>
+            <p className="text-base text-white/35">Enter the 6-digit code from your authenticator app</p>
+          </div>
+
+          <Alert type="error" message={totpError} />
+
+          <form onSubmit={handleTotpSubmit} className="flex flex-col gap-5" noValidate>
+            <InputField
+              label="Authentication Code"
+              type="text"
+              inputMode="numeric"
+              value={totpCode}
+              onChange={e => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="000000"
+              autoComplete="one-time-code"
+              disabled={totpLoading}
+            />
+            <Button type="submit" loading={totpLoading}>
+              Verify &amp; Sign In
+            </Button>
+          </form>
+
+          <button
+            type="button"
+            onClick={() => { setTotpStep(false); setTotpCode(''); setTotpError('') }}
+            className="text-center text-sm text-white/30 hover:text-white/50 transition-colors"
+          >
+            &larr; Back to login
+          </button>
+        </div>
+      </AuthLayout>
+    )
   }
 
   return (

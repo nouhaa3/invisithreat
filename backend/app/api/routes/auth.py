@@ -8,7 +8,7 @@ from app.db.session import get_db
 from app.schemas.auth import LoginResponse, Token, RefreshTokenRequest
 from app.schemas.user import UserCreate, UserWithRole, RoleUpdateRequest, UserProfileUpdateRequest, UserAdminResponse, ForgotPasswordRequest, VerifyResetCodeRequest, ResetPasswordRequest, SelfProfileUpdateRequest, ChangePasswordRequest
 from app.services.auth import authenticate_user, register_user, get_user_with_role
-from app.core.jwt import create_access_token, create_refresh_token, decode_token, get_current_user, require_admin, create_action_token, decode_action_token
+from app.core.jwt import create_access_token, create_refresh_token, decode_token, get_current_user, require_admin, create_action_token, decode_action_token, create_totp_token
 from app.core.api_key_auth import get_user_from_api_key
 from app.core.config import settings
 from app.core.email import notify_admin_new_request, notify_user_approved, notify_user_rejected, notify_admin_reset_code
@@ -80,6 +80,10 @@ async def login(
     refresh_tok = create_refresh_token(
         data={"sub": str(user.id)}
     )
+
+    # If 2FA is enabled, return an intermediate token instead of full access
+    if getattr(user, 'totp_enabled', False):
+        return LoginResponse(totp_required=True, totp_token=create_totp_token(str(user.id)))
 
     ip = request.client.host if request.client else None
     create_audit_log(db, user.id, "login", f"Login from {ip or 'unknown'}", ip)

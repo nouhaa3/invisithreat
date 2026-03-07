@@ -191,3 +191,10 @@ def require_role(*allowed_roles: str):
 # Convenience shortcuts
 require_admin = require_role("Admin")
 require_developer_or_admin = require_role("Admin", "Developer", "Security Manager")
+
+
+def create_totp_token(user_id: str) -> str:
+    """Create a 5-minute intermediate token for a pending TOTP 2FA verification."""
+    expire = datetime.now(UTC) + timedelta(minutes=5)
+    payload = {"sub": user_id, "type": "totp_pending", "exp": expire}
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)

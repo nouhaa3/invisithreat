@@ -63,6 +63,8 @@ def _run_migrations():
             created_at TIMESTAMP DEFAULT NOW()
         )""",
         "CREATE INDEX IF NOT EXISTS ix_audit_logs_user_id ON audit_logs(user_id)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret VARCHAR",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT FALSE",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

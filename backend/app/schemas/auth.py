@@ -22,8 +22,12 @@ class RefreshTokenRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    """Response after successful login"""
-    access_token: str
-    refresh_token: str
+    """Response after login — either full tokens or a pending 2FA challenge."""
+    # Full login (no 2FA or 2FA already verified)
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
     token_type: str = "bearer"
-    user: UserWithRole
+    user: Optional[UserWithRole] = None
+    # 2FA challenge
+    totp_required: bool = False
+    totp_token: Optional[str] = None
