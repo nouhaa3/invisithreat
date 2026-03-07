@@ -14,6 +14,7 @@ from app.models import user, role  # noqa: F401
 from app.models import scan as scan_models  # noqa: F401
 from app.models import member  # noqa: F401
 from app.models import api_key  # noqa: F401
+from app.models import notification  # noqa: F401
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -41,6 +42,17 @@ def _run_migrations():
             created_at TIMESTAMP DEFAULT NOW(),
             last_used_at TIMESTAMP
         )""",
+        """CREATE TABLE IF NOT EXISTS notifications (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            type VARCHAR(50) NOT NULL DEFAULT 'system',
+            title VARCHAR(200) NOT NULL,
+            message TEXT,
+            link VARCHAR(500),
+            is_read BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_notifications_user_id ON notifications(user_id)",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

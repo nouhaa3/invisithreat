@@ -11,11 +11,10 @@ Commands:
   scan       Scan a local directory and upload results
 """
 
-import os, re, sys, ast, json, hashlib, time, platform
+import os, re, sys, json, time, platform
 from pathlib import Path
-from datetime import datetime
-from dataclasses import dataclass, field, asdict
-from typing import Optional, List
+from dataclasses import dataclass
+from typing import List
 
 # ── Third-party (bundled in exe) ──────────────────────────────────────────────
 try:
@@ -26,10 +25,11 @@ except ImportError:
     sys.exit(1)
 
 # Force UTF-8 on Windows
-if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+_stdout_enc = sys.stdout.encoding
+if _stdout_enc and str(_stdout_enc).lower() != "utf-8":
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
 # ─── Config ───────────────────────────────────────────────────────────────────
@@ -264,7 +264,6 @@ BANNER = f"""
 @click.group()
 def cli():
     """InvisiThreat Scanner — scan local code and push results to the platform."""
-    pass
 
 
 @cli.command()

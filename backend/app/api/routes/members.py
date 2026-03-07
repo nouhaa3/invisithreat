@@ -9,6 +9,7 @@ from app.models.user import User
 from app.models.scan import Project
 from app.schemas.member import MemberInviteRequest, MemberRoleUpdate, MemberResponse
 from app.services.member import list_members, invite_member, update_member_role, remove_member
+from app.services.notification import create_notification
 from app.core.email import notify_project_invitation
 from app.core.config import settings
 
@@ -58,6 +59,15 @@ async def invite_project_member(
         role=result["member"]["role_projet"],
         registered=True,
         frontend_url=settings.FRONTEND_URL,
+    )
+    # In-app notification for the invited user
+    create_notification(
+        db,
+        user_id=result["member"]["user_id"],
+        type="project_invite",
+        title=f'Added to project "{result["project_name"]}"',
+        message=f'{current_user.nom} added you as {result["member"]["role_projet"]}.',
+        link=f'/projects/{project_id}',
     )
     return {"status": "added", "member": result["member"]}
 

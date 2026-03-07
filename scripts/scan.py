@@ -12,10 +12,7 @@ Examples:
 """
 
 import argparse
-import ast
-import hashlib
 import json
-import os
 import re
 import sys
 import uuid
@@ -554,7 +551,7 @@ def main():
     print_results(results)
 
     if args.output:
-        Path(args.output).write_text(json.dumps(results, indent=2))
+        Path(args.output).write_text(json.dumps(results, indent=2), encoding='utf-8')
         print(f"Results saved to {args.output}")
 
     if not args.no_upload:

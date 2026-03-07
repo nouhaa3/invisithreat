@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from app.db.session import get_db
-from app.core.jwt import get_current_user, require_admin
+from app.core.jwt import require_admin
 from app.core.permissions import require_permission, P
 from app.core.config import settings
 from app.models.user import User

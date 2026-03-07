@@ -1,7 +1,6 @@
 from fastapi import APIRouter
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import PlainTextResponse
 from pathlib import Path
-import os
 
 router = APIRouter(prefix="/scanner", tags=["scanner"])
 

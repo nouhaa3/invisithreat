@@ -14,6 +14,7 @@ from app.core.api_key_auth import get_user_from_api_key
 from app.models.user import User
 from app.models.scan import Project, Scan, ScanMethod, ScanStatus
 from app.models.member import ProjectMember
+from app.services.notification import create_notification
 
 router = APIRouter(prefix="/cli", tags=["CLI"])
 
@@ -160,6 +161,26 @@ async def cli_upload_scan(
     db.add(scan)
     db.commit()
     db.refresh(scan)
+
+    # In-app notification for the project owner
+    total = len(payload.findings)
+    critical_count = by_sev.get("critical", 0)
+    high_count = by_sev.get("high", 0)
+    if total == 0:
+        sev_msg = "No vulnerabilities found."
+    else:
+        parts = []
+        if critical_count: parts.append(f"{critical_count} critical")
+        if high_count: parts.append(f"{high_count} high")
+        sev_msg = ", ".join(parts) + "." if parts else f"{total} finding(s)."
+    create_notification(
+        db,
+        user_id=project.owner_id,
+        type="scan_complete",
+        title=f'Scan completed — {project.name}',
+        message=f'{total} finding{"s" if total != 1 else ""} detected. {sev_msg}',
+        link=f'/projects/{project.id}',
+    )
 
     return CLIScanResponse(
         scan_id=scan.id,

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { NotificationProvider } from './context/NotificationContext'
 import { can, PERMISSIONS } from './utils/permissions'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
@@ -12,6 +13,7 @@ import AdminPage from './pages/AdminPage'
 import ProjectMembersPage from './pages/ProjectMembersPage'
 import DeveloperPage from './pages/DeveloperPage'
 import SettingsPage from './pages/SettingsPage'
+import NotificationsPage from './pages/NotificationsPage'
 
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth()
@@ -37,7 +39,8 @@ const PublicRoute = ({ children }) => {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <NotificationProvider>
+        <BrowserRouter>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
@@ -51,9 +54,11 @@ export default function App() {
           <Route path="/admin" element={<PermissionRoute permission={PERMISSIONS.MANAGE_USERS}><AdminPage /></PermissionRoute>} />
           <Route path="/developer" element={<PrivateRoute><DeveloperPage /></PrivateRoute>} />
           <Route path="/settings" element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
+          <Route path="/notifications" element={<PrivateRoute><NotificationsPage /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
-      </BrowserRouter>
+        </BrowserRouter>
+      </NotificationProvider>
     </AuthProvider>
   )
 }

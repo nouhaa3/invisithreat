@@ -68,7 +68,7 @@ export default function EditProjectPage() {
   return (
     <AppLayout>
       <main className="flex-1 overflow-auto">
-        <div className="max-w-2xl mx-auto px-8 py-8">
+        <div className="px-8 py-8">
 
           {/* Header */}
           <div className="mb-8 animate-slide-up">

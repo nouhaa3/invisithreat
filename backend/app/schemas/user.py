@@ -74,7 +74,6 @@ class ResetPasswordRequest(BaseModel):
 
 class UserAdminResponse(UserWithRole):
     """Extended user info for admin views"""
-    pass
 
 
 class SelfProfileUpdateRequest(BaseModel):

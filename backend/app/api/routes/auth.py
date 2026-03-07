@@ -17,7 +17,7 @@ from app.models.role import Role
 import uuid as _uuid
 import random
 import string
-from datetime import datetime, UTC, timedelta
+from datetime import datetime, UTC
 from passlib.context import CryptContext as _CryptContext
 
 _pwd_ctx = _CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -75,13 +75,13 @@ async def login(
     access_token = create_access_token(
         data={"sub": str(user.id), "role": user_with_role["role_name"]}
     )
-    refresh_token = create_refresh_token(
+    refresh_tok = create_refresh_token(
         data={"sub": str(user.id)}
     )
     
     return LoginResponse(
         access_token=access_token,
-        refresh_token=refresh_token,
+        refresh_token=refresh_tok,
         token_type="bearer",
         user=UserWithRole(**user_with_role)
     )
@@ -142,16 +142,16 @@ async def refresh_token(
         
     except HTTPException:
         raise
-    except Exception:
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate token"
-        )
+        ) from exc
 
 
 @router.post("/logout")
 async def logout(
-    current_user: User = Depends(get_current_user)
+    _: User = Depends(get_current_user)
 ):
     """
     Logout current user
@@ -437,7 +437,7 @@ async def admin_update_profile(
     user_id: str,
     payload: UserProfileUpdateRequest,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    _admin: User = Depends(require_admin),
 ):
     """Admin only — update a user's name or email."""
     user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()

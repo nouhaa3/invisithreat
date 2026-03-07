@@ -2,8 +2,8 @@
 Email notification service — Brevo (Sendinblue) Transactional API
 """
 import logging
-import sib_api_v3_sdk
-from sib_api_v3_sdk.rest import ApiException
+import sib_api_v3_sdk  # type: ignore  # pylint: disable=import-error
+from sib_api_v3_sdk.rest import ApiException  # type: ignore  # pylint: disable=import-error
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
