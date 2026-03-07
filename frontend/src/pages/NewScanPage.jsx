@@ -214,7 +214,7 @@ export default function NewScanPage() {
             <p className="text-white/30 text-sm mt-1">Analyse your project for security vulnerabilities</p>
           </div>
 
-          <StepIndicator current={step} steps={method === 'exe' ? ['Project', 'Method', 'API Key', 'Done'] : ['Project', 'Method', 'Configure', 'Done']} />
+          <StepIndicator current={step} steps={method === 'exe' ? ['Project', 'Method', 'Setup', 'Done'] : ['Project', 'Method', 'Configure', 'Done']} />
 
           {/* ─── STEP 0: Project ─────────────────────────────────────────────── */}
           {step === 0 && (
@@ -428,7 +428,39 @@ export default function NewScanPage() {
           {/* ─── STEP 2: API Key (EXE) / Configure (others) ──────────────── */}
           {step === 2 && method === 'exe' && (
             <div className="animate-slide-up">
-              {/* Header card */}
+              {/* Download card */}
+              <div className="flex items-center justify-between p-4 rounded-2xl mb-3"
+                style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.15)' }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="1.8">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">Step 1 — Download invisithreat.exe</p>
+                    <p className="text-xs text-white/30 mt-0.5">Windows x64 · ~12 MB</p>
+                  </div>
+                </div>
+                <a
+                  href="/downloads/invisithreat.exe"
+                  download="invisithreat.exe"
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95"
+                  style={{ background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)' }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Download
+                </a>
+              </div>
+
+              {/* API Key card */}
               <SectionCard>
                 <div className="flex items-center gap-3 mb-5 pb-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                   <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -662,7 +694,7 @@ export default function NewScanPage() {
 
                 {method === 'exe' && createdProject && (
                   <div>
-                    <p className="text-sm text-white/50 mb-4">Your project is ready. Run these commands in the folder where you saved <code className="text-white/60">invisithreat.exe</code>:</p>
+                    <p className="text-sm text-white/50 mb-4">Your project is ready. Follow these steps to run your first scan:</p>
 
                     {/* Project ID */}
                     <div className="mb-4 rounded-xl px-4 py-3" style={{ background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.15)' }}>
@@ -679,11 +711,27 @@ export default function NewScanPage() {
                       </div>
                     </div>
 
-                    <StepCmd n={1} label="Login (once — skip if already logged in)">
+                    <StepCmd n={1} label="Download invisithreat.exe (if you haven't already)">
+                      <a
+                        href="/downloads/invisithreat.exe"
+                        download="invisithreat.exe"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95"
+                        style={{ background: 'rgba(96,165,250,0.08)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.15)' }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                          <polyline points="7 10 12 15 17 10"/>
+                          <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        invisithreat.exe — Windows x64 · ~12 MB
+                      </a>
+                    </StepCmd>
+
+                    <StepCmd n={2} label="Login (once — skip if already logged in)">
                       <CodeBlock>{`.\\invisithreat.exe login --server ${getApiBase()} --token YOUR_API_KEY`}</CodeBlock>
                     </StepCmd>
 
-                    <StepCmd n={2} label="Run the scan">
+                    <StepCmd n={3} label="Run the scan">
                       <CodeBlock>{`.\\invisithreat.exe scan "path\\to\\your-project" --project-id ${createdProject.id}`}</CodeBlock>
                     </StepCmd>
 
