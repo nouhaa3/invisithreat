@@ -8,6 +8,8 @@ from app.api.routes import projects
 from app.api.routes import scanner
 from app.api.routes import members
 from app.api.routes import dashboard
+from app.api.routes import api_keys
+from app.api.routes import cli_scan
 
 api_router = APIRouter()
 
@@ -18,3 +20,5 @@ api_router.include_router(projects.router, tags=["projects"])
 api_router.include_router(scanner.router, tags=["scanner"])
 api_router.include_router(members.router)
 api_router.include_router(dashboard.router)
+api_router.include_router(api_keys.router)
+api_router.include_router(cli_scan.router)

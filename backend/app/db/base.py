@@ -4,3 +4,4 @@ Base = declarative_base()
 
 # Import all models here for SQLAlchemy to register them
 from app.models import role, user  # noqa: F401
+from app.models import api_key  # noqa: F401
