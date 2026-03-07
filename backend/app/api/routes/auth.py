@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.email import notify_admin_new_request, notify_user_approved, notify_user_rejected, notify_admin_reset_code
 from app.models.user import User
 from app.models.role import Role
+from app.services.audit_log import create_audit_log
 import uuid as _uuid
 import random
 import string
@@ -57,6 +58,7 @@ async def register(
 
 @router.post("/login", response_model=LoginResponse)
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -78,7 +80,10 @@ async def login(
     refresh_tok = create_refresh_token(
         data={"sub": str(user.id)}
     )
-    
+
+    ip = request.client.host if request.client else None
+    create_audit_log(db, user.id, "login", f"Login from {ip or 'unknown'}", ip)
+
     return LoginResponse(
         access_token=access_token,
         refresh_token=refresh_tok,
@@ -151,7 +156,8 @@ async def refresh_token(
 
 @router.post("/logout")
 async def logout(
-    _: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Logout current user
@@ -159,6 +165,7 @@ async def logout(
     Note: JWT tokens are stateless, so logout is handled client-side
     by deleting the tokens. This endpoint confirms the token is valid.
     """
+    create_audit_log(db, current_user.id, "logout", "User logged out")
     return {
         "message": "Successfully logged out",
         "detail": "Please delete tokens from client storage"
@@ -193,6 +200,7 @@ async def update_my_profile(
         current_user.email = payload.email
     db.commit()
     db.refresh(current_user)
+    create_audit_log(db, current_user.id, "profile_updated", "Profile updated")
     return UserWithRole(**get_user_with_role(db, current_user))
 
 
@@ -207,6 +215,7 @@ async def change_my_password(
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     current_user.hashed_password = _pwd_ctx.hash(payload.new_password)
     db.commit()
+    create_audit_log(db, current_user.id, "password_changed", "Password changed via settings")
 
 
 @router.get("/cli/me", response_model=UserWithRole)

@@ -4,6 +4,7 @@ import AppLayout from '../components/AppLayout'
 import { useAuth } from '../context/AuthContext'
 import { updateMyProfile, changeMyPassword } from '../services/authService'
 import { listApiKeys, createApiKey, revokeApiKey } from '../services/apiKeyService'
+import { getMyAuditLogs } from '../services/auditLogService'
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
@@ -686,16 +687,24 @@ function IntegrationsTab() {
 // ─── LOGS / AUDIT ─────────────────────────────────────────────────────────────
 
 function LogsTab({ user }) {
-  const LOGS = [
-    { id: 1, action: 'Login successful',         detail: 'Chrome on Windows',     ts: new Date(Date.now() - 60000).toISOString(),       type: 'auth' },
-    { id: 2, action: 'API key generated',         detail: 'Key: "My Laptop"',      ts: new Date(Date.now() - 3600000).toISOString(),     type: 'apikey' },
-    { id: 3, action: 'Scan started',              detail: 'Project: WebApp v2',    ts: new Date(Date.now() - 86400000).toISOString(),    type: 'scan' },
-    { id: 4, action: 'Profile updated',           detail: 'Email changed',         ts: new Date(Date.now() - 172800000).toISOString(),   type: 'profile' },
-    { id: 5, action: 'Password changed',          detail: 'Via settings',          ts: new Date(Date.now() - 432000000).toISOString(),   type: 'auth' },
-    { id: 6, action: 'Scan completed',            detail: '4 findings — MEDIUM',   ts: new Date(Date.now() - 518400000).toISOString(),   type: 'scan' },
-    { id: 7, action: 'API key revoked',           detail: 'Key: "Old CI Key"',     ts: new Date(Date.now() - 604800000).toISOString(),   type: 'apikey' },
-    { id: 8, action: 'Login from new location',   detail: 'Tunis, TN · 197.x.x.x', ts: new Date(Date.now() - 691200000).toISOString(), type: 'auth' },
-  ]
+  const [logs, setLogs] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    getMyAuditLogs()
+      .then(setLogs)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const ACTION_MAP = {
+    login:            { label: 'Login successful',  type: 'auth' },
+    logout:           { label: 'Logged out',         type: 'auth' },
+    password_changed: { label: 'Password changed',  type: 'auth' },
+    profile_updated:  { label: 'Profile updated',   type: 'profile' },
+    api_key_created:  { label: 'API key created',   type: 'apikey' },
+    api_key_revoked:  { label: 'API key revoked',   type: 'apikey' },
+  }
 
   const TYPE_CFG = {
     auth:    { color: 'blue',   icon: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></>, },
@@ -718,32 +727,34 @@ function LogsTab({ user }) {
 
   return (
     <div>
-      <SectionHeader title="Activity Logs" subtitle="Recent security and account activity for your session." />
-      <div className="p-3 rounded-xl mb-6" style={{ background: 'rgba(255,107,43,0.04)', border: '1px solid rgba(255,107,43,0.08)' }}>
-        <p className="text-xs text-white/30 leading-relaxed">
-          <span className="text-white/45 font-semibold">Note:</span> Full persistent audit logs with backend retention are a planned enterprise feature. This shows your current-session activity.
-        </p>
-      </div>
-      <div className="flex flex-col gap-2">
-        {LOGS.map(log => {
-          const cfg = TYPE_CFG[log.type] ?? TYPE_CFG.auth
-          const col = BAD_CFG[cfg.color] ?? '#9ca3af'
-          return (
-            <div key={log.id} className="flex items-center gap-4 px-4 py-3 rounded-xl"
-              style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ background: `${col}12`, border: `1px solid ${col}20` }}>
-                <svg width="13" height="13" fill="none" stroke={col} strokeWidth="1.8" viewBox="0 0 24 24">{cfg.icon}</svg>
+      <SectionHeader title="Activity Logs" subtitle="Your last 100 account and security events, stored persistently on the server." />
+      {loading ? (
+        <p className="text-sm text-white/30 py-8 text-center">Loading…</p>
+      ) : logs.length === 0 ? (
+        <p className="text-sm text-white/30 py-8 text-center">No activity recorded yet.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {logs.map(log => {
+            const mapped = ACTION_MAP[log.action] ?? { label: log.action, type: 'auth' }
+            const cfg = TYPE_CFG[mapped.type] ?? TYPE_CFG.auth
+            const col = BAD_CFG[cfg.color] ?? '#9ca3af'
+            return (
+              <div key={log.id} className="flex items-center gap-4 px-4 py-3 rounded-xl"
+                style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background: `${col}12`, border: `1px solid ${col}20` }}>
+                  <svg width="13" height="13" fill="none" stroke={col} strokeWidth="1.8" viewBox="0 0 24 24">{cfg.icon}</svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white">{mapped.label}</p>
+                  {log.detail && <p className="text-xs text-white/30">{log.detail}</p>}
+                </div>
+                <span className="text-xs text-white/20 flex-shrink-0">{fmt(log.created_at)}</span>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white">{log.action}</p>
-                <p className="text-xs text-white/30">{log.detail}</p>
-              </div>
-              <span className="text-xs text-white/20 flex-shrink-0">{fmt(log.ts)}</span>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

@@ -11,6 +11,7 @@ from app.api.routes import dashboard
 from app.api.routes import api_keys
 from app.api.routes import cli_scan
 from app.api.routes import notifications
+from app.api.routes import audit_logs
 
 api_router = APIRouter()
 
@@ -24,3 +25,4 @@ api_router.include_router(dashboard.router)
 api_router.include_router(api_keys.router)
 api_router.include_router(cli_scan.router)
 api_router.include_router(notifications.router)
+api_router.include_router(audit_logs.router)
