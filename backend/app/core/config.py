@@ -20,12 +20,9 @@ class Settings(BaseSettings):
     FRONTEND_URL: str
     BACKEND_URL: str = "http://localhost:8000"
 
-    # Email (Gmail SMTP)
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""      # Gmail App Password
-    ADMIN_EMAIL: str = ""         # admin's Gmail address to receive notifications
+    # Email — Brevo
+    BREVO_API_KEY: str = ""
+    ADMIN_EMAIL: str = ""
 
     @property
     def DATABASE_URL(self) -> str:

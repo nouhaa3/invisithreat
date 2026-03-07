@@ -1,36 +1,42 @@
 ﻿"""
-Email notification service — Gmail SMTP
-Uses Python built-in smtplib, no extra packages needed.
+Email notification service — Brevo (Sendinblue) Transactional API
 """
-import smtplib
 import logging
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+SENDER = {"email": "nouhaboughnim03@gmail.com", "name": "InvisiThreat"}
 
 def _send(to: str, subject: str, html: str, text: str) -> bool:
-    """Low-level send — returns True on success, False on failure (never raises)."""
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        logger.warning("SMTP not configured — skipping email to %s", to)
+    """Low-level send via Brevo — returns True on success, False on failure (never raises)."""
+    if not settings.BREVO_API_KEY:
+        logger.warning("BREVO_API_KEY not configured — skipping email to %s", to)
         return False
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"InvisiThreat <{settings.SMTP_USER}>"
-        msg["To"] = to
-        msg.attach(MIMEText(text, "plain", "utf-8"))
-        msg.attach(MIMEText(html, "html", "utf-8"))
+        configuration = sib_api_v3_sdk.Configuration()
+        configuration.api_key["api-key"] = settings.BREVO_API_KEY
 
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.sendmail(settings.SMTP_USER, to, msg.as_string())
+        api = sib_api_v3_sdk.TransactionalEmailsApi(
+            sib_api_v3_sdk.ApiClient(configuration)
+        )
+
+        email = sib_api_v3_sdk.SendSmtpEmail(
+            to=[{"email": to}],
+            sender=SENDER,
+            subject=subject,
+            html_content=html,
+            text_content=text,
+        )
+
+        api.send_transac_email(email)
         logger.info("Email sent to %s — %s", to, subject)
         return True
+    except ApiException as exc:
+        logger.error("Brevo API error sending to %s: %s", to, exc)
+        return False
     except Exception as exc:
         logger.error("Failed to send email to %s: %s", to, exc)
         return False
