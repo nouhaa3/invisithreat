@@ -22,13 +22,19 @@ export const AuthProvider = ({ children }) => {
     setUser(data.user)
   }
 
+  const updateUser = (updatedUser) => {
+    const merged = { ...user, ...updatedUser }
+    setUser(merged)
+    localStorage.setItem('user', JSON.stringify(merged))
+  }
+
   const logout = () => {
     clearAuthData()
     setUser(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, loginSuccess, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, isLoading, loginSuccess, logout, updateUser, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   )

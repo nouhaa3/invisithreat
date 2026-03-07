@@ -75,3 +75,15 @@ class ResetPasswordRequest(BaseModel):
 class UserAdminResponse(UserWithRole):
     """Extended user info for admin views"""
     pass
+
+
+class SelfProfileUpdateRequest(BaseModel):
+    """Payload for a user updating their own name or email"""
+    nom: Optional[str] = Field(None, min_length=2, max_length=100)
+    email: Optional[EmailStr] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    """Payload to change own password"""
+    current_password: str
+    new_password: str = Field(..., min_length=8, max_length=100)

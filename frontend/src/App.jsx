@@ -11,6 +11,7 @@ import EditProjectPage from './pages/EditProjectPage'
 import AdminPage from './pages/AdminPage'
 import ProjectMembersPage from './pages/ProjectMembersPage'
 import DeveloperPage from './pages/DeveloperPage'
+import SettingsPage from './pages/SettingsPage'
 
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth()
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="/projects/:id/members" element={<PermissionRoute permission={PERMISSIONS.MANAGE_PROJECT_MEMBERS}><ProjectMembersPage /></PermissionRoute>} />
           <Route path="/admin" element={<PermissionRoute permission={PERMISSIONS.MANAGE_USERS}><AdminPage /></PermissionRoute>} />
           <Route path="/developer" element={<PrivateRoute><DeveloperPage /></PrivateRoute>} />
+          <Route path="/settings" element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>

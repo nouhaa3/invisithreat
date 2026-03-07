@@ -6,7 +6,7 @@ from typing import List
 from datetime import timedelta
 from app.db.session import get_db
 from app.schemas.auth import LoginResponse, Token, RefreshTokenRequest
-from app.schemas.user import UserCreate, UserWithRole, RoleUpdateRequest, UserProfileUpdateRequest, UserAdminResponse, ForgotPasswordRequest, VerifyResetCodeRequest, ResetPasswordRequest
+from app.schemas.user import UserCreate, UserWithRole, RoleUpdateRequest, UserProfileUpdateRequest, UserAdminResponse, ForgotPasswordRequest, VerifyResetCodeRequest, ResetPasswordRequest, SelfProfileUpdateRequest, ChangePasswordRequest
 from app.services.auth import authenticate_user, register_user, get_user_with_role
 from app.core.jwt import create_access_token, create_refresh_token, decode_token, get_current_user, require_admin, create_action_token, decode_action_token
 from app.core.api_key_auth import get_user_from_api_key
@@ -175,6 +175,38 @@ async def get_current_user_info(
     """
     user_with_role = get_user_with_role(db, current_user)
     return UserWithRole(**user_with_role)
+
+
+@router.patch("/me", response_model=UserWithRole)
+async def update_my_profile(
+    payload: SelfProfileUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Authenticated user updates their own name or email."""
+    if payload.nom is not None:
+        current_user.nom = payload.nom
+    if payload.email is not None:
+        existing = db.query(User).filter(User.email == payload.email, User.id != current_user.id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already in use")
+        current_user.email = payload.email
+    db.commit()
+    db.refresh(current_user)
+    return UserWithRole(**get_user_with_role(db, current_user))
+
+
+@router.post("/me/change-password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_my_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Authenticated user changes their own password (must supply current password)."""
+    if not _pwd_ctx.verify(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    current_user.hashed_password = _pwd_ctx.hash(payload.new_password)
+    db.commit()
 
 
 @router.get("/cli/me", response_model=UserWithRole)

@@ -89,3 +89,18 @@ export const resetPassword = async (reset_token, new_password) => {
   const response = await api.post('/api/auth/reset-password', { reset_token, new_password })
   return response.data
 }
+
+/**
+ * Update own profile (name and/or email)
+ */
+export const updateMyProfile = async ({ nom, email }) => {
+  const response = await api.patch('/api/auth/me', { nom, email })
+  return response.data  // UserWithRole
+}
+
+/**
+ * Change own password
+ */
+export const changeMyPassword = async (current_password, new_password) => {
+  await api.post('/api/auth/me/change-password', { current_password, new_password })
+}
