@@ -209,39 +209,21 @@ export default function NotificationsPage() {
         </div>
 
         {/* ── Filter tabs ── */}
-        <div
-          className="flex items-center gap-1 mb-6 p-1 rounded-xl overflow-x-auto"
-          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
-        >
+        <div className="flex gap-2 flex-wrap mb-6">
           {FILTERS.map(f => {
-            const count = f === 'All'
-              ? notifications.length
-              : f === 'Unread'
-              ? unreadCount
-              : notifications.filter(n => n.type === f).length
             const isActive = activeFilter === f
             return (
               <button
                 key={f}
                 onClick={() => setActiveFilter(f)}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all"
-                style={isActive
-                  ? { background: '#FF6B2B', color: 'white' }
-                  : { color: 'rgba(255,255,255,0.4)' }}
-                onMouseEnter={e => { if (!isActive) e.currentTarget.style.color = 'rgba(255,255,255,0.75)' }}
-                onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = 'rgba(255,255,255,0.4)' }}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                style={{
+                  background: isActive ? 'rgba(255,107,43,0.1)' : 'rgba(255,255,255,0.03)',
+                  border:     isActive ? '1px solid rgba(255,107,43,0.25)' : '1px solid rgba(255,255,255,0.06)',
+                  color:      isActive ? '#FF8C5A' : 'rgba(255,255,255,0.35)',
+                }}
               >
                 {FILTER_LABELS[f]}
-                {count > 0 && (
-                  <span
-                    className="text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center"
-                    style={isActive
-                      ? { background: 'rgba(255,255,255,0.25)', color: 'white' }
-                      : { background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.4)' }}
-                  >
-                    {count}
-                  </span>
-                )}
               </button>
             )
           })}
