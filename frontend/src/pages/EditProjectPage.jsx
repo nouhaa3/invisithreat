@@ -162,7 +162,7 @@ export default function EditProjectPage() {
               <div>
                 <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">Visibility</label>
                 <div className="flex gap-2">
-                  {[['private','🔒 Private'],['public','🌐 Public']].map(([val, lbl]) => (
+                  {[['private','Private'],['public','Public']].map(([val, lbl]) => (
                     <button key={val} type="button"
                       onClick={() => setForm(f => ({ ...f, visibility: val }))}
                       className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
