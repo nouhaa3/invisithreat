@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { getProjects, createProject, createScan, getCLIToken } from '../services/projectService'
+import { listApiKeys, createApiKey } from '../services/apiKeyService'
 
 const getApiBase = () => {
   const env = import.meta.env.VITE_API_URL
@@ -9,12 +10,10 @@ const getApiBase = () => {
   return `${window.location.protocol}//${window.location.hostname}:8000`
 }
 
-const STEPS = ['Project', 'Method', 'Configure', 'Done']
-
-function StepIndicator({ current }) {
+function StepIndicator({ current, steps }) {
   return (
     <div className="flex items-center gap-2 mb-8">
-      {STEPS.map((label, i) => {
+      {steps.map((label, i) => {
         const isComplete = i < current
         const isActive = i === current
         return (
@@ -51,7 +50,7 @@ function StepIndicator({ current }) {
                 {label}
               </span>
             </div>
-            {i < STEPS.length - 1 && (
+            {i < steps.length - 1 && (
               <div
                 className="w-8 h-px"
                 style={{ background: isComplete ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.06)' }}
@@ -88,7 +87,14 @@ export default function NewScanPage() {
   const [projectError, setProjectError] = useState('')
 
   // Step 1 - Method
-  const [method, setMethod] = useState(null) // 'cli' | 'github'
+  const [method, setMethod] = useState(null) // 'cli' | 'github' | 'exe'
+
+  // Step 2 - EXE: API key generation
+  const [exeKeys, setExeKeys] = useState([])
+  const [exeNewKeyName, setExeNewKeyName] = useState('')
+  const [exeCreating, setExeCreating] = useState(false)
+  const [exeNewKeyData, setExeNewKeyData] = useState(null)
+  const [exeKeysLoaded, setExeKeysLoaded] = useState(false)
 
   // Step 2 - Configure
   const [repoUrl, setRepoUrl] = useState('')
@@ -104,6 +110,25 @@ export default function NewScanPage() {
   useEffect(() => {
     getProjects().then(setProjects).catch(() => setProjects([]))
   }, [])
+
+  useEffect(() => {
+    if (step === 2 && method === 'exe' && !exeKeysLoaded) {
+      listApiKeys().then(k => { setExeKeys(k); setExeKeysLoaded(true) }).catch(() => setExeKeysLoaded(true))
+    }
+  }, [step, method])
+
+  const handleExeGenerateKey = async () => {
+    const name = exeNewKeyName.trim() || 'My Key'
+    setExeCreating(true)
+    try {
+      const data = await createApiKey(name)
+      setExeNewKeyData(data)
+      setExeNewKeyName('')
+      listApiKeys().then(setExeKeys).catch(() => {})
+    } finally {
+      setExeCreating(false)
+    }
+  }
 
   // ─── Step 0: Project ────────────────────────────────────────────────────────
   const handleStep0 = () => {
@@ -148,16 +173,18 @@ export default function NewScanPage() {
       }
       setCreatedProject(project)
 
-      const scan = await createScan(project.id, {
-        method,
-        repo_url: method === 'github' ? repoUrl.trim() : null,
-        repo_branch: method === 'github' ? (repoBranch.trim() || 'main') : null,
-      })
-      setCreatedScan(scan)
+      if (method !== 'exe') {
+        const scan = await createScan(project.id, {
+          method,
+          repo_url: method === 'github' ? repoUrl.trim() : null,
+          repo_branch: method === 'github' ? (repoBranch.trim() || 'main') : null,
+        })
+        setCreatedScan(scan)
 
-      if (method === 'cli') {
-        const tokenData = await getCLIToken(project.id, scan.id)
-        setCliToken(tokenData)
+        if (method === 'cli') {
+          const tokenData = await getCLIToken(project.id, scan.id)
+          setCliToken(tokenData)
+        }
       }
 
       setStep(3)
@@ -187,7 +214,7 @@ export default function NewScanPage() {
             <p className="text-white/30 text-sm mt-1">Analyse your project for security vulnerabilities</p>
           </div>
 
-          <StepIndicator current={step} />
+          <StepIndicator current={step} steps={method === 'exe' ? ['Project', 'Method', 'API Key', 'Done'] : ['Project', 'Method', 'Configure', 'Done']} />
 
           {/* ─── STEP 0: Project ─────────────────────────────────────────────── */}
           {step === 0 && (
@@ -342,14 +369,29 @@ export default function NewScanPage() {
           {/* ─── STEP 1: Method ──────────────────────────────────────────────── */}
           {step === 1 && (
             <div className="animate-slide-up">
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <MethodCard
+                  active={method === 'exe'}
+                  onClick={() => setMethod('exe')}
+                  recommended
+                  title="EXE Scanner"
+                  description="Download invisithreat.exe and scan locally. No Python needed — one file, instant results."
+                  badge="Recommended"
+                  icon={
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <rect x="3" y="3" width="7" height="7" rx="1"/>
+                      <rect x="14" y="3" width="7" height="7" rx="1"/>
+                      <rect x="3" y="14" width="7" height="7" rx="1"/>
+                      <path d="M14 17h7M17 14v7"/>
+                    </svg>
+                  }
+                />
                 <MethodCard
                   active={method === 'cli'}
                   onClick={() => setMethod('cli')}
-                  recommended
-                  title="Local CLI Scan"
-                  description="Scan runs entirely on your machine. Only results are sent to the platform. Maximum privacy."
-                  badge="Recommended"
+                  title="CLI (Python)"
+                  description="Run the Python scanner script. Requires Python installed on your machine."
+                  badge=""
                   icon={
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
                       <polyline points="4 17 10 11 4 5" />
@@ -360,9 +402,9 @@ export default function NewScanPage() {
                 <MethodCard
                   active={method === 'github'}
                   onClick={() => setMethod('github')}
-                  title="GitHub Repository"
-                  description="Connect your GitHub repo. The scan runs in an isolated sandbox and access can be revoked anytime."
-                  badge="Simple setup"
+                  title="GitHub"
+                  description="Connect your GitHub repo. Scan runs in an isolated sandbox."
+                  badge=""
                   icon={
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
                       <circle cx="12" cy="12" r="10" />
@@ -383,8 +425,135 @@ export default function NewScanPage() {
             </div>
           )}
 
-          {/* ─── STEP 2: Configure ───────────────────────────────────────────── */}
-          {step === 2 && (
+          {/* ─── STEP 2: API Key (EXE) / Configure (others) ──────────────── */}
+          {step === 2 && method === 'exe' && (
+            <div className="animate-slide-up">
+              {/* Header card */}
+              <SectionCard>
+                <div className="flex items-center gap-3 mb-5 pb-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'rgba(255,107,43,0.08)', border: '1px solid rgba(255,107,43,0.12)' }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FF6B2B" strokeWidth="1.8">
+                      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3M12 7L7 12" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">Get your API key</p>
+                    <p className="text-xs text-white/30 mt-0.5">
+                      The scanner needs this key to send results to your project.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Newly generated key — shown once */}
+                {exeNewKeyData && (
+                  <div className="mb-4 rounded-xl p-4"
+                    style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      <p className="text-xs font-semibold text-green-400">
+                        Key "<span className="text-white">{exeNewKeyData.name}</span>" created — copy it now, it won't be shown again
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-xs px-3 py-2 rounded-lg select-all font-mono overflow-x-auto"
+                        style={{ background: 'rgba(0,0,0,0.5)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}>
+                        {exeNewKeyData.plaintext}
+                      </code>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(exeNewKeyData.plaintext)}
+                        className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all"
+                        style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="9" y="9" width="13" height="13" rx="2"/>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Generate key form */}
+                <div className="flex gap-3 mb-4">
+                  <input
+                    value={exeNewKeyName}
+                    onChange={e => setExeNewKeyName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleExeGenerateKey()}
+                    placeholder='Key name, e.g. "My Laptop"'
+                    className="flex-1 px-4 py-2.5 rounded-xl text-sm text-white placeholder-white/20 outline-none transition-all"
+                    style={{ background: '#0d0d0d', border: '1px solid rgba(255,255,255,0.08)' }}
+                    onFocus={e => e.target.style.borderColor = 'rgba(255,107,43,0.4)'}
+                    onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'}
+                  />
+                  <button
+                    onClick={handleExeGenerateKey}
+                    disabled={exeCreating}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg,#FF6B2B,#C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}>
+                    {exeCreating
+                      ? <span className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid rgba(255,255,255,0.2)', borderTop: '2px solid white' }} />
+                      : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                    }
+                    Generate Key
+                  </button>
+                </div>
+
+                {/* Existing keys list */}
+                {exeKeys.length > 0 && !exeNewKeyData && (
+                  <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/25 px-4 py-2.5"
+                      style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.01)' }}>
+                      Your existing keys — still valid
+                    </p>
+                    {exeKeys.slice(0, 3).map((k, i) => (
+                      <div key={k.id} className="flex items-center gap-3 px-4 py-3"
+                        style={{ borderBottom: i < Math.min(exeKeys.length, 3) - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FF6B2B" strokeWidth="1.8">
+                          <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5"/>
+                        </svg>
+                        <span className="text-xs text-white/60 flex-1">{k.name}</span>
+                        <code className="text-xs font-mono text-white/25">{k.key_prefix}••••••</code>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {exeKeys.length === 0 && !exeNewKeyData && exeKeysLoaded && (
+                  <div className="rounded-xl px-4 py-3 text-center"
+                    style={{ background: 'rgba(255,107,43,0.04)', border: '1px solid rgba(255,107,43,0.1)' }}>
+                    <p className="text-xs" style={{ color: 'rgba(255,107,43,0.7)' }}>
+                      You have no API keys yet. Generate one above to continue.
+                    </p>
+                  </div>
+                )}
+              </SectionCard>
+
+              <button
+                onClick={handleStep2}
+                disabled={loading || (exeKeys.length === 0 && !exeNewKeyData)}
+                className="w-full mt-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}
+              >
+                {loading ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Creating project...
+                  </>
+                ) : (
+                  <>
+                    I have my key — Create Project
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {step === 2 && method !== 'exe' && (
             <div className="animate-slide-up">
               <SectionCard>
                 <h2 className="text-sm font-semibold text-white mb-1">
@@ -482,12 +651,50 @@ export default function NewScanPage() {
                     </svg>
                   </div>
                   <div>
-                    <p className="text-white font-semibold">Scan created successfully</p>
+                    <p className="text-white font-semibold">
+                      {method === 'exe' ? 'Project created successfully' : 'Scan created successfully'}
+                    </p>
                     <p className="text-white/30 text-xs mt-0.5">
                       Project: <span className="text-white/50">{createdProject?.name}</span>
                     </p>
                   </div>
                 </div>
+
+                {method === 'exe' && createdProject && (
+                  <div>
+                    <p className="text-sm text-white/50 mb-4">Your project is ready. Run these commands in the folder where you saved <code className="text-white/60">invisithreat.exe</code>:</p>
+
+                    {/* Project ID */}
+                    <div className="mb-4 rounded-xl px-4 py-3" style={{ background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.15)' }}>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">Your Project ID</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 text-xs font-mono" style={{ color: '#60a5fa' }}>{createdProject.id}</code>
+                        <button onClick={() => navigator.clipboard.writeText(createdProject.id)}
+                          className="flex-shrink-0 text-white/20 hover:text-white/60 transition-colors">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    <StepCmd n={1} label="Login (once — skip if already logged in)">
+                      <CodeBlock>{`.\\invisithreat.exe login --server ${getApiBase()} --token YOUR_API_KEY`}</CodeBlock>
+                    </StepCmd>
+
+                    <StepCmd n={2} label="Run the scan">
+                      <CodeBlock>{`.\\invisithreat.exe scan "path\\to\\your-project" --project-id ${createdProject.id}`}</CodeBlock>
+                    </StepCmd>
+
+                    <div className="mt-3 rounded-xl px-4 py-3"
+                      style={{ background: 'rgba(34,197,94,0.04)', border: '1px solid rgba(34,197,94,0.12)' }}>
+                      <p className="text-xs" style={{ color: 'rgba(34,197,94,0.8)' }}>
+                        Results will appear on the project page automatically once the scan completes.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {method === 'cli' && cliToken && (
                   <div>
