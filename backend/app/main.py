@@ -13,6 +13,7 @@ from app.db.session import engine
 from app.models import user, role  # noqa: F401
 from app.models import scan as scan_models  # noqa: F401
 from app.models import member  # noqa: F401
+from app.models import api_key  # noqa: F401
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -30,6 +31,16 @@ def _run_migrations():
         "UPDATE users SET is_pending = FALSE WHERE is_pending = TRUE AND date_creation < NOW() - INTERVAL '2 minutes'",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code_expires TIMESTAMP",
+        """CREATE TABLE IF NOT EXISTS user_api_keys (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name VARCHAR(100) NOT NULL,
+            key_prefix VARCHAR(12) NOT NULL,
+            key_hash VARCHAR(64) NOT NULL UNIQUE,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            last_used_at TIMESTAMP
+        )""",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
