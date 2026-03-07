@@ -9,6 +9,7 @@ from app.schemas.auth import LoginResponse, Token, RefreshTokenRequest
 from app.schemas.user import UserCreate, UserWithRole, RoleUpdateRequest, UserProfileUpdateRequest, UserAdminResponse, ForgotPasswordRequest, VerifyResetCodeRequest, ResetPasswordRequest
 from app.services.auth import authenticate_user, register_user, get_user_with_role
 from app.core.jwt import create_access_token, create_refresh_token, decode_token, get_current_user, require_admin, create_action_token, decode_action_token
+from app.core.api_key_auth import get_user_from_api_key
 from app.core.config import settings
 from app.core.email import notify_admin_new_request, notify_user_approved, notify_user_rejected, notify_admin_reset_code
 from app.models.user import User
@@ -170,7 +171,19 @@ async def get_current_user_info(
     db: Session = Depends(get_db)
 ):
     """
-    Get current authenticated user information
+    Get current authenticated user information (JWT auth)
+    """
+    user_with_role = get_user_with_role(db, current_user)
+    return UserWithRole(**user_with_role)
+
+
+@router.get("/cli/me", response_model=UserWithRole)
+async def get_current_cli_user_info(
+    current_user: User = Depends(get_user_from_api_key),
+    db: Session = Depends(get_db)
+):
+    """
+    Get current authenticated user information (API Key auth for CLI)
     """
     user_with_role = get_user_with_role(db, current_user)
     return UserWithRole(**user_with_role)

@@ -24,3 +24,4 @@ class User(Base):
     role = relationship("Role", back_populates="users")
     projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
     memberships = relationship("ProjectMember", back_populates="user", cascade="all, delete-orphan")
+    api_keys = relationship("UserAPIKey", back_populates="user", cascade="all, delete-orphan")
