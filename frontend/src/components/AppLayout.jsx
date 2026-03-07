@@ -29,6 +29,7 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
+
 ]
 
 export default function AppLayout({ children }) {
@@ -48,7 +49,7 @@ export default function AppLayout({ children }) {
     Viewer: '#6b7280',
   }[user?.role_name] || '#6b7280'
 
-  const visibleNavItems = NAV_ITEMS.filter(item => check(item.permission))
+  const visibleNavItems = NAV_ITEMS.filter(item => !item.permission || check(item.permission))
 
   return (
     <div className="h-screen flex overflow-hidden" style={{ background: '#080808' }}>
