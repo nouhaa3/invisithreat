@@ -1,4 +1,4 @@
-# InvisiThreat CLI Scanner
+﻿# InvisiThreat CLI Scanner
 
 A lightweight, zero-dependency security scanner for local project folders.
 
