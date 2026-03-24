@@ -1,11 +1,12 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from './AuthContext'
 import * as svc from '../services/notificationService'
+import { adminGetUsers } from '../services/adminService'
 
 const NotificationContext = createContext(null)
 
 export function NotificationProvider({ children }) {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount]     = useState(0)
   const timerRef = useRef(null)
@@ -14,10 +15,40 @@ export function NotificationProvider({ children }) {
     if (!isAuthenticated) return
     try {
       const data = await svc.getNotifications()
-      setNotifications(data)
-      setUnreadCount(data.filter(n => !n.is_read).length)
+      let merged = data
+
+      // Backfill role-request notifications for existing pending requests.
+      if (user?.role_name === 'Admin') {
+        const users = await adminGetUsers()
+        const roleRequestNotifications = users
+          .filter(u => !!u.requested_role_id)
+          .map(u => ({
+            id: `role-request-${u.id}`,
+            type: 'role_request',
+            title: `New role request from ${u.nom}`,
+            message: `${u.email} requested the ${u.requested_role_name || 'Unknown'} role.`,
+            link: '/admin',
+            is_read: false,
+            created_at: u.date_creation,
+          }))
+
+        const realRoleRequestSignatures = new Set(
+          data
+            .filter(n => n.type === 'role_request')
+            .map(n => `${n.title}|${n.message}`)
+        )
+
+        const syntheticOnly = roleRequestNotifications.filter(
+          n => !realRoleRequestSignatures.has(`${n.title}|${n.message}`)
+        )
+
+        merged = [...syntheticOnly, ...data]
+      }
+
+      setNotifications(merged)
+      setUnreadCount(merged.filter(n => !n.is_read).length)
     } catch {}
-  }, [isAuthenticated])
+  }, [isAuthenticated, user])
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -31,6 +62,11 @@ export function NotificationProvider({ children }) {
   }, [isAuthenticated, refresh])
 
   const markRead = async (id) => {
+    if (typeof id === 'string' && id.startsWith('role-request-')) {
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
+      setUnreadCount(prev => Math.max(0, prev - 1))
+      return
+    }
     await svc.markRead(id)
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
     setUnreadCount(prev => Math.max(0, prev - 1))
@@ -44,7 +80,9 @@ export function NotificationProvider({ children }) {
 
   const removeNotification = async (id) => {
     const notif = notifications.find(n => n.id === id)
-    await svc.deleteNotification(id)
+    if (!(typeof id === 'string' && id.startsWith('role-request-'))) {
+      await svc.deleteNotification(id)
+    }
     setNotifications(prev => prev.filter(n => n.id !== id))
     if (notif && !notif.is_read) setUnreadCount(prev => Math.max(0, prev - 1))
   }

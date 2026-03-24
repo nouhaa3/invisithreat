@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.email import notify_admin_new_request, notify_user_approved, notify_user_rejected, notify_admin_reset_code, notify_user_verify_email
 from app.models.user import User
 from app.models.role import Role
+from app.services.notification import create_notification
 from app.services.audit_log import create_audit_log
 import uuid as _uuid
 import random
@@ -397,6 +398,23 @@ async def request_role(
     db.commit()
     db.refresh(current_user)
     create_audit_log(db, current_user.id, "role_request", f"Requested role: {role_name}")
+
+    # Notify every active admin in-app so requests are handled from Notifications.
+    admins = (
+        db.query(User)
+        .join(Role, User.role_id == Role.id)
+        .filter(Role.name == "Admin", User.is_active == True)  # noqa: E712
+        .all()
+    )
+    for admin_user in admins:
+        create_notification(
+            db,
+            user_id=admin_user.id,
+            type="role_request",
+            title=f"New role request from {current_user.nom}",
+            message=f"{current_user.email} requested the {role_name} role.",
+            link="/admin",
+        )
     
     return {
         "status": "pending",
@@ -478,8 +496,22 @@ async def admin_change_role(
     if not role:
         raise HTTPException(status_code=400, detail=f"Role '{payload.role_name}' not found")
     user.role_id = role.id
+    # If the user had a pending request, resolve it when admin applies a role manually.
+    if user.requested_role_id:
+        user.requested_role_id = None
     db.commit()
     db.refresh(user)
+    
+    # Notify user that their role was changed
+    create_notification(
+        db,
+        user_id=user.id,
+        type="system",
+        title="Your role has been updated",
+        message=f"{admin.nom} changed your role to {payload.role_name}.",
+        link="/settings",
+    )
+    
     return UserAdminResponse(**get_user_with_role(db, user))
 
 
@@ -525,6 +557,16 @@ async def admin_approve_role_request(
     requested_role = db.query(Role).filter(Role.id == user.role_id).first()
     role_name = requested_role.name if requested_role else "Unknown"
     create_audit_log(db, admin.id, "role_approved", f"Approved {user.email} for {role_name} role")
+    
+    # Notify user that their role request was approved
+    create_notification(
+        db,
+        user_id=user.id,
+        type="system",
+        title="Your role request has been approved",
+        message=f"{admin.nom} approved your request for the {role_name} role.",
+        link="/settings",
+    )
     
     return UserAdminResponse(**get_user_with_role(db, user))
 
