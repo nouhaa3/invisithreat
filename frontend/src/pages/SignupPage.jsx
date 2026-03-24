@@ -120,11 +120,15 @@ export default function SignupPage() {
           </div>
         }
       >
-        <div className="flex flex-col items-center gap-8 text-center py-4">
+        <div className="flex flex-col items-center gap-7 text-center py-2">
           {/* Icon */}
           <div className="relative">
             <div className="w-20 h-20 rounded-2xl flex items-center justify-center"
-              style={{ background: 'rgba(255,107,43,0.08)', border: '1px solid rgba(255,107,43,0.2)' }}>
+              style={{
+                background: 'linear-gradient(145deg, rgba(255,107,43,0.14), rgba(255,107,43,0.05))',
+                border: '1px solid rgba(255,107,43,0.24)',
+                boxShadow: '0 0 28px rgba(255,107,43,0.15)',
+              }}>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#FF8C5A" strokeWidth="1.5">
                 <rect x="2" y="4" width="20" height="16" rx="2" />
                 <path d="M2 6l10 7.5L22 6" />
@@ -138,19 +142,22 @@ export default function SignupPage() {
           </div>
 
           {/* Text */}
-          <div>
-            <h2 className="text-2xl font-bold text-white mb-2">Check your email</h2>
-            <p className="text-white/40 text-sm leading-relaxed max-w-xs">
+          <div className="max-w-sm">
+            <h2 className="text-3xl font-bold text-white mb-2">Check your email</h2>
+            <p className="text-white/45 text-sm leading-relaxed">
               Hi <span className="text-white font-medium">{verificationData.nom}</span>, we've sent a verification link to<br />
-              <span className="text-brand-orange font-medium">{verificationData.email}</span>
+              <span className="text-brand-orange-light font-semibold">{verificationData.email}</span>
             </p>
           </div>
 
           {/* Info card */}
           <div className="w-full rounded-2xl px-5 py-5 text-left"
-            style={{ background: '#161616', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <p className="text-sm text-white/60 leading-relaxed">
-              Click the link in the email to verify your account. The link will expire in 24 hours.
+            style={{
+              background: 'linear-gradient(160deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01))',
+              border: '1px solid rgba(255,107,43,0.16)',
+            }}>
+            <p className="text-sm text-white/65 leading-relaxed">
+              Click the verification button in your email to activate your account. The link expires in <span className="text-white">24 hours</span>.
             </p>
           </div>
 
@@ -158,8 +165,12 @@ export default function SignupPage() {
             type="button"
             onClick={handleResendVerification}
             disabled={resending}
-            className="w-full text-center px-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.97] disabled:opacity-60"
-            style={{ background: 'linear-gradient(135deg,#3b82f6,#2563eb)', boxShadow: '0 4px 16px rgba(59,130,246,0.3)' }}
+            className="w-full text-center px-4 py-3 rounded-xl text-sm font-semibold transition-all hover:shadow-lg active:scale-[0.97] disabled:opacity-60"
+            style={{
+              background: 'rgba(255,107,43,0.08)',
+              color: '#FF8C5A',
+              border: '1px solid rgba(255,107,43,0.28)',
+            }}
           >
             {resending ? 'Resending...' : 'Resend Verification Email'}
           </button>
@@ -168,14 +179,17 @@ export default function SignupPage() {
             <a
               href={verificationData.verificationUrl}
               className="w-full text-center px-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.97]"
-              style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 4px 16px rgba(22,163,74,0.3)' }}
+              style={{
+                background: 'linear-gradient(135deg,#FF6B2B,#C13A00)',
+                boxShadow: '0 8px 24px rgba(255,107,43,0.3)',
+              }}
             >
-              Verify Me
+              Open Verification Link
             </a>
           )}
 
           {resendMessage && (
-            <p className="text-xs text-white/50">{resendMessage}</p>
+            <p className="text-xs text-white/55">{resendMessage}</p>
           )}
 
           <Link to="/login"

@@ -11,10 +11,19 @@ from app.services.auth import authenticate_user, register_user, get_user_with_ro
 from app.core.jwt import create_access_token, create_refresh_token, decode_token, get_current_user, require_admin, create_action_token, decode_action_token, create_totp_token
 from app.core.api_key_auth import get_user_from_api_key
 from app.core.config import settings
-from app.core.email import notify_admin_new_request, notify_user_approved, notify_user_rejected, notify_admin_reset_code, notify_user_verify_email
+from app.core.email import (
+    notify_user_approved,
+    notify_user_rejected,
+    notify_admin_reset_code,
+    notify_user_verify_email,
+    notify_admin_role_request,
+    notify_user_role_request_received,
+    notify_user_role_request_approved,
+)
 from app.models.user import User
 from app.models.role import Role
 from app.services.audit_log import create_audit_log
+from app.services.notification import create_notification
 import uuid as _uuid
 import random
 import string
@@ -397,6 +406,35 @@ async def request_role(
     db.commit()
     db.refresh(current_user)
     create_audit_log(db, current_user.id, "role_request", f"Requested role: {role_name}")
+
+    # Notify all admins in-app + by email
+    admin_users = (
+        db.query(User)
+        .join(Role, User.role_id == Role.id)
+        .filter(Role.name == "Admin", User.is_active == True)
+        .all()
+    )
+    for admin_user in admin_users:
+        create_notification(
+            db,
+            admin_user.id,
+            "system",
+            "New Role Request",
+            f"{current_user.nom} requested {role_name} role.",
+            "/admin",
+        )
+    notify_admin_role_request(current_user.nom, current_user.email, role_name)
+
+    # Notify requester in-app + by email
+    create_notification(
+        db,
+        current_user.id,
+        "system",
+        "Role Request Submitted",
+        f"Your request for {role_name} role was sent to administrators.",
+        "/dashboard",
+    )
+    notify_user_role_request_received(current_user.nom, current_user.email, role_name)
     
     return {
         "status": "pending",
@@ -516,15 +554,37 @@ async def admin_approve_role_request(
     if not user.requested_role_id:
         raise HTTPException(status_code=400, detail="User has no pending role request")
     
-    # Grant the requested role
+    # Grant the requested role and expire trial banner/scans
     user.role_id = user.requested_role_id
     user.requested_role_id = None
+    user.trial_scans_remaining = 0
     db.commit()
     db.refresh(user)
     
     requested_role = db.query(Role).filter(Role.id == user.role_id).first()
     role_name = requested_role.name if requested_role else "Unknown"
     create_audit_log(db, admin.id, "role_approved", f"Approved {user.email} for {role_name} role")
+
+    # Notify user in-app + by email
+    create_notification(
+        db,
+        user.id,
+        "system",
+        "Role Request Approved",
+        f"Your role has been upgraded to {role_name}.",
+        "/dashboard",
+    )
+    notify_user_role_request_approved(user.nom, user.email, role_name)
+
+    # Notify acting admin in-app as confirmation
+    create_notification(
+        db,
+        admin.id,
+        "system",
+        "Role Approval Completed",
+        f"You approved {user.email} for {role_name} role.",
+        "/admin",
+    )
     
     return UserAdminResponse(**get_user_with_role(db, user))
 

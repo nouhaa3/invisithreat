@@ -52,6 +52,14 @@ export const requestRole = async (role_name) => {
 }
 
 /**
+ * Fetch current authenticated user profile
+ */
+export const getMe = async () => {
+  const response = await api.get('/api/auth/me')
+  return response.data
+}
+
+/**
  * Refresh access token
  */
 export const refreshToken = async (refresh_token) => {

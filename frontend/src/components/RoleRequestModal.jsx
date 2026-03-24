@@ -43,7 +43,7 @@ export default function RoleRequestModal({ isOpen, onClose, currentRole }) {
   if (success) {
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-slate-900 rounded-2xl max-w-sm w-full p-8 border border-slate-800">
+        <div className="rounded-2xl max-w-sm w-full p-8" style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)' }}>
           <div className="flex justify-center mb-6">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
               style={{ background: 'rgba(255,107,43,0.08)', border: '1px solid rgba(255,107,43,0.2)' }}>
@@ -63,8 +63,8 @@ export default function RoleRequestModal({ isOpen, onClose, currentRole }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-900 rounded-2xl max-w-sm w-full border border-slate-800">
-        <div className="p-6 border-b border-slate-800">
+      <div className="rounded-2xl max-w-sm w-full" style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="p-6" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <h2 className="text-2xl font-bold text-white">Request Role Upgrade</h2>
           <p className="text-white/40 text-sm mt-1">
             Select the role you'd like to upgrade to
@@ -114,7 +114,8 @@ export default function RoleRequestModal({ isOpen, onClose, currentRole }) {
                 type="button"
                 onClick={onClose}
                 disabled={loading}
-                className="flex-1 px-4 py-3 rounded-lg font-medium transition-all border border-slate-700 text-white/60 hover:text-white/80"
+                className="flex-1 px-4 py-3 rounded-lg font-medium transition-all text-white/60 hover:text-white/80"
+                style={{ border: '1px solid rgba(255,255,255,0.16)', background: 'rgba(255,255,255,0.02)' }}
               >
                 Cancel
               </button>

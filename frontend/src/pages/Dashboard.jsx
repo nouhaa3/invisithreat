@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import AppLayout from '../components/AppLayout'
 import RoleRequestModal from '../components/RoleRequestModal'
 import { getProjects, deleteProject, getDashboardStats } from '../services/projectService'
+import { getMe } from '../services/authService'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -190,7 +191,7 @@ function StatusBadge({ status }) {
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { user } = useAuth()
+  const { user, updateUser } = useAuth()
   const navigate  = useNavigate()
 
   const [projects,      setProjects]      = useState([])
@@ -201,9 +202,10 @@ export default function Dashboard() {
 
   const load = async () => {
     try {
-      const [proj, st] = await Promise.all([getProjects(), getDashboardStats()])
+      const [proj, st, freshUser] = await Promise.all([getProjects(), getDashboardStats(), getMe()])
       setProjects(proj)
       setStats(st)
+      if (freshUser) updateUser(freshUser)
     } catch {
       setProjects([])
     } finally {
@@ -252,7 +254,7 @@ export default function Dashboard() {
           </div>
 
           {/* VIEWER Trial Info Banner */}
-          {user?.role_name === 'Viewer' && (
+          {user?.role_name === 'Viewer' && (user?.trial_scans_remaining ?? 0) > 0 && (
             <div className="mb-6 animate-slide-up rounded-2xl p-5 flex items-center justify-between"
               style={{ background: 'linear-gradient(135deg, rgba(255,107,43,0.08), rgba(255,107,43,0.04))', border: '1px solid rgba(255,107,43,0.2)' }}>
               <div>
