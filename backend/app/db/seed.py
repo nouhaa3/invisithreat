@@ -8,6 +8,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from app.db.session import SessionLocal
 from app.models.role import Role
 from app.models.user import User
+from app.models import scan as scan_models  # noqa: F401
+from app.models import member  # noqa: F401
+from app.models import api_key  # noqa: F401
+from app.models import notification  # noqa: F401
+from app.models import audit_log  # noqa: F401
 from app.core.security import hash_password
 import uuid
 
@@ -53,6 +58,9 @@ def seed():
                     hashed_password=hash_password(u["password"]),
                     role_id=role_map[u["role"]].id,
                     is_active=True,
+                    is_verified=True,  # seed users are verified
+                    is_pending=False,  # not pending
+                    trial_scans_remaining=2
                 )
                 db.add(obj)
                 print(f"  + User: {u['email']}")

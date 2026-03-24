@@ -16,15 +16,38 @@ export const login = async (email, password) => {
 }
 
 /**
- * Register - JSON body with nom, email, password, role_name
+ * Register - JSON body with nom, email, password
  */
-export const register = async ({ nom, email, password, role_name = 'Developer' }) => {
+export const register = async ({ nom, email, password }) => {
   const response = await api.post('/api/auth/register', {
     nom,
     email,
     password,
-    role_name,
   })
+  return response.data
+}
+
+/**
+ * Verify email with token
+ */
+export const verifyEmail = async (token) => {
+  const response = await api.get(`/api/auth/action/verify-email/${token}`)
+  return response.data
+}
+
+/**
+ * Resend verification email
+ */
+export const resendVerificationEmail = async (email) => {
+  const response = await api.post('/api/auth/resend-verification', { email })
+  return response.data
+}
+
+/**
+ * Request role upgrade
+ */
+export const requestRole = async (role_name) => {
+  const response = await api.post('/api/auth/request-role', { role_name })
   return response.data
 }
 

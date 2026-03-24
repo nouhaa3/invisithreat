@@ -2,6 +2,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppLayout from '../components/AppLayout'
+import RoleRequestModal from '../components/RoleRequestModal'
 import { getProjects, deleteProject, getDashboardStats } from '../services/projectService'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -192,10 +193,11 @@ export default function Dashboard() {
   const { user } = useAuth()
   const navigate  = useNavigate()
 
-  const [projects,   setProjects]   = useState([])
-  const [stats,      setStats]      = useState(null)
-  const [loading,    setLoading]    = useState(true)
-  const [deletingId, setDeletingId] = useState(null)
+  const [projects,      setProjects]      = useState([])
+  const [stats,         setStats]         = useState(null)
+  const [loading,       setLoading]       = useState(true)
+  const [deletingId,    setDeletingId]    = useState(null)
+  const [showRoleModal, setShowRoleModal] = useState(false)
 
   const load = async () => {
     try {
@@ -233,6 +235,7 @@ export default function Dashboard() {
     : '#f87171'
 
   return (
+    <>
     <AppLayout>
       <main className="flex-1 overflow-auto">
         <div className="px-8 py-8">
@@ -247,6 +250,31 @@ export default function Dashboard() {
               {loading ? 'Loading workspace...' : `${projects.length} project${projects.length !== 1 ? 's' : ''} in your workspace`}
             </p>
           </div>
+
+          {/* VIEWER Trial Info Banner */}
+          {user?.role_name === 'Viewer' && (
+            <div className="mb-6 animate-slide-up rounded-2xl p-5 flex items-center justify-between"
+              style={{ background: 'linear-gradient(135deg, rgba(255,107,43,0.08), rgba(255,107,43,0.04))', border: '1px solid rgba(255,107,43,0.2)' }}>
+              <div>
+                <p className="text-sm font-semibold text-white mb-1">Try InvisiThreat Risk-Free</p>
+                <p className="text-xs text-white/60">
+                  You have <span className="text-brand-orange font-semibold">{user?.trial_scans_remaining ?? 0} trial scan{(user?.trial_scans_remaining ?? 0) !== 1 ? 's' : ''}</span> remaining. Request a Developer role for unlimited scanning.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowRoleModal(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white flex-shrink-0 transition-all hover:shadow-lg active:scale-[0.97]"
+                style={{ background: 'linear-gradient(135deg,#FF6B2B,#C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.3)' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5" />
+                  <path d="M12 5v9" />
+                  <path d="M9 11h6" />
+                </svg>
+                Request Role
+              </button>
+            </div>
+          )}
 
           {/* ── KPI row ────────────────────────────────────────────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 animate-slide-up" style={{ animationDelay: '0.04s' }}>
@@ -389,6 +417,12 @@ export default function Dashboard() {
         </div>
       </main>
     </AppLayout>
+    <RoleRequestModal 
+      isOpen={showRoleModal} 
+      onClose={() => setShowRoleModal(false)}
+      currentRole={user?.role_name}
+    />
+    </>
   )
 }
 

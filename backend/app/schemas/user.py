@@ -11,14 +11,11 @@ class UserBase(BaseModel):
 
 
 class UserCreate(BaseModel):
-    """Schema for user registration"""
+    """Schema for user registration - user automatically gets VIEWER role"""
     email: EmailStr
     nom: str = Field(..., min_length=2, max_length=100)
     password: str = Field(..., min_length=8, max_length=100)
-    role_name: str = Field(
-        default="Viewer", 
-        description="Role name: Admin, Developer, Security Manager, or Viewer"
-    )
+    # role_name removed - users always start as VIEWER
 
 
 class UserLogin(BaseModel):
@@ -36,6 +33,10 @@ class UserResponse(BaseModel):
     date_creation: datetime
     is_active: bool
     is_pending: bool = True
+    is_verified: bool = False  # email verification status
+    trial_scans_remaining: int = 2
+    requested_role_id: Optional[uuid.UUID] = None
+    requested_role_name: Optional[str] = None
     role_id: uuid.UUID
     
     model_config = ConfigDict(from_attributes=True)

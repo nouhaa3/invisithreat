@@ -33,6 +33,9 @@ def _run_migrations():
         "UPDATE users SET is_pending = FALSE WHERE is_pending = TRUE AND date_creation < NOW() - INTERVAL '2 minutes'",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code_expires TIMESTAMP",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_scans_remaining INTEGER NOT NULL DEFAULT 2",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS requested_role_id UUID REFERENCES roles(id)",
         """CREATE TABLE IF NOT EXISTS user_api_keys (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

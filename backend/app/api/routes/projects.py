@@ -106,6 +106,18 @@ async def create_new_scan(
         raise HTTPException(status_code=403, detail="Only owners and editors can run scans")
     if data.method not in ("cli", "github"):
         raise HTTPException(status_code=400, detail="method must be 'cli' or 'github'")
+    
+    # Check trial scans limit for VIEWER role
+    if current_user.role.name == "Viewer":
+        if getattr(current_user, 'trial_scans_remaining', 0) <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Trial scan limit reached. Upgrade your role to continue scanning.",
+            )
+        # Decrement trial scans
+        current_user.trial_scans_remaining -= 1
+        db.commit()
+    
     scan = create_scan(db, project, data.method, data.repo_url, data.repo_branch)
 
     if data.method == "github":

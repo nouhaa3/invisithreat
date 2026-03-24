@@ -20,6 +20,11 @@ export const adminApproveUser = async (userId) => {
   return res.data
 }
 
+export const adminApproveRoleRequest = async (userId) => {
+  const res = await api.post(`/api/auth/admin/users/${userId}/approve-role-request`)
+  return res.data
+}
+
 export const adminRejectUser = async (userId) => {
   const res = await api.post(`/api/auth/admin/users/${userId}/reject`)
   return res.data

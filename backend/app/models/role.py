@@ -12,4 +12,4 @@ class Role(Base):
     name = Column(String, unique=True, nullable=False)
     description = Column(String, nullable=True)
 
-    users = relationship("User", back_populates="role")
+    users = relationship("User", back_populates="role", foreign_keys="User.role_id")

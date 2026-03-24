@@ -2,44 +2,82 @@
 Email notification service — Brevo (Sendinblue) Transactional API
 """
 import logging
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import sib_api_v3_sdk  # type: ignore  # pylint: disable=import-error
 from sib_api_v3_sdk.rest import ApiException  # type: ignore  # pylint: disable=import-error
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-SENDER = {"email": "nouhaboughnim03@gmail.com", "name": "InvisiThreat"}
+SENDER = {"email": settings.EMAIL_FROM or "nouhaboughnim03@gmail.com", "name": "InvisiThreat"}
+
+
+def _send_brevo(to: str, subject: str, html: str, text: str) -> bool:
+  if not settings.BREVO_API_KEY:
+    return False
+  try:
+    configuration = sib_api_v3_sdk.Configuration()
+    configuration.api_key["api-key"] = settings.BREVO_API_KEY
+
+    api = sib_api_v3_sdk.TransactionalEmailsApi(
+      sib_api_v3_sdk.ApiClient(configuration)
+    )
+
+    email = sib_api_v3_sdk.SendSmtpEmail(
+      to=[{"email": to}],
+      sender=SENDER,
+      subject=subject,
+      html_content=html,
+      text_content=text,
+    )
+
+    api.send_transac_email(email)
+    logger.info("Email sent via Brevo to %s — %s", to, subject)
+    return True
+  except ApiException as exc:
+    logger.error("Brevo API error sending to %s: %s", to, exc)
+    return False
+  except Exception as exc:
+    logger.error("Failed to send via Brevo to %s: %s", to, exc)
+    return False
+
+
+def _send_smtp(to: str, subject: str, html: str, text: str) -> bool:
+  if not settings.SMTP_HOST or not settings.SMTP_USERNAME or not settings.SMTP_PASSWORD:
+    return False
+  try:
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = SENDER["email"]
+    msg["To"] = to
+    msg.attach(MIMEText(text, "plain", "utf-8"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
+
+    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20) as server:
+      if settings.SMTP_USE_TLS:
+        server.starttls()
+      server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+      server.sendmail(SENDER["email"], [to], msg.as_string())
+
+    logger.info("Email sent via SMTP to %s — %s", to, subject)
+    return True
+  except Exception as exc:
+    logger.error("Failed to send via SMTP to %s: %s", to, exc)
+    return False
 
 def _send(to: str, subject: str, html: str, text: str) -> bool:
-    """Low-level send via Brevo — returns True on success, False on failure (never raises)."""
-    if not settings.BREVO_API_KEY:
-        logger.warning("BREVO_API_KEY not configured — skipping email to %s", to)
-        return False
-    try:
-        configuration = sib_api_v3_sdk.Configuration()
-        configuration.api_key["api-key"] = settings.BREVO_API_KEY
-
-        api = sib_api_v3_sdk.TransactionalEmailsApi(
-            sib_api_v3_sdk.ApiClient(configuration)
-        )
-
-        email = sib_api_v3_sdk.SendSmtpEmail(
-            to=[{"email": to}],
-            sender=SENDER,
-            subject=subject,
-            html_content=html,
-            text_content=text,
-        )
-
-        api.send_transac_email(email)
-        logger.info("Email sent to %s — %s", to, subject)
-        return True
-    except ApiException as exc:
-        logger.error("Brevo API error sending to %s: %s", to, exc)
-        return False
-    except Exception as exc:
-        logger.error("Failed to send email to %s: %s", to, exc)
-        return False
+  """Low-level send: Brevo first, then SMTP fallback. Never raises."""
+  if _send_brevo(to, subject, html, text):
+    return True
+  if _send_smtp(to, subject, html, text):
+    return True
+  logger.warning(
+    "No email transport configured or available for %s. Configure BREVO_API_KEY or SMTP_*.",
+    to,
+  )
+  return False
 
 
 # ─── Templates ───────────────────────────────────────────────────────────────
@@ -257,6 +295,57 @@ def notify_admin_reset_code(nom: str, email: str, code: str) -> bool:
         f"Your InvisiThreat password reset code is: {code}\n\n"
         f"This code expires in 30 minutes.\n"
         f"If you didn't request this, ignore this email."
+    )
+    return _send(email, subject, html, plain)
+
+
+def notify_user_verify_email(nom: str, email: str, verification_token: str, frontend_url: str) -> bool:
+    """Send email verification link to newly registered user."""
+    subject = "[InvisiThreat] Verify your email address"
+    verify_url = f"{frontend_url}/verify-email?token={verification_token}"
+
+    html = f"""
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#080808;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 20px;">
+      <table width="560" style="background:#111111;border-radius:16px;border:1px solid rgba(255,255,255,0.06);overflow:hidden;">
+        <tr><td style="background:linear-gradient(135deg,#0a1a2e,#111);padding:32px 36px;border-bottom:1px solid rgba(59,130,246,0.15);">
+          <span style="font-size:22px;font-weight:700;color:#60a5fa;">InvisiThreat</span>
+          <span style="font-size:12px;color:rgba(255,255,255,0.3);margin-left:12px;">Email Verification</span>
+        </td></tr>
+        <tr><td style="padding:40px 36px;text-align:center;">
+          <h2 style="color:#fff;font-size:24px;margin:0 0 16px;">Welcome, {nom}!</h2>
+          <p style="color:rgba(255,255,255,0.5);font-size:14px;line-height:1.6;margin:0 0 32px;">
+            We're excited to have you on board.<br>
+            Please verify your email to get started with InvisiThreat.
+          </p>
+          <a href="{verify_url}"
+             style="display:inline-block;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-weight:700;font-size:14px;text-decoration:none;padding:13px 32px;border-radius:10px;margin-bottom:24px;">
+            Verify Email Address →
+          </a>
+          <p style="color:rgba(255,255,255,0.3);font-size:12px;margin:0;">
+            This link expires in 24 hours.<br>
+            If you didn't create this account, please ignore this email.
+          </p>
+        </td></tr>
+        <tr><td style="padding:20px 36px;border-top:1px solid rgba(255,255,255,0.05);">
+          <p style="color:rgba(255,255,255,0.2);font-size:12px;margin:0;text-align:center;">InvisiThreat · DevSecOps Platform</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+    plain = (
+        f"Hi {nom},\n\n"
+        f"Welcome to InvisiThreat!\n"
+        f"Please verify your email by visiting this link:\n"
+        f"{verify_url}\n\n"
+        f"This link expires in 24 hours.\n"
+        f"If you didn't create this account, ignore this email."
     )
     return _send(email, subject, html, plain)
 

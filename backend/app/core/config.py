@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     BREVO_API_KEY: str = ""
     ADMIN_EMAIL: str = ""
 
+    # Email — SMTP fallback (Gmail/Outlook/custom SMTP)
+    EMAIL_FROM: str = ""
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_USE_TLS: bool = True
+
     @property
     def DATABASE_URL(self) -> str:
         """Return DB URL from DATABASE_URL when set, otherwise build from POSTGRES_* values."""
@@ -50,6 +58,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 
 settings = Settings()

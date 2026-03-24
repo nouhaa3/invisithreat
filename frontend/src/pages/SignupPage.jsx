@@ -4,16 +4,18 @@ import AuthLayout from '../components/AuthLayout'
 import InputField from '../components/InputField'
 import Button from '../components/Button'
 import Alert from '../components/Alert'
-import { register } from '../services/authService'
+import { register, resendVerificationEmail } from '../services/authService'
 
 export default function SignupPage() {
   const navigate = useNavigate()
 
-  const [form, setForm] = useState({ nom: '', email: '', password: '', confirmPassword: '', role_name: 'Developer' })
+  const [form, setForm] = useState({ nom: '', email: '', password: '', confirmPassword: '' })
   const [errors, setErrors] = useState({})
   const [serverError, setServerError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [pendingData, setPendingData] = useState(null) // set after successful registration
+  const [resending, setResending] = useState(false)
+  const [resendMessage, setResendMessage] = useState('')
+  const [verificationData, setVerificationData] = useState(null) // set after successful registration
 
   const validate = () => {
     const errs = {}
@@ -41,10 +43,15 @@ export default function SignupPage() {
     setLoading(true)
     setServerError('')
     try {
-      const data = await register({ nom: form.nom, email: form.email, password: form.password, role_name: form.role_name })
-      // Backend now returns { status: 'pending', ... } instead of tokens
-      if (data?.status === 'pending') {
-        setPendingData({ nom: data.nom, email: data.email })
+      const data = await register({ nom: form.nom, email: form.email, password: form.password })
+      // Backend now returns { status: 'email_verification_required', ... }
+      if (data?.status === 'email_verification_required') {
+        setVerificationData({
+          nom: data.nom,
+          email: data.email,
+          emailSent: data.email_sent !== false,
+          verificationUrl: data.verification_url || '',
+        })
       } else {
         // Fallback: should not happen, but redirect gracefully
         navigate('/login')
@@ -56,6 +63,21 @@ export default function SignupPage() {
       )
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResendVerification = async () => {
+    if (!verificationData?.email) return
+    setResending(true)
+    setResendMessage('')
+    try {
+      const data = await resendVerificationEmail(verificationData.email)
+      setResendMessage(data?.message || 'Verification email sent.')
+    } catch (err) {
+      const detail = err.response?.data?.detail
+      setResendMessage(typeof detail === 'string' ? detail : 'Could not resend email right now.')
+    } finally {
+      setResending(false)
     }
   }
 
@@ -80,23 +102,21 @@ export default function SignupPage() {
     'linear-gradient(90deg, #FF6B2B, #FF8C5A)',
   ]
 
-  // ── Pending confirmation screen ──────────────────────────────────────────
-  if (pendingData) {
+  // ── Email verification screen ──────────────────────────────────────────
+  if (verificationData) {
     return (
       <AuthLayout
         imageContent={
           <div>
             <div className="flex items-center gap-2 mb-4">
               <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, rgba(255,107,43,0.6), transparent)' }} />
-              <span className="text-brand-orange text-xs font-semibold tracking-widest uppercase">Pending</span>
+              <span className="text-brand-orange text-xs font-semibold tracking-widest uppercase">Verify Email</span>
             </div>
             <p className="text-white text-3xl font-light leading-tight mb-3">
-              Your request is<br />
-              <span className="font-bold shimmer-text">under review</span>
+              Confirm Your<br />
+              <span className="font-bold shimmer-text">Email Address</span>
             </p>
-            <p className="text-white/30 text-sm leading-relaxed">
-              The administrator will be notified and will review your account shortly.
-            </p>
+            <p className="text-white/30 text-sm leading-relaxed">We've sent you a verification link</p>
           </div>
         }
       >
@@ -106,22 +126,23 @@ export default function SignupPage() {
             <div className="w-20 h-20 rounded-2xl flex items-center justify-center"
               style={{ background: 'rgba(255,107,43,0.08)', border: '1px solid rgba(255,107,43,0.2)' }}>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#FF8C5A" strokeWidth="1.5">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                <path d="M12 8v4M12 16h.01" />
+                <rect x="2" y="4" width="20" height="16" rx="2" />
+                <path d="M2 6l10 7.5L22 6" />
               </svg>
             </div>
-            <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-yellow-400 flex items-center justify-center">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="#000" stroke="none">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-emerald-400 flex items-center justify-center">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3">
+                <path d="M20 6L9 17l-5-5" />
               </svg>
             </div>
           </div>
 
           {/* Text */}
           <div>
-            <h2 className="text-2xl font-bold text-white mb-2">Request submitted!</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">Check your email</h2>
             <p className="text-white/40 text-sm leading-relaxed max-w-xs">
-              Hi <span className="text-white font-medium">{pendingData.nom}</span>, your account request has been sent to the administrator.
+              Hi <span className="text-white font-medium">{verificationData.nom}</span>, we've sent a verification link to<br />
+              <span className="text-brand-orange font-medium">{verificationData.email}</span>
             </p>
           </div>
 
@@ -129,11 +150,33 @@ export default function SignupPage() {
           <div className="w-full rounded-2xl px-5 py-5 text-left"
             style={{ background: '#161616', border: '1px solid rgba(255,255,255,0.06)' }}>
             <p className="text-sm text-white/60 leading-relaxed">
-              Hi <span className="text-white font-semibold">{pendingData.nom}</span>, your request has been received.
-              The administrator will review it and you will get a confirmation at{' '}
-              <span className="text-brand-orange">{pendingData.email}</span> once a decision has been made.
+              Click the link in the email to verify your account. The link will expire in 24 hours.
             </p>
           </div>
+
+          <button
+            type="button"
+            onClick={handleResendVerification}
+            disabled={resending}
+            className="w-full text-center px-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.97] disabled:opacity-60"
+            style={{ background: 'linear-gradient(135deg,#3b82f6,#2563eb)', boxShadow: '0 4px 16px rgba(59,130,246,0.3)' }}
+          >
+            {resending ? 'Resending...' : 'Resend Verification Email'}
+          </button>
+
+          {verificationData.verificationUrl && (
+            <a
+              href={verificationData.verificationUrl}
+              className="w-full text-center px-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.97]"
+              style={{ background: 'linear-gradient(135deg,#16a34a,#15803d)', boxShadow: '0 4px 16px rgba(22,163,74,0.3)' }}
+            >
+              Verify Me
+            </a>
+          )}
+
+          {resendMessage && (
+            <p className="text-xs text-white/50">{resendMessage}</p>
+          )}
 
           <Link to="/login"
             className="text-sm text-white/30 hover:text-brand-orange transition-colors">
@@ -171,7 +214,7 @@ export default function SignupPage() {
             <span className="text-brand-orange-light text-xs font-medium">New Account</span>
           </div>
           <h1 className="text-4xl font-bold text-white mb-2">Create Account</h1>
-          <p className="text-base text-white/35">Your request will be reviewed by the administrator</p>
+          <p className="text-base text-white/35">Get instant access with your VIEWER trial</p>
         </div>
 
         {/* Server error */}
@@ -251,37 +294,9 @@ export default function SignupPage() {
             />
           </div>
 
-          {/* Role */}
-          <div className="animate-slide-up animation-delay-700">
-            <label className="block text-xs font-medium text-white/50 mb-2 uppercase tracking-widest">Requested Role</label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { value: 'Developer',        label: 'Developer',         desc: 'Create & scan projects' },
-                { value: 'Security Manager', label: 'Security Manager',  desc: 'Review all findings' },
-                { value: 'Viewer',           label: 'Viewer',            desc: 'Read-only access' },
-                { value: 'Admin',            label: 'Admin',             desc: 'Full platform access' },
-              ].map(({ value, label, desc }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setForm(p => ({ ...p, role_name: value }))}
-                  disabled={loading}
-                  className="flex flex-col items-start px-3 py-2.5 rounded-xl text-left transition-all"
-                  style={{
-                    background: form.role_name === value ? 'rgba(255,107,43,0.08)' : 'rgba(255,255,255,0.02)',
-                    border: form.role_name === value ? '1px solid rgba(255,107,43,0.3)' : '1px solid rgba(255,255,255,0.06)',
-                  }}
-                >
-                  <span className="text-xs font-semibold" style={{ color: form.role_name === value ? '#FF8C5A' : 'rgba(255,255,255,0.5)' }}>{label}</span>
-                  <span className="text-[10px] text-white/25 mt-0.5">{desc}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="animate-slide-up animation-delay-800 mt-1">
             <Button type="submit" loading={loading}>
-              Submit Request
+              Create Account
             </Button>
           </div>
         </form>

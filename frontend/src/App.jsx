@@ -4,6 +4,7 @@ import { NotificationProvider } from './context/NotificationContext'
 import { can, PERMISSIONS } from './utils/permissions'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
+import VerifyEmailPage from './pages/VerifyEmailPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import Dashboard from './pages/Dashboard'
 import NewScanPage from './pages/NewScanPage'
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
+          <Route path="/verify-email" element={<PublicRoute><VerifyEmailPage /></PublicRoute>} />
           <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
           <Route path="/dashboard" element={<PermissionRoute permission={PERMISSIONS.VIEW_DASHBOARD}><Dashboard /></PermissionRoute>} />
           <Route path="/scans/new" element={<PermissionRoute permission={PERMISSIONS.RUN_SCAN}><NewScanPage /></PermissionRoute>} />

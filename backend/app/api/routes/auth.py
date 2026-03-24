@@ -11,7 +11,7 @@ from app.services.auth import authenticate_user, register_user, get_user_with_ro
 from app.core.jwt import create_access_token, create_refresh_token, decode_token, get_current_user, require_admin, create_action_token, decode_action_token, create_totp_token
 from app.core.api_key_auth import get_user_from_api_key
 from app.core.config import settings
-from app.core.email import notify_admin_new_request, notify_user_approved, notify_user_rejected, notify_admin_reset_code
+from app.core.email import notify_admin_new_request, notify_user_approved, notify_user_rejected, notify_admin_reset_code, notify_user_verify_email
 from app.models.user import User
 from app.models.role import Role
 from app.services.audit_log import create_audit_log
@@ -32,28 +32,54 @@ async def register(
     db: Session = Depends(get_db)
 ):
     """
-    Register a new user — account starts as pending.
-    Admin receives an email notification and must approve before login is possible.
+    Register a new user with VIEWER role and email verification.
+    User receives email verification link and must verify before login.
     """
     user = register_user(db, user_data)
 
-    # Get role name for the notification email
-    role = db.query(Role).filter(Role.id == user.role_id).first()
-    role_name = role.name if role else user_data.role_name
+    # Create email verification token (valid for 24 hours)
+    verification_token = create_action_token(str(user.id), "verify_email")
 
-    # Build one-click approve / reject links embedded in the email
-    approve_token = create_action_token(str(user.id), "approve")
-    reject_token  = create_action_token(str(user.id), "reject")
-
-    # Notify admin by email (fire-and-forget — failure is non-blocking)
-    notify_admin_new_request(user.nom, user.email, role_name, approve_token, reject_token)
+    # Send verification email to user (not admin notification)
+    email_sent = notify_user_verify_email(user.nom, user.email, verification_token, settings.FRONTEND_URL)
 
     return {
-        "status": "pending",
-        "message": "Your account request has been submitted. You will receive an email once the administrator reviews it.",
+        "status": "email_verification_required",
+        "message": "Account created! Please verify your email to continue.",
         "email": user.email,
         "nom": user.nom,
+        "email_sent": email_sent,
+        "verification_url": f"{settings.FRONTEND_URL}/verify-email?token={verification_token}",
     }
+
+
+@router.post("/resend-verification", tags=["Authentication"])
+async def resend_verification_email(
+    payload: dict,
+    db: Session = Depends(get_db),
+):
+    """Resend email verification link for non-verified users."""
+    email = (payload.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="email is required")
+
+    user = db.query(User).filter(User.email == email).first()
+    # Do not leak user existence in production-like flows.
+    if not user:
+        return {"message": "If this account exists, a verification email has been sent."}
+
+    if getattr(user, "is_verified", False):
+        return {"message": "This email is already verified."}
+
+    verification_token = create_action_token(str(user.id), "verify_email")
+    sent = notify_user_verify_email(user.nom, user.email, verification_token, settings.FRONTEND_URL)
+    if not sent:
+        raise HTTPException(
+            status_code=503,
+            detail="Email service unavailable. Please contact administrator.",
+        )
+
+    return {"message": "Verification email sent successfully."}
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -307,6 +333,78 @@ def _html_page(title: str, icon: str, heading: str, body: str, color: str) -> st
 <body><div class='card'><div class='icon'>{icon}</div><div class='heading'>{heading}</div><div class='body'>{body}</div><a class='btn' href='{settings.FRONTEND_URL}/login'>Go to platform</a><div class='brand'>InvisiThreat · DevSecOps Platform</div></div></body></html>"""
 
 
+@router.get("/action/verify-email/{token}", response_class=HTMLResponse, tags=["Auth"], include_in_schema=False)
+async def email_verify_user(token: str, db: Session = Depends(get_db)):
+    """Public link — verify user email (called from signup confirmation email)."""
+    user_id = decode_action_token(token, "verify_email")
+    user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
+    if not user:
+        return HTMLResponse(_html_page("Error", "❌", "User not found",
+            "This user no longer exists in the platform.", "#ef4444"), status_code=404)
+    if getattr(user, 'is_verified', False):
+        return HTMLResponse(_html_page("Already Verified", "ℹ️", "Email already verified",
+            f"Your email <strong style='color:#fff'>{user.email}</strong> is already verified.<br>You can now log in.", "#3b82f6"))
+    user.is_verified = True
+    db.commit()
+    db.refresh(user)
+    return HTMLResponse(_html_page("Verified", "✅", "Email verified!",
+        f"Your email <strong style='color:#fff'>{user.email}</strong> is now verified.<br>You can now log in and access your dashboard.",
+        "#16a34a"))
+
+
+@router.post("/request-role", tags=["Authentication"])
+async def request_role(
+    payload: dict,  # {"role_name": "Developer"}
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Authenticated user requests a role upgrade.
+    Sets requested_role_id and notifies admins via dashboard.
+    Only VIEWER role with no pending request can request.
+    """
+    if str(current_user.role.name) != "Viewer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Viewer role users can request role changes"
+        )
+    if current_user.requested_role_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You already have a pending role request"
+        )
+    
+    role_name = payload.get("role_name")
+    if not role_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="role_name is required"
+        )
+    
+    requested_role = db.query(Role).filter(Role.name == role_name).first()
+    if not requested_role:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Role '{role_name}' not found"
+        )
+    if role_name == "Viewer":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot request Viewer role (you already have it)"
+        )
+    
+    current_user.requested_role_id = requested_role.id
+    db.commit()
+    db.refresh(current_user)
+    create_audit_log(db, current_user.id, "role_request", f"Requested role: {role_name}")
+    
+    return {
+        "status": "pending",
+        "message": f"Your request for {role_name} role has been submitted to the administrators.",
+        "requested_role": role_name
+    }
+
+
 @router.get("/action/approve/{token}", response_class=HTMLResponse, tags=["Admin"], include_in_schema=False)
 async def email_approve_user(token: str, db: Session = Depends(get_db)):
     """Public one-click link — approve a pending user (called from admin email)."""
@@ -402,6 +500,32 @@ async def admin_toggle_active(
         user.is_pending = False   # clear pending flag when manually activated
     db.commit()
     db.refresh(user)
+    return UserAdminResponse(**get_user_with_role(db, user))
+
+
+@router.post("/admin/users/{user_id}/approve-role-request", response_model=UserAdminResponse, tags=["Admin"])
+async def admin_approve_role_request(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Admin only — approve a user's role request and grant the role."""
+    user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.requested_role_id:
+        raise HTTPException(status_code=400, detail="User has no pending role request")
+    
+    # Grant the requested role
+    user.role_id = user.requested_role_id
+    user.requested_role_id = None
+    db.commit()
+    db.refresh(user)
+    
+    requested_role = db.query(Role).filter(Role.id == user.role_id).first()
+    role_name = requested_role.name if requested_role else "Unknown"
+    create_audit_log(db, admin.id, "role_approved", f"Approved {user.email} for {role_name} role")
+    
     return UserAdminResponse(**get_user_with_role(db, user))
 
 
