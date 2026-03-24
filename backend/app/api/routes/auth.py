@@ -33,6 +33,19 @@ from passlib.context import CryptContext as _CryptContext
 _pwd_ctx = _CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+PRIMARY_ADMIN_EMAIL = (settings.PRIMARY_ADMIN_EMAIL or "invisithreat@gmail.com").strip().lower()
+
+
+def _is_primary_admin(user: User) -> bool:
+    return (user.email or "").strip().lower() == PRIMARY_ADMIN_EMAIL
+
+
+def _ensure_not_primary_admin_target(user: User, action: str) -> None:
+    if _is_primary_admin(user):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Primary admin account is protected and cannot be {action}"
+        )
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -233,6 +246,8 @@ async def update_my_profile(
     if payload.nom is not None:
         current_user.nom = payload.nom
     if payload.email is not None:
+        if _is_primary_admin(current_user) and payload.email.strip().lower() != PRIMARY_ADMIN_EMAIL:
+            raise HTTPException(status_code=403, detail="Primary admin email cannot be changed")
         existing = db.query(User).filter(User.email == payload.email, User.id != current_user.id).first()
         if existing:
             raise HTTPException(status_code=400, detail="Email already in use")
@@ -509,6 +524,7 @@ async def admin_change_role(
     user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    _ensure_not_primary_admin_target(user, "modified")
     if str(user.id) == str(admin.id):
         raise HTTPException(status_code=400, detail="Cannot change your own role")
     role = db.query(Role).filter(Role.name == payload.role_name).first()
@@ -544,6 +560,7 @@ async def admin_toggle_active(
     user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    _ensure_not_primary_admin_target(user, "deactivated")
     if str(user.id) == str(admin.id):
         raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
     user.is_active = not user.is_active
@@ -564,6 +581,7 @@ async def admin_approve_role_request(
     user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    _ensure_not_primary_admin_target(user, "modified")
     if not user.requested_role_id:
         raise HTTPException(status_code=400, detail="User has no pending role request")
     
@@ -610,6 +628,7 @@ async def admin_approve_user(
     user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    _ensure_not_primary_admin_target(user, "modified")
     if str(user.id) == str(admin.id):
         raise HTTPException(status_code=400, detail="Cannot approve your own account")
     user.is_active = True
@@ -630,6 +649,7 @@ async def admin_reject_user(
     user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    _ensure_not_primary_admin_target(user, "modified")
     if str(user.id) == str(admin.id):
         raise HTTPException(status_code=400, detail="Cannot reject your own account")
     user.is_active = False
@@ -651,6 +671,7 @@ async def admin_update_profile(
     user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    _ensure_not_primary_admin_target(user, "modified")
     if payload.nom is not None:
         user.nom = payload.nom
     if payload.email is not None:
@@ -673,6 +694,7 @@ async def admin_delete_user(
     user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    _ensure_not_primary_admin_target(user, "deleted")
     if str(user.id) == str(admin.id):
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     db.delete(user)

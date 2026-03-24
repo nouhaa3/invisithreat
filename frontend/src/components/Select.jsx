@@ -26,6 +26,7 @@ export default function Select({
   getOptionStyle,
 }) {
   const [open, setOpen] = useState(false)
+  const [openUp, setOpenUp] = useState(false)
   const ref = useRef(null)
 
   /* ── Close on outside click or Escape ── */
@@ -49,6 +50,31 @@ export default function Select({
   const isDisabled = disabled || loading
   const pad   = size === 'sm' ? '0.35rem 0.65rem' : '0.55rem 0.8rem'
   const fSize = size === 'sm' ? '0.73rem'          : '0.875rem'
+
+  /* ── Open direction: flip up if not enough viewport space below ── */
+  useEffect(() => {
+    if (!open || !ref.current) return
+
+    const updateDirection = () => {
+      if (!ref.current) return
+      const rect = ref.current.getBoundingClientRect()
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight
+      const optionHeight = size === 'sm' ? 34 : 40
+      const estimatedMenuHeight = Math.min(260, opts.length * optionHeight + 12)
+      const spaceBelow = viewportHeight - rect.bottom
+      const spaceAbove = rect.top
+
+      setOpenUp(spaceBelow < estimatedMenuHeight && spaceAbove > spaceBelow)
+    }
+
+    updateDirection()
+    window.addEventListener('resize', updateDirection)
+    window.addEventListener('scroll', updateDirection, true)
+    return () => {
+      window.removeEventListener('resize', updateDirection)
+      window.removeEventListener('scroll', updateDirection, true)
+    }
+  }, [open, opts.length, size])
 
   return (
     <div ref={ref} className={`relative ${className ?? ''}`} style={style}>
@@ -108,14 +134,19 @@ export default function Select({
         <div
           className="absolute z-50 mt-1.5 rounded-xl overflow-hidden"
           style={{
-            top:    '100%',
+            top:    openUp ? 'auto' : '100%',
+            bottom: openUp ? '100%' : 'auto',
             left:   0,
             right:  0,
             minWidth: '100%',
+            marginTop: openUp ? 0 : '0.375rem',
+            marginBottom: openUp ? '0.375rem' : 0,
             background:    'rgba(18,18,18,0.97)',
             border:        '1px solid rgba(255,255,255,0.1)',
             boxShadow:     '0 12px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04)',
             backdropFilter:'blur(16px)',
+            maxHeight: '260px',
+            overflowY: 'auto',
           }}
         >
           {opts.map((opt, idx) => {

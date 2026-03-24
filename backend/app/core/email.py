@@ -11,7 +11,8 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-SENDER = {"email": (settings.EMAIL_FROM or settings.ADMIN_EMAIL or "no-reply@invisithreat.local"), "name": "InvisiThreat"}
+ADMIN_NOTIFICATION_EMAIL = settings.ADMIN_NOTIFICATION_EMAIL
+SENDER = {"email": (settings.EMAIL_FROM or ADMIN_NOTIFICATION_EMAIL or "no-reply@invisithreat.local"), "name": "InvisiThreat"}
 
 
 def _send_brevo(to: str, subject: str, html: str, text: str) -> bool:
@@ -84,8 +85,8 @@ def _send(to: str, subject: str, html: str, text: str) -> bool:
 
 def notify_admin_new_request(nom: str, email: str, role_name: str, approve_token: str, reject_token: str) -> bool:
     """Notify the admin that a new user is waiting for approval, with one-click approve/reject buttons."""
-    if not settings.ADMIN_EMAIL:
-        logger.warning("ADMIN_EMAIL not set — skipping admin notification")
+    if not ADMIN_NOTIFICATION_EMAIL:
+        logger.warning("ADMIN_NOTIFICATION_EMAIL not set — skipping admin notification")
         return False
 
     approve_url = f"{settings.BACKEND_URL}/api/auth/action/approve/{approve_token}"
@@ -165,7 +166,7 @@ def notify_admin_new_request(nom: str, email: str, role_name: str, approve_token
         f"REJECT:  {reject_url}\n\n"
         f"Links expire in 7 days."
     )
-    return _send(settings.ADMIN_EMAIL, subject, html, plain)
+    return _send(ADMIN_NOTIFICATION_EMAIL, subject, html, plain)
 
 
 def notify_user_approved(nom: str, email: str) -> bool:
@@ -368,8 +369,8 @@ def notify_user_verify_email(nom: str, email: str, verification_token: str, fron
 
 def notify_admin_role_request(user_nom: str, user_email: str, requested_role: str) -> bool:
     """Notify admin when a viewer requests a role upgrade."""
-    if not settings.ADMIN_EMAIL:
-        logger.warning("ADMIN_EMAIL not set — skipping admin role request notification")
+    if not ADMIN_NOTIFICATION_EMAIL:
+        logger.warning("ADMIN_NOTIFICATION_EMAIL not set — skipping admin role request notification")
         return False
 
     subject = f"[InvisiThreat] Role request: {user_nom} -> {requested_role}"
@@ -412,7 +413,7 @@ def notify_admin_role_request(user_nom: str, user_email: str, requested_role: st
         f"Email: {user_email}\n"
         f"Requested role: {requested_role}\n"
     )
-    return _send(settings.ADMIN_EMAIL, subject, html, plain)
+    return _send(ADMIN_NOTIFICATION_EMAIL, subject, html, plain)
 
 
 def notify_user_role_request_received(nom: str, email: str, requested_role: str) -> bool:

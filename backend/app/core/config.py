@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     # Email — Brevo
     BREVO_API_KEY: str = ""
     ADMIN_EMAIL: str = ""
+    PRIMARY_ADMIN_EMAIL: str = "invisithreat@gmail.com"
 
     # Email — SMTP fallback (Gmail/Outlook/custom SMTP)
     EMAIL_FROM: str = ""
@@ -55,6 +56,11 @@ class Settings(BaseSettings):
             db_url = f"{db_url}{separator}sslmode={sslmode}"
 
         return db_url
+
+    @property
+    def ADMIN_NOTIFICATION_EMAIL(self) -> str:
+        """Central admin inbox for platform approval/access emails."""
+        return (self.PRIMARY_ADMIN_EMAIL or self.ADMIN_EMAIL or "").strip()
 
     class Config:
         env_file = ".env"

@@ -2,6 +2,8 @@
 InvisiThreat Backend API
 FastAPI application entry point
 """
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
@@ -19,11 +21,13 @@ from app.models import audit_log  # noqa: F401
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+logger = logging.getLogger(__name__)
 
 # ─── Lightweight column migration (idempotent) ───────────────────────────────
 # Adds new columns to existing tables without Alembic, safe to run every boot.
 def _run_migrations():
     from sqlalchemy import text
+    from sqlalchemy.exc import SQLAlchemyError
     migrations = [
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS language VARCHAR DEFAULT 'Other'",
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS analysis_type VARCHAR DEFAULT 'SAST'",
@@ -70,8 +74,13 @@ def _run_migrations():
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT FALSE",
     ]
     with engine.connect() as conn:
+        # Prevent session-level statement timeout from aborting startup migrations.
+        conn.execute(text("SET statement_timeout = 0"))
         for stmt in migrations:
-            conn.execute(text(stmt))
+            try:
+                conn.execute(text(stmt))
+            except SQLAlchemyError as exc:
+                logger.warning("Skipping migration statement due to DB error: %s", exc)
         conn.commit()
 
 _run_migrations()
