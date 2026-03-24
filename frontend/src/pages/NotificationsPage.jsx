@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { useNotifications } from '../context/NotificationContext'
+import { useAuth } from '../context/AuthContext'
+import { adminApproveRoleRequest, adminChangeRole, adminGetUsers } from '../services/adminService'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -46,6 +48,19 @@ const TYPE_CFG = {
       </>
     ),
   },
+  role_request: {
+    label: 'Role Request',
+    color: '#60a5fa',
+    bg: 'rgba(96,165,250,0.08)',
+    border: 'rgba(96,165,250,0.15)',
+    icon: (
+      <>
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M19 8v6M16 11h6" />
+      </>
+    ),
+  },
   system: {
     label: 'System',
     color: '#FF8C5A',
@@ -57,30 +72,45 @@ const TYPE_CFG = {
   },
 }
 
-const FILTERS = ['All', 'Unread', 'scan_complete', 'vuln_found', 'project_invite', 'system']
+const FILTERS = ['All', 'Unread', 'scan_complete', 'vuln_found', 'project_invite', 'role_request', 'system']
 const FILTER_LABELS = {
   All: 'All',
   Unread: 'Unread',
   scan_complete: 'Scans',
   vuln_found: 'Vulnerabilities',
   project_invite: 'Invites',
+  role_request: 'Role Requests',
   system: 'System',
 }
 
+const ROLES = ['Admin', 'Developer', 'Security Manager', 'Viewer']
+
 // ─── Notification Card ────────────────────────────────────────────────────────
 
-function NotifCard({ notif, onMarkRead, onDelete }) {
+function NotifCard({
+  notif,
+  onMarkRead,
+  onDelete,
+  selectedRole,
+  onRoleSelect,
+  onApproveRoleRequest,
+  onApplyRole,
+  approvingRoleRequest,
+  applyingRole,
+}) {
   const navigate = useNavigate()
   const cfg = TYPE_CFG[notif.type] ?? TYPE_CFG.system
+  const isRoleRequest = notif.type === 'role_request'
 
   const handleClick = async () => {
+    if (isRoleRequest) return
     if (!notif.is_read) await onMarkRead(notif.id)
     if (notif.link) navigate(notif.link)
   }
 
   return (
     <div
-      className="group flex items-start gap-4 p-4 rounded-xl cursor-pointer transition-all relative"
+      className={`group flex items-start gap-4 p-4 rounded-xl transition-all relative ${isRoleRequest ? '' : 'cursor-pointer'}`}
       style={{
         background: notif.is_read ? 'rgba(255,255,255,0.02)' : 'rgba(255,107,43,0.04)',
         border: `1px solid ${notif.is_read ? 'rgba(255,255,255,0.06)' : 'rgba(255,107,43,0.12)'}`,
@@ -138,6 +168,54 @@ function NotifCard({ notif, onMarkRead, onDelete }) {
                 {notif.message}
               </p>
             )}
+
+            {isRoleRequest && notif.requestUserId && (
+              <div className="mt-3 flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-2">
+                <select
+                  value={selectedRole}
+                  onClick={e => e.stopPropagation()}
+                  onChange={e => onRoleSelect(notif.requestUserId, e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium outline-none"
+                  style={{
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    color: 'rgba(255,255,255,0.9)',
+                  }}
+                >
+                  {ROLES.map(role => (
+                    <option key={role} value={role} style={{ background: '#222', color: 'white' }}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.stopPropagation()
+                    onApproveRoleRequest(notif.requestUserId)
+                  }}
+                  disabled={approvingRoleRequest || applyingRole}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                  style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', color: '#4ade80' }}
+                >
+                  {approvingRoleRequest ? 'Approving...' : 'Approve Request'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.stopPropagation()
+                    onApplyRole(notif.requestUserId)
+                  }}
+                  disabled={approvingRoleRequest || applyingRole}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                  style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa' }}
+                >
+                  {applyingRole ? 'Applying...' : 'Apply Selected Role'}
+                </button>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 mt-1">
             <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.2)' }}>
@@ -148,16 +226,18 @@ function NotifCard({ notif, onMarkRead, onDelete }) {
       </div>
 
       {/* Delete button */}
-      <button
-        type="button"
-        onClick={e => { e.stopPropagation(); onDelete(notif.id) }}
-        className="absolute bottom-3.5 right-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-white/20 hover:text-white/60"
-        title="Dismiss"
-      >
-        <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-          <path d="M18 6 6 18M6 6l12 12" />
-        </svg>
-      </button>
+      {!notif.synthetic && (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); onDelete(notif.id) }}
+          className="absolute bottom-3.5 right-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-white/20 hover:text-white/60"
+          title="Dismiss"
+        >
+          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+      )}
     </div>
   )
 }
@@ -165,10 +245,104 @@ function NotifCard({ notif, onMarkRead, onDelete }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function NotificationsPage() {
-  const { notifications, unreadCount, markRead, markAllRead, removeNotification } = useNotifications()
+  const { user } = useAuth()
+  const { notifications, unreadCount, refresh, markRead, markAllRead, removeNotification } = useNotifications()
   const [activeFilter, setActiveFilter] = useState('All')
+  const [roleRequests, setRoleRequests] = useState([])
+  const [selectedRoles, setSelectedRoles] = useState({})
+  const [approvingRoleReq, setApprovingRoleReq] = useState({})
+  const [applyingRoleReq, setApplyingRoleReq] = useState({})
 
-  const filtered = notifications.filter(n => {
+  const isAdmin = user?.role_name === 'Admin'
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadRoleRequests = async () => {
+      if (!isAdmin) {
+        setRoleRequests([])
+        return
+      }
+      try {
+        const users = await adminGetUsers()
+        const pendingRoleRequests = users.filter(u => !!u.requested_role_id)
+        if (!mounted) return
+
+        setRoleRequests(pendingRoleRequests)
+        setSelectedRoles(prev => {
+          const next = { ...prev }
+          for (const reqUser of pendingRoleRequests) {
+            if (!next[reqUser.id]) {
+              next[reqUser.id] = reqUser.requested_role_name || 'Developer'
+            }
+          }
+          return next
+        })
+      } catch {
+        if (mounted) setRoleRequests([])
+      }
+    }
+
+    loadRoleRequests()
+    return () => { mounted = false }
+  }, [isAdmin])
+
+  const roleRequestNotifs = useMemo(() => {
+    if (!isAdmin) return []
+    return roleRequests.map(u => ({
+      id: `role-request-${u.id}`,
+      type: 'role_request',
+      title: `${u.nom} requested ${u.requested_role_name || 'a role'}`,
+      message: `${u.email} · Current role: ${u.role_name}`,
+      is_read: false,
+      created_at: u.date_creation || new Date().toISOString(),
+      requestUserId: u.id,
+      synthetic: true,
+    }))
+  }, [isAdmin, roleRequests])
+
+  const dbNotifications = useMemo(
+    () => notifications.filter(n => n.type !== 'role_request'),
+    [notifications]
+  )
+
+  const allNotifications = useMemo(
+    () => [...roleRequestNotifs, ...dbNotifications],
+    [roleRequestNotifs, dbNotifications]
+  )
+
+  const totalUnread = unreadCount + roleRequestNotifs.length
+
+  const handleApproveRoleRequest = async (userId) => {
+    setApprovingRoleReq(prev => ({ ...prev, [userId]: true }))
+    try {
+      await adminApproveRoleRequest(userId)
+      setRoleRequests(prev => prev.filter(u => u.id !== userId))
+      await refresh()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to approve role request')
+    } finally {
+      setApprovingRoleReq(prev => ({ ...prev, [userId]: false }))
+    }
+  }
+
+  const handleApplyRole = async (userId) => {
+    const roleName = selectedRoles[userId]
+    if (!roleName) return
+
+    setApplyingRoleReq(prev => ({ ...prev, [userId]: true }))
+    try {
+      await adminChangeRole(userId, roleName)
+      setRoleRequests(prev => prev.filter(u => u.id !== userId))
+      await refresh()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to apply selected role')
+    } finally {
+      setApplyingRoleReq(prev => ({ ...prev, [userId]: false }))
+    }
+  }
+
+  const filtered = allNotifications.filter(n => {
     if (activeFilter === 'All')    return true
     if (activeFilter === 'Unread') return !n.is_read
     return n.type === activeFilter
@@ -183,8 +357,8 @@ export default function NotificationsPage() {
           <div>
             <h1 className="text-2xl font-bold text-white">Notifications</h1>
             <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
-              {unreadCount > 0
-                ? `${unreadCount} unread notification${unreadCount !== 1 ? 's' : ''}`
+              {totalUnread > 0
+                ? `${totalUnread} unread notification${totalUnread !== 1 ? 's' : ''}`
                 : 'All caught up!'}
             </p>
           </div>
@@ -259,6 +433,12 @@ export default function NotificationsPage() {
                 notif={n}
                 onMarkRead={markRead}
                 onDelete={removeNotification}
+                selectedRole={selectedRoles[n.requestUserId] || 'Developer'}
+                onRoleSelect={(userId, roleName) => setSelectedRoles(prev => ({ ...prev, [userId]: roleName }))}
+                onApproveRoleRequest={handleApproveRoleRequest}
+                onApplyRole={handleApplyRole}
+                approvingRoleRequest={!!approvingRoleReq[n.requestUserId]}
+                applyingRole={!!applyingRoleReq[n.requestUserId]}
               />
             ))}
           </div>
@@ -267,7 +447,7 @@ export default function NotificationsPage() {
         {/* ── Footer info ── */}
         {filtered.length > 0 && (
           <p className="text-center text-xs mt-6" style={{ color: 'rgba(255,255,255,0.12)' }}>
-            Showing {filtered.length} of {notifications.length} notification{notifications.length !== 1 ? 's' : ''} · auto-refreshes every 30s
+            Showing {filtered.length} of {allNotifications.length} notification{allNotifications.length !== 1 ? 's' : ''} · auto-refreshes every 30s
           </p>
         )}
       </div>

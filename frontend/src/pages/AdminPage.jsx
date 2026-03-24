@@ -8,7 +8,6 @@ import {
   adminChangeRole,
   adminToggleActive,
   adminApproveUser,
-  adminApproveRoleRequest,
   adminRejectUser,
   adminDeleteUser,
   adminUpdateUser,
@@ -42,7 +41,6 @@ export default function AdminPage() {
   const [changingRole, setChangingRole]     = useState({})
   const [togglingActive, setTogglingActive] = useState({})
   const [approving, setApproving]           = useState({})
-  const [approvingRoleReq, setApprovingRoleReq] = useState({})
   const [rejecting, setRejecting]           = useState({})
   const [deleting, setDeleting]             = useState({})
   const [search, setSearch]     = useState('')
@@ -76,18 +74,6 @@ export default function AdminPage() {
       alert(err.response?.data?.detail || 'Failed to approve user')
     } finally {
       setApproving(p => ({ ...p, [userId]: false }))
-    }
-  }
-
-  const handleApproveRoleRequest = async (userId) => {
-    setApprovingRoleReq(p => ({ ...p, [userId]: true }))
-    try {
-      const updated = await adminApproveRoleRequest(userId)
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updated } : u))
-    } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to approve role request')
-    } finally {
-      setApprovingRoleReq(p => ({ ...p, [userId]: false }))
     }
   }
 
@@ -156,7 +142,6 @@ export default function AdminPage() {
   }
 
   const pending  = users.filter(u => u.is_pending)
-  const roleRequests = users.filter(u => !!u.requested_role_id)
   const active   = users.filter(u => !u.is_pending)
   const filtered = active.filter(u => {
     const matchSearch = u.nom.toLowerCase().includes(search.toLowerCase()) ||
@@ -273,63 +258,6 @@ export default function AdminPage() {
                           )}
                         </button>
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* ── Role requests ─────────────────────────────────────────────────── */}
-          {!loading && roleRequests.length > 0 && (
-            <div className="mb-8 animate-slide-up">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-                <h2 className="text-sm font-semibold text-white/80 uppercase tracking-widest">
-                  Role Requests
-                </h2>
-                <span className="px-2 py-0.5 rounded-full text-xs font-bold"
-                  style={{ background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa' }}>
-                  {roleRequests.length}
-                </span>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                {roleRequests.map(u => {
-                  const targetRole = u.requested_role_name || 'Unknown'
-                  const cfg = ROLE_COLOR[targetRole] || ROLE_COLOR.Viewer
-                  return (
-                    <div key={u.id}
-                      className="flex items-center gap-4 px-5 py-4 rounded-2xl"
-                      style={{ background: 'rgba(96,165,250,0.04)', border: '1px solid rgba(96,165,250,0.15)' }}>
-
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0"
-                        style={{ background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color }}>
-                        {u.nom?.charAt(0).toUpperCase()}
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-white truncate">{u.nom}</p>
-                        <p className="text-xs text-white/30 truncate">{u.email}</p>
-                      </div>
-
-                      <span className="text-xs text-white/40">Requested:</span>
-                      <RoleBadge role={targetRole} />
-
-                      <button
-                        onClick={() => handleApproveRoleRequest(u.id)}
-                        disabled={!!approvingRoleReq[u.id]}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
-                        style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', color: '#4ade80' }}>
-                        {approvingRoleReq[u.id] ? (
-                          <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                        Approve Requested Role
-                      </button>
                     </div>
                   )
                 })}
