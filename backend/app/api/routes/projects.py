@@ -20,6 +20,8 @@ import uuid, secrets
 from datetime import datetime, UTC
 from app.models.scan import Project as ProjectModel
 from app.models.member import ProjectMember as MemberModel
+from app.models.scan import Scan as ScanModel, ScanStatus
+from app.services.risk_score import get_or_create_scan_risk_score
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -144,6 +146,67 @@ async def list_project_scans(
     return get_scans_for_project(db, project_id)
 
 
+@router.get("/{project_id}/risk-score")
+async def get_project_risk_score(
+    project_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(P.VIEW_SCAN_RESULTS)),
+):
+    get_project_accessible(db, project_id, current_user)
+    latest_scan = (
+        db.query(ScanModel)
+        .filter(ScanModel.project_id == project_id, ScanModel.status == ScanStatus.completed)
+        .order_by(ScanModel.started_at.desc())
+        .first()
+    )
+    if not latest_scan:
+        return {
+            "project_id": str(project_id),
+            "scan_id": None,
+            "score": 0.0,
+            "exploitability": 0.0,
+            "business_impact": 0.0,
+        }
+
+    risk = get_or_create_scan_risk_score(db, latest_scan)
+    return {
+        "project_id": str(project_id),
+        "scan_id": str(latest_scan.id),
+        "score": round(float(risk.score), 2) if risk else 0.0,
+        "exploitability": round(float(risk.exploitability), 2) if risk else 0.0,
+        "business_impact": round(float(risk.business_impact), 2) if risk else 0.0,
+    }
+
+
+@router.get("/{project_id}/scans/{scan_id}/risk-score")
+async def get_scan_risk_score(
+    project_id: uuid.UUID,
+    scan_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(P.VIEW_SCAN_RESULTS)),
+):
+    get_project_accessible(db, project_id, current_user)
+    scan = db.query(ScanModel).filter(ScanModel.id == scan_id, ScanModel.project_id == project_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    risk = get_or_create_scan_risk_score(db, scan)
+    if not risk:
+        return {
+            "project_id": str(project_id),
+            "scan_id": str(scan_id),
+            "score": 0.0,
+            "exploitability": 0.0,
+            "business_impact": 0.0,
+        }
+    return {
+        "project_id": str(project_id),
+        "scan_id": str(scan_id),
+        "score": round(float(risk.score), 2),
+        "exploitability": round(float(risk.exploitability), 2),
+        "business_impact": round(float(risk.business_impact), 2),
+    }
+
+
 @router.post("/{project_id}/scans/{scan_id}/claim-token", response_model=CLITokenResponse)
 async def get_cli_upload_token(
     project_id: uuid.UUID,
@@ -156,8 +219,7 @@ async def get_cli_upload_token(
     The CLI never needs a user password — only this short-lived token.
     """
     get_project(db, project_id, current_user)
-    from app.models.scan import Scan
-    scan = db.query(Scan).filter(Scan.id == scan_id, Scan.project_id == project_id).first()
+    scan = db.query(ScanModel).filter(ScanModel.id == scan_id, ScanModel.project_id == project_id).first()
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
     token = secrets.token_urlsafe(32)
@@ -175,9 +237,8 @@ async def cli_upload_results(
     """
     Endpoint called by the CLI (no user auth) to upload scan results using the upload token.
     """
-    from app.models.scan import Scan, ScanStatus
-    scan = db.query(Scan).filter(
-        Scan.results_json == f"__pending_token:{payload.upload_token}"
+    scan = db.query(ScanModel).filter(
+        ScanModel.results_json == f"__pending_token:{payload.upload_token}"
     ).first()
     if not scan:
         raise HTTPException(status_code=401, detail="Invalid or expired upload token")
@@ -186,4 +247,6 @@ async def cli_upload_results(
     scan.error_message = payload.error_message
     scan.completed_at = datetime.now(UTC)
     db.commit()
+    if scan.status == ScanStatus.completed:
+        get_or_create_scan_risk_score(db, scan)
     return {"message": "Results uploaded successfully", "scan_id": str(scan.id)}

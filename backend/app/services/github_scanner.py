@@ -15,6 +15,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.models.scan import Scan, ScanStatus
+from app.services.risk_score import upsert_scan_risk_score
 
 
 # ─── Detection Rules (mirrors scripts/scan.py) ───────────────────────────────
@@ -374,6 +375,7 @@ def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str) -> No
         scan.results_json = json.dumps(results)
         scan.completed_at = datetime.now(timezone.utc)
         db.commit()
+        upsert_scan_risk_score(db, scan)
 
     except Exception as exc:
         try:

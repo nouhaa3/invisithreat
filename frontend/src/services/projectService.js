@@ -7,6 +7,11 @@ export const getDashboardStats = async () => {
   return res.data
 }
 
+export const getDashboardRiskOverview = async () => {
+  const res = await api.get('/api/dashboard/risk-overview')
+  return res.data
+}
+
 // ─── Projects ────────────────────────────────────────────────────────────────
 
 export const getProjects = async () => {

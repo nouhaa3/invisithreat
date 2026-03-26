@@ -12,6 +12,7 @@ from app.core.permissions import require_permission, P
 from app.models.user import User
 from app.models.scan import Project, Scan, ScanStatus
 from app.models.member import ProjectMember
+from app.services.risk_score import get_or_create_scan_risk_score
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -22,7 +23,7 @@ def _parse_findings(results_json: str) -> list:
     try:
         data = json.loads(results_json)
         return data.get("findings", [])
-    except Exception:
+    except (ValueError, TypeError, json.JSONDecodeError):
         return []
 
 
@@ -50,6 +51,12 @@ async def get_dashboard_stats(
             "by_severity": {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0},
             "scan_trend": [],
             "top_risky_projects": [],
+            "risk_overview": {
+                "avg_score": 0.0,
+                "avg_exploitability": 0.0,
+                "avg_business_impact": 0.0,
+                "max_score": 0.0,
+            },
         }
 
     # 2. All scans for these projects
@@ -60,6 +67,7 @@ async def get_dashboard_stats(
     # 3. Aggregate findings from latest completed scan per project
     severity_totals = defaultdict(int)
     project_risk = []  # (project_name, project_id, critical, high)
+    risk_rows = []
 
     for p in all_projects:
         proj_scans = sorted(
@@ -79,10 +87,28 @@ async def get_dashboard_stats(
             elif sev == "low":      low  += 1; severity_totals["low"] += 1
             else:                   info += 1; severity_totals["info"] += 1
         if crit + high > 0:
-            project_risk.append({"id": str(p.id), "name": p.name, "critical": crit, "high": high, "medium": med, "low": low})
+            project_row = {"id": str(p.id), "name": p.name, "critical": crit, "high": high, "medium": med, "low": low}
+            risk = get_or_create_scan_risk_score(db, proj_scans[0])
+            if risk:
+                project_row["risk_score"] = round(float(risk.score), 2)
+                risk_rows.append(risk)
+            project_risk.append(project_row)
+        else:
+            risk = get_or_create_scan_risk_score(db, proj_scans[0])
+            if risk:
+                risk_rows.append(risk)
+                project_risk.append({
+                    "id": str(p.id),
+                    "name": p.name,
+                    "critical": crit,
+                    "high": high,
+                    "medium": med,
+                    "low": low,
+                    "risk_score": round(float(risk.score), 2),
+                })
 
     # Sort top risky projects
-    top_risky = sorted(project_risk, key=lambda x: (x["critical"], x["high"]), reverse=True)[:5]
+    top_risky = sorted(project_risk, key=lambda x: (x.get("risk_score", 0), x["critical"], x["high"]), reverse=True)[:5]
 
     # 4. Security score (100 → penalise per severity)
     total_findings = sum(severity_totals.values())
@@ -112,6 +138,20 @@ async def get_dashboard_stats(
         label = day.strftime("%b %d")
         scan_trend.append({"date": label, "count": trend_map.get(label, 0)})
 
+    risk_overview = {
+        "avg_score": 0.0,
+        "avg_exploitability": 0.0,
+        "avg_business_impact": 0.0,
+        "max_score": 0.0,
+    }
+    if risk_rows:
+        risk_overview = {
+            "avg_score": round(sum(float(r.score) for r in risk_rows) / len(risk_rows), 2),
+            "avg_exploitability": round(sum(float(r.exploitability) for r in risk_rows) / len(risk_rows), 2),
+            "avg_business_impact": round(sum(float(r.business_impact) for r in risk_rows) / len(risk_rows), 2),
+            "max_score": round(max(float(r.score) for r in risk_rows), 2),
+        }
+
     return {
         "total_projects": len(all_projects),
         "total_scans": total_scans,
@@ -127,4 +167,19 @@ async def get_dashboard_stats(
         },
         "scan_trend": scan_trend,
         "top_risky_projects": top_risky,
+        "risk_overview": risk_overview,
     }
+
+
+@router.get("/risk-overview")
+async def get_dashboard_risk_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(P.VIEW_DASHBOARD)),
+):
+    stats = await get_dashboard_stats(db=db, current_user=current_user)
+    return stats.get("risk_overview", {
+        "avg_score": 0.0,
+        "avg_exploitability": 0.0,
+        "avg_business_impact": 0.0,
+        "max_score": 0.0,
+    })

@@ -18,6 +18,7 @@ from app.models import member  # noqa: F401
 from app.models import api_key  # noqa: F401
 from app.models import notification  # noqa: F401
 from app.models import audit_log  # noqa: F401
+from app.models import risk_score  # noqa: F401
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -70,6 +71,15 @@ def _run_migrations():
             created_at TIMESTAMP DEFAULT NOW()
         )""",
         "CREATE INDEX IF NOT EXISTS ix_audit_logs_user_id ON audit_logs(user_id)",
+        """CREATE TABLE IF NOT EXISTS risk_scores (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            scan_id UUID NOT NULL UNIQUE REFERENCES scans(id) ON DELETE CASCADE,
+            score DOUBLE PRECISION NOT NULL DEFAULT 0,
+            exploitability DOUBLE PRECISION NOT NULL DEFAULT 0,
+            business_impact DOUBLE PRECISION NOT NULL DEFAULT 0,
+            calculated_at TIMESTAMP DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_risk_scores_scan_id ON risk_scores(scan_id)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT FALSE",
     ]

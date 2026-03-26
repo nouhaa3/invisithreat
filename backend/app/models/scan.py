@@ -80,3 +80,4 @@ class Scan(Base):
     completed_at = Column(DateTime, nullable=True)
 
     project = relationship("Project", back_populates="scans")
+    risk_score = relationship("RiskScore", back_populates="scan", uselist=False, cascade="all, delete-orphan")

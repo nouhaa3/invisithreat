@@ -1,14 +1,16 @@
 import { NavLink } from 'react-router-dom'
 import { useNotifications } from '../context/NotificationContext'
 
-export default function NotificationBell() {
+export default function NotificationBell({ collapsed = false, onNavigate }) {
   const { unreadCount } = useNotifications()
 
   return (
     <NavLink
       to="/notifications"
+      onClick={onNavigate}
+      title={collapsed ? 'Notifications' : undefined}
       className={({ isActive }) =>
-        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+        `flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
           isActive ? 'text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.03]'
         }`
       }
@@ -34,9 +36,9 @@ export default function NotificationBell() {
         )}
       </div>
 
-      <span className="flex-1">Notifications</span>
+      {!collapsed && <span className="flex-1">Notifications</span>}
 
-      {unreadCount > 0 && (
+      {!collapsed && unreadCount > 0 && (
         <span
           className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0"
           style={{ background: 'rgba(255,107,43,0.15)', color: '#FF8C5A' }}

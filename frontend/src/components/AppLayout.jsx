@@ -1,10 +1,21 @@
+import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import usePermissions from '../hooks/usePermissions'
 import NotificationBell from './NotificationBell'
 import logo from '../assets/logo_invisithreat.png'
 
-function SectionLabel({ children }) {
+function SectionLabel({ children, collapsed }) {
+  if (collapsed) {
+    return (
+      <p
+        className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest select-none"
+        style={{ visibility: 'hidden' }}
+      >
+        {children}
+      </p>
+    )
+  }
   return (
     <p
       className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest select-none"
@@ -15,13 +26,15 @@ function SectionLabel({ children }) {
   )
 }
 
-function NavItem({ to, icon, children, end }) {
+function NavItem({ to, icon, children, label, end, collapsed, onNavigate }) {
   return (
     <NavLink
       to={to}
       end={end}
+      onClick={onNavigate}
+      title={collapsed ? label : undefined}
       className={({ isActive }) =>
-        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+        `flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
           isActive ? 'text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.03]'
         }`
       }
@@ -32,7 +45,7 @@ function NavItem({ to, icon, children, end }) {
       }
     >
       {icon}
-      {children}
+      {!collapsed && children}
     </NavLink>
   )
 }
@@ -41,6 +54,18 @@ export default function AppLayout({ children }) {
   const { user, logout } = useAuth()
   const { can: check, canManageUsers } = usePermissions()
   const navigate = useNavigate()
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === 'undefined') return true
+    const cached = window.localStorage.getItem('invisithreat:sidebar-open')
+    return cached === null ? true : cached === '1'
+  })
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('invisithreat:sidebar-open', sidebarOpen ? '1' : '0')
+    }
+  }, [sidebarOpen])
 
   const handleLogout = () => {
     logout()
@@ -54,26 +79,62 @@ export default function AppLayout({ children }) {
     Viewer: '#6b7280',
   }[user?.role_name] || '#6b7280'
 
+  const sidebarWidth = sidebarOpen ? 272 : 88
+  const toggleSidebar = () => setSidebarOpen(prev => !prev)
+  const handleLogoClick = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setMobileOpen(prev => !prev)
+      return
+    }
+    toggleSidebar()
+  }
+
   return (
-    <div className="h-screen flex overflow-hidden" style={{ background: '#080808' }}>
+    <div className="h-screen flex overflow-hidden relative" style={{ background: 'radial-gradient(1200px 600px at 10% -20%, rgba(255,107,43,0.09), transparent 60%), #080808' }}>
+      {/* Mobile backdrop */}
+      {mobileOpen && (
+        <button
+          className="md:hidden fixed inset-0 bg-black/55 backdrop-blur-[2px] z-30"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Close sidebar overlay"
+        />
+      )}
+
       {/* Sidebar */}
       <aside
-        className="w-64 flex-shrink-0 flex flex-col h-screen"
+        className={`fixed md:relative z-40 h-screen flex flex-col transition-all duration-300 ease-out ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}
         style={{
+          width: `${mobileOpen ? 272 : sidebarWidth}px`,
           background: 'rgba(12,12,12,0.98)',
           borderRight: '1px solid rgba(255,255,255,0.05)',
+          boxShadow: '0 18px 45px rgba(0,0,0,0.35)',
         }}
       >
         {/* Logo */}
-        <div className="px-5 py-4 flex items-center flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-          <img src={logo} alt="InvisiThreat" className="h-[70px] w-auto object-contain" />
+        <div
+          className={`py-4 flex items-center flex-shrink-0 ${sidebarOpen ? 'px-5 justify-between' : 'px-3 justify-center'}`}
+          style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+        >
+          <button
+            onClick={handleLogoClick}
+            className={`group ${sidebarOpen ? 'w-full flex items-center justify-center' : 'w-full flex items-center justify-center'} transition-opacity hover:opacity-90`}
+            title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+          >
+            {sidebarOpen ? (
+              <img src={logo} alt="InvisiThreat" className="h-[58px] w-auto object-contain" />
+            ) : (
+              <img src={logo} alt="InvisiThreat" className="h-[38px] w-auto object-contain" />
+            )}
+          </button>
         </div>
 
         {/* Navigation — scrollable if content overflows */}
         <nav className="flex-1 px-3 py-2 flex flex-col overflow-y-auto">
 
           {/* ── Overview ──────────────────────────────── */}
-          <SectionLabel>Overview</SectionLabel>
+          <SectionLabel collapsed={!sidebarOpen}>Overview</SectionLabel>
 
           {check('view_dashboard') && (
             <NavItem to="/dashboard" end icon={
@@ -83,7 +144,7 @@ export default function AppLayout({ children }) {
                 <rect x="3" y="14" width="7" height="7" rx="1" />
                 <rect x="14" y="14" width="7" height="7" rx="1" />
               </svg>
-            }>
+            } label="Dashboard" collapsed={!sidebarOpen} onNavigate={() => setMobileOpen(false)}>
               Dashboard
             </NavItem>
           )}
@@ -95,33 +156,33 @@ export default function AppLayout({ children }) {
                 <path d="m21 21-4.35-4.35" />
                 <path d="M11 8v6M8 11h6" />
               </svg>
-            }>
+            } label="New Scan" collapsed={!sidebarOpen} onNavigate={() => setMobileOpen(false)}>
               New Scan
             </NavItem>
           )}
 
           {/* ── Activity ──────────────────────────────── */}
-          <SectionLabel>Activity</SectionLabel>
+          <SectionLabel collapsed={!sidebarOpen}>Activity</SectionLabel>
 
           {/* Notifications — bell dropdown inline in sidebar */}
-          <NotificationBell />
+          <NotificationBell collapsed={!sidebarOpen} onNavigate={() => setMobileOpen(false)} />
 
           {/* ── Account ───────────────────────────────── */}
-          <SectionLabel>Account</SectionLabel>
+          <SectionLabel collapsed={!sidebarOpen}>Account</SectionLabel>
 
           <NavItem to="/settings" icon={
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
-          }>
+          } label="Settings" collapsed={!sidebarOpen} onNavigate={() => setMobileOpen(false)}>
             Settings
           </NavItem>
 
           {/* ── Admin ─────────────────────────────────── */}
           {canManageUsers && (
             <>
-              <SectionLabel>Admin</SectionLabel>
+              <SectionLabel collapsed={!sidebarOpen}>Admin</SectionLabel>
               <NavItem to="/admin" icon={
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -129,7 +190,7 @@ export default function AppLayout({ children }) {
                   <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
-              }>
+              } label="User Management" collapsed={!sidebarOpen} onNavigate={() => setMobileOpen(false)}>
                 User Management
               </NavItem>
             </>
@@ -142,7 +203,7 @@ export default function AppLayout({ children }) {
         {/* User card — always at bottom */}
         <div className="px-3 py-3 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
           <div
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+            className={`flex items-center ${sidebarOpen ? 'gap-3 px-3 py-2.5' : 'justify-center px-2 py-2'} rounded-xl`}
             style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}
           >
             <div
@@ -151,10 +212,12 @@ export default function AppLayout({ children }) {
             >
               {user?.nom?.charAt(0).toUpperCase()}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-xs font-semibold truncate">{user?.nom}</p>
-              <p className="text-xs font-medium truncate" style={{ color: roleColor }}>{user?.role_name}</p>
-            </div>
+            {sidebarOpen && (
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-xs font-semibold truncate">{user?.nom}</p>
+                <p className="text-xs font-medium truncate" style={{ color: roleColor }}>{user?.role_name}</p>
+              </div>
+            )}
             <button
               onClick={handleLogout}
               className="flex-shrink-0 text-white/20 hover:text-white/60 transition-colors"
@@ -172,6 +235,20 @@ export default function AppLayout({ children }) {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <div className="md:hidden sticky top-0 z-20 px-3 py-2" style={{ background: 'rgba(8,8,8,0.85)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-white/80"
+            style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+            Menu
+          </button>
+        </div>
         {children}
       </div>
     </div>

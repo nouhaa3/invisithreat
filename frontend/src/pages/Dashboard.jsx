@@ -166,11 +166,17 @@ function TrendBars({ trend }) {
 
 function KpiCard({ label, value, sub, accent }) {
   return (
-    <div className="rounded-2xl px-5 py-4 flex flex-col gap-1"
-      style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)' }}>
-      <p className="text-xs font-semibold uppercase tracking-widest text-white/25">{label}</p>
-      <p className="text-3xl font-bold" style={{ color: accent || '#fff' }}>{value}</p>
-      {sub && <p className="text-xs text-white/25">{sub}</p>}
+    <div
+      className="rounded-2xl px-5 py-4 flex flex-col gap-1.5 transition-all"
+      style={{
+        background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))',
+        border: '1px solid rgba(255,255,255,0.06)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 22px rgba(0,0,0,0.22)',
+      }}
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/30">{label}</p>
+      <p className="text-3xl font-bold leading-none" style={{ color: accent || '#fff' }}>{value}</p>
+      {sub && <p className="text-xs text-white/35">{sub}</p>}
     </div>
   )
 }
@@ -235,22 +241,57 @@ export default function Dashboard() {
     : stats.security_score >= 50 ? '#eab308'
     : stats.security_score >= 25 ? '#fb923c'
     : '#f87171'
+  const avgRisk = Number(stats?.risk_overview?.avg_score || 0)
+  const riskColor = avgRisk >= 7 ? '#f87171' : avgRisk >= 4 ? '#fb923c' : '#22c55e'
 
   return (
     <>
     <AppLayout>
       <main className="flex-1 overflow-auto">
-        <div className="px-8 py-8">
-
+        <div className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
           {/* Header */}
-          <div className="mb-8 animate-slide-up">
-            <h1 className="text-2xl font-bold text-white">
-              {getGreeting()},{' '}
-              <span style={{ color: '#FF6B2B' }}>{user?.nom?.split(' ')[0]}</span>
-            </h1>
-            <p className="text-sm text-white/30 mt-1">
-              {loading ? 'Loading workspace...' : `${projects.length} project${projects.length !== 1 ? 's' : ''} in your workspace`}
-            </p>
+          <div className="mb-6 animate-slide-up flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight">
+                {getGreeting()}, <span style={{ color: '#FF8C5A' }}>{user?.nom?.split(' ')[0]}</span>
+              </h1>
+              <p className="text-sm text-white/45 mt-2">
+                {loading ? 'Loading workspace...' : `${projects.length} project${projects.length !== 1 ? 's' : ''} monitored in your workspace`}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => navigate('/scans/new')}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white"
+                style={{ background: 'linear-gradient(135deg,#FF6B2B,#C13A00)' }}
+              >
+                Launch New Scan
+              </button>
+              <button
+                onClick={() => navigate('/notifications')}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white/85"
+                style={{ border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.02)' }}
+              >
+                Review Alerts
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-6 animate-slide-up rounded-2xl p-4 sm:p-5"
+            style={{ background: '#101010', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                ['Security score', loading ? '—' : stats?.security_score ?? 0, scoreColor],
+                ['Average risk', loading ? '—' : `${avgRisk.toFixed(1)}/10`, riskColor],
+                ['Critical', bySev.critical || 0, '#f87171'],
+                ['High', bySev.high || 0, '#fb923c'],
+              ].map(([label, value, color]) => (
+                <div key={label} className="rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-white/35">{label}</p>
+                  <p className="text-xl font-bold mt-1" style={{ color }}>{value}</p>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* VIEWER Trial Info Banner */}
@@ -279,11 +320,12 @@ export default function Dashboard() {
           )}
 
           {/* ── KPI row ────────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 animate-slide-up" style={{ animationDelay: '0.04s' }}>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6 animate-slide-up" style={{ animationDelay: '0.04s' }}>
             <KpiCard label="Projects"      value={loading ? '—' : stats?.total_projects ?? 0}  sub="in workspace" />
             <KpiCard label="Total Scans"   value={loading ? '—' : stats?.total_scans ?? 0}     sub="all time" />
             <KpiCard label="Active Scans"  value={loading ? '—' : stats?.active_scans ?? 0}    sub="running / pending" accent={stats?.active_scans > 0 ? '#eab308' : undefined} />
             <KpiCard label="Findings"      value={loading ? '—' : stats?.total_findings ?? 0}  sub="latest scans" accent={stats?.total_findings > 0 ? '#fb923c' : undefined} />
+            <KpiCard label="Avg Risk"      value={loading ? '—' : `${avgRisk.toFixed(1)}/10`}   sub="calculated from latest scans" accent={riskColor} />
           </div>
 
           {/* ── Charts row ─────────────────────────────────────────────────── */}
@@ -292,7 +334,7 @@ export default function Dashboard() {
 
               {/* Security score */}
               <div className="rounded-2xl p-5 flex flex-col items-center justify-center gap-2"
-                style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)' }}>
+                style={{ background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <ScoreRing score={stats.security_score} />
                 <div className="w-full mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
                   {[['Critical', bySev.critical, '#f87171'], ['High', bySev.high, '#fb923c'], ['Medium', bySev.medium, '#eab308'], ['Low', bySev.low, '#60a5fa']].map(([lbl, v, c]) => (
@@ -306,7 +348,7 @@ export default function Dashboard() {
 
               {/* Severity breakdown */}
               <div className="rounded-2xl p-5 flex flex-col gap-3"
-                style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)' }}>
+                style={{ background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <p className="text-xs font-semibold uppercase tracking-widest text-white/25">Findings by Severity</p>
                 <div className="flex-1 flex items-center justify-center">
                   <SeverityDonut bySev={bySev} />
@@ -332,7 +374,7 @@ export default function Dashboard() {
 
               {/* Scan trend */}
               <div className="rounded-2xl p-5 flex flex-col gap-3"
-                style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)' }}>
+                style={{ background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-widest text-white/25">Scan Activity</p>
                   <span className="text-[10px] text-white/20">last 14 days</span>
@@ -355,7 +397,7 @@ export default function Dashboard() {
             <div className="mb-6 animate-slide-up" style={{ animationDelay: '0.12s' }}>
               <h2 className="text-xs font-semibold uppercase tracking-widest text-white/30 mb-3">Top Risky Projects</h2>
               <div className="rounded-2xl overflow-hidden"
-                style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)' }}>
+                style={{ background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))', border: '1px solid rgba(255,255,255,0.06)' }}>
                 {stats.top_risky_projects.map((p, i) => (
                   <div key={p.id}
                     onClick={() => navigate(`/projects/${p.id}`)}
@@ -364,6 +406,7 @@ export default function Dashboard() {
                     <span className="text-xs text-white/20 w-4 flex-shrink-0">{i + 1}</span>
                     <span className="flex-1 text-sm font-medium text-white truncate">{p.name}</span>
                     <div className="flex items-center gap-2 flex-shrink-0">
+                      {typeof p.risk_score === 'number' && <SevPill n={p.risk_score.toFixed(1)} c="#f87171" label="risk" />}
                       {p.critical > 0 && <SevPill n={p.critical} c="#f87171" label="crit" />}
                       {p.high     > 0 && <SevPill n={p.high}     c="#fb923c" label="high" />}
                       {p.medium   > 0 && <SevPill n={p.medium}   c="#eab308" label="med"  />}
@@ -445,7 +488,7 @@ function ProjectRow({ project, deleting, onClick, onDelete }) {
     <div
       onClick={onClick}
       className="group flex items-center justify-between px-5 py-4 rounded-2xl cursor-pointer transition-all"
-      style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.05)' }}
+      style={{ background: 'linear-gradient(170deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))', border: '1px solid rgba(255,255,255,0.055)' }}
       onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,107,43,0.15)'}
       onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'}
     >
