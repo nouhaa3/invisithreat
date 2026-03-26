@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from app.db.base import Base
 
 
@@ -19,3 +20,5 @@ class AuditLog(Base):
     detail = Column(String(500), nullable=True)
     ip_address = Column(String(45), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="audit_logs")

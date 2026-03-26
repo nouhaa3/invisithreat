@@ -19,3 +19,4 @@ class RiskScore(Base):
     calculated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
     scan = relationship("Scan", back_populates="risk_score")
+    vulnerabilities = relationship("Vulnerability", back_populates="risk_score")

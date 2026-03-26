@@ -52,12 +52,16 @@ class Project(Base):
     language = Column(String, nullable=True, default="Other")
     analysis_type = Column(String, nullable=True, default="SAST")
     visibility = Column(String, nullable=True, default="private")
+    status = Column(String, nullable=True, default="active")
     owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
     owner = relationship("User", back_populates="projects")
     scans = relationship("Scan", back_populates="project", cascade="all, delete-orphan")
     members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")
+    security_reports = relationship("SecurityReport", back_populates="project", cascade="all, delete-orphan")
+    security_metrics = relationship("SecurityMetric", back_populates="project", cascade="all, delete-orphan")
+    github_repositories = relationship("GitHubRepository", back_populates="project", cascade="all, delete-orphan")
 
 
 class Scan(Base):
@@ -81,3 +85,6 @@ class Scan(Base):
 
     project = relationship("Project", back_populates="scans")
     risk_score = relationship("RiskScore", back_populates="scan", uselist=False, cascade="all, delete-orphan")
+    vulnerabilities = relationship("Vulnerability", back_populates="scan", cascade="all, delete-orphan")
+    tool_execution = relationship("ToolExecution", back_populates="scan", uselist=False, cascade="all, delete-orphan")
+    scan_comparison = relationship("ScanComparison", back_populates="scan", uselist=False, cascade="all, delete-orphan")
