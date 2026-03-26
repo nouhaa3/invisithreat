@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         """Return DB URL from DATABASE_URL when set, otherwise build from POSTGRES_* values."""
-        db_url = self.DATABASE_URL_OVERRIDE.strip()
+        db_url = str(self.DATABASE_URL_OVERRIDE or "").strip()
         if not db_url:
             db_url = (
                 f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
