@@ -2,14 +2,15 @@
 API Key management routes — users create/list/revoke personal CLI tokens.
 """
 import hashlib, secrets, uuid
-from datetime import datetime, UTC
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.db.session import get_db
 from app.core.jwt import get_current_user
+from app.core.rate_limit import limiter
 from app.models.user import User
 from app.models.api_key import UserAPIKey
 from app.services.audit_log import create_audit_log
@@ -51,12 +52,15 @@ class APIKeyResponse(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("", response_model=APIKeyCreatedResponse, status_code=201)
+@limiter.limit("10/hour")
 async def create_api_key(
     body: APIKeyCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Generate a new personal API key. The plaintext is returned once and never stored."""
+    _ = request
     raw   = KEY_PREFIX + secrets.token_urlsafe(32)
     prefix = raw[:12]          # "ivt_xxxxxxxx"
     record = UserAPIKey(

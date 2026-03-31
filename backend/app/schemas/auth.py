@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from app.schemas.user import UserWithRole
 
@@ -19,6 +19,14 @@ class TokenData(BaseModel):
 class RefreshTokenRequest(BaseModel):
     """Request to refresh access token"""
     refresh_token: str
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+
+class RoleRequest(BaseModel):
+    role_name: str = Field(..., min_length=3, max_length=100)
 
 
 class LoginResponse(BaseModel):

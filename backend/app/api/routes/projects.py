@@ -1,9 +1,10 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from typing import List
 from app.db.session import get_db
 from app.core.jwt import require_admin
 from app.core.permissions import require_permission, P
+from app.core.rate_limit import limiter
 from app.core.config import settings
 from app.models.user import User
 from app.schemas.scan import (
@@ -208,9 +209,11 @@ async def get_scan_risk_score(
 
 
 @router.post("/{project_id}/scans/{scan_id}/claim-token", response_model=CLITokenResponse)
+@limiter.limit("30/minute")
 async def get_cli_upload_token(
     project_id: uuid.UUID,
     scan_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(P.RUN_SCAN)),
 ):
@@ -218,6 +221,7 @@ async def get_cli_upload_token(
     Issue a one-time upload token for the CLI to send results back.
     The CLI never needs a user password — only this short-lived token.
     """
+    _ = request
     get_project(db, project_id, current_user)
     scan = db.query(ScanModel).filter(ScanModel.id == scan_id, ScanModel.project_id == project_id).first()
     if not scan:
@@ -230,13 +234,16 @@ async def get_cli_upload_token(
 
 
 @router.post("/scans/upload", status_code=200)
+@limiter.limit("60/minute")
 async def cli_upload_results(
     payload: CLIScanUpload,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """
     Endpoint called by the CLI (no user auth) to upload scan results using the upload token.
     """
+    _ = request
     scan = db.query(ScanModel).filter(
         ScanModel.results_json == f"__pending_token:{payload.upload_token}"
     ).first()
