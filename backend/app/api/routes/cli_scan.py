@@ -108,7 +108,11 @@ async def cli_upload_scan(
     """
     Called by scanner.exe after a local SAST scan.
     Creates a completed Scan with all findings and returns the platform URL.
-    
+    """
+    try:
+        project_id = uuid.UUID(payload.project_id)
+    except ValueError:
+        raise HTTPE    
     VIEWER users: limited to 2 trial scans
     DEVELOPER or higher: unlimited scans
     """
@@ -129,9 +133,7 @@ async def cli_upload_scan(
         # Decrement trial scans
         current_user.trial_scans_remaining -= 1
         db.commit()
-
-    # Count by severity (lowercase to match frontend)
-    by_sev = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+ "info": 0}
     for f in payload.findings:
         key = f.severity.lower()
         by_sev[key] = by_sev.get(key, 0) + 1
