@@ -20,6 +20,10 @@ from app.core.email import (
     notify_admin_role_request,
     notify_user_role_request_received,
     notify_user_role_request_approved,
+    notify_user_role_changed,
+    notify_user_account_activated,
+    notify_user_account_deactivated,
+    email_is_configured,
 )
 from app.models.user import User
 from app.models.role import Role
@@ -546,12 +550,16 @@ async def admin_change_role(
     admin: User = Depends(require_admin),
 ):
     """Admin only — change a user's role."""
+    if not email_is_configured():
+        raise HTTPException(status_code=503, detail="Email service is not configured. Contact an administrator.")
+
     user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     _ensure_not_primary_admin_target(user, "modified")
     if str(user.id) == str(admin.id):
         raise HTTPException(status_code=400, detail="Cannot change your own role")
+    old_role = user.role.name if user.role else "Unknown"
     role = db.query(Role).filter(Role.name == payload.role_name).first()
     if not role:
         raise HTTPException(status_code=400, detail=f"Role '{payload.role_name}' not found")
@@ -571,6 +579,8 @@ async def admin_change_role(
         message=f"{admin.nom} changed your role to {payload.role_name}.",
         link="/settings",
     )
+
+    notify_user_role_changed(user.nom, user.email, old_role, payload.role_name, admin.nom, settings.FRONTEND_URL)
     
     return UserAdminResponse(**get_user_with_role(db, user))
 
@@ -582,6 +592,9 @@ async def admin_toggle_active(
     admin: User = Depends(require_admin),
 ):
     """Admin only — activate or deactivate a user account (sends email to user)."""
+    if not email_is_configured():
+        raise HTTPException(status_code=503, detail="Email service is not configured. Contact an administrator.")
+
     user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -593,6 +606,10 @@ async def admin_toggle_active(
         user.is_pending = False   # clear pending flag when manually activated
     db.commit()
     db.refresh(user)
+    if user.is_active:
+        notify_user_account_activated(user.nom, user.email, admin.nom, settings.FRONTEND_URL)
+    else:
+        notify_user_account_deactivated(user.nom, user.email, admin.nom, settings.FRONTEND_URL)
     return UserAdminResponse(**get_user_with_role(db, user))
 
 

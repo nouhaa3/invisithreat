@@ -1,4 +1,5 @@
 ﻿from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 import uuid
@@ -10,7 +11,7 @@ from app.models.scan import Project
 from app.schemas.member import MemberInviteRequest, MemberRoleUpdate, MemberResponse
 from app.services.member import list_members, invite_member, update_member_role, remove_member
 from app.services.notification import create_notification
-from app.core.email import notify_project_invitation
+from app.core.email import notify_project_invitation, email_is_configured
 from app.core.config import settings
 
 router = APIRouter(prefix="/projects/{project_id}/members", tags=["Members"])
@@ -33,6 +34,9 @@ async def invite_project_member(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(P.MANAGE_PROJECT_MEMBERS)),
 ):
+    if not email_is_configured():
+        raise HTTPException(status_code=503, detail="Email service is not configured. Contact an administrator.")
+
     result = invite_member(db, project_id, data, current_user)
 
     if result["status"] == "not_found":

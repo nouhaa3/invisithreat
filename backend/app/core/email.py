@@ -15,6 +15,13 @@ ADMIN_NOTIFICATION_EMAIL = settings.ADMIN_NOTIFICATION_EMAIL
 SENDER = {"email": (settings.EMAIL_FROM or ADMIN_NOTIFICATION_EMAIL or "no-reply@invisithreat.local"), "name": "InvisiThreat"}
 
 
+def email_is_configured() -> bool:
+  """Check if either Brevo or SMTP is usable."""
+  has_brevo = bool((settings.BREVO_API_KEY or "").strip())
+  has_smtp = bool((settings.SMTP_HOST or "").strip() and (settings.SMTP_USERNAME or "").strip() and (settings.SMTP_PASSWORD or "").strip())
+  return has_brevo or has_smtp
+
+
 def _send_brevo(to: str, subject: str, html: str, text: str) -> bool:
     if not settings.BREVO_API_KEY:
         return False
@@ -487,6 +494,112 @@ def notify_user_role_request_approved(nom: str, email: str, role_name: str) -> b
         f"Hi {nom},\n\n"
         f"Your role request has been approved. New role: {role_name}.\n"
         f"Sign in: {login_url}"
+    )
+    return _send(email, subject, html, plain)
+
+
+def notify_user_role_changed(nom: str, email: str, old_role: str, new_role: str, admin_nom: str, frontend_url: str) -> bool:
+    """Notify user when an admin changes their role."""
+    subject = f"[InvisiThreat] Your role changed to {new_role}"
+    settings_url = f"{frontend_url}/settings"
+    html = f"""<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#080808;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 20px;">
+      <table width="560" style="background:#111111;border-radius:16px;border:1px solid rgba(255,255,255,0.06);overflow:hidden;">
+        <tr><td style="background:linear-gradient(135deg,#001a0d,#111);padding:28px 32px;border-bottom:1px solid rgba(34,197,94,0.2);">
+          <span style="font-size:22px;font-weight:700;color:#4ade80;">InvisiThreat</span>
+          <span style="font-size:12px;color:rgba(255,255,255,0.35);margin-left:12px;">Role Update</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <p style="color:rgba(255,255,255,0.5);font-size:14px;margin:0 0 10px;">Hi {nom},</p>
+          <h2 style="color:#fff;font-size:22px;margin:0 0 18px;">Your access level changed</h2>
+          <p style="color:rgba(255,255,255,0.5);font-size:14px;line-height:1.6;margin:0 0 16px;">
+            {admin_nom} updated your role from <strong style="color:#fff;">{old_role}</strong> to <strong style="color:#fff;">{new_role}</strong>.
+          </p>
+          <a href="{settings_url}" style="display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-weight:700;font-size:14px;text-decoration:none;padding:12px 28px;border-radius:10px;">View my access</a>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+    plain = (
+        f"Hi {nom},\n\n"
+        f"{admin_nom} changed your role from {old_role} to {new_role}.\n"
+        f"Review your settings: {settings_url}\n"
+    )
+    return _send(email, subject, html, plain)
+
+
+def notify_user_account_activated(nom: str, email: str, admin_nom: str, frontend_url: str) -> bool:
+    """Notify user when an admin activates their account."""
+    subject = "[InvisiThreat] Your account is active"
+    login_url = f"{frontend_url}/login"
+    html = f"""<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#080808;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 20px;">
+      <table width="560" style="background:#111111;border-radius:16px;border:1px solid rgba(255,255,255,0.06);overflow:hidden;">
+        <tr><td style="background:linear-gradient(135deg,#001a0d,#111);padding:28px 32px;border-bottom:1px solid rgba(34,197,94,0.2);">
+          <span style="font-size:22px;font-weight:700;color:#4ade80;">InvisiThreat</span>
+          <span style="font-size:12px;color:rgba(255,255,255,0.35);margin-left:12px;">Account Activated</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <h2 style="color:#fff;font-size:22px;margin:0 0 14px;">You're good to go</h2>
+          <p style="color:rgba(255,255,255,0.5);font-size:14px;line-height:1.6;margin:0 0 18px;">
+            {admin_nom} activated your account. You can now sign in and access the platform.
+          </p>
+          <a href="{login_url}" style="display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-weight:700;font-size:14px;text-decoration:none;padding:12px 28px;border-radius:10px;">Sign in</a>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+    plain = (
+        f"Hi {nom},\n\n"
+        f"{admin_nom} activated your account. You can sign in now: {login_url}\n"
+    )
+    return _send(email, subject, html, plain)
+
+
+def notify_user_account_deactivated(nom: str, email: str, admin_nom: str, frontend_url: str) -> bool:
+    """Notify user when an admin deactivates their account."""
+    subject = "[InvisiThreat] Your account was deactivated"
+    help_url = f"{frontend_url}/support" if frontend_url else ""
+    html = f"""<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#080808;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 20px;">
+      <table width="560" style="background:#111111;border-radius:16px;border:1px solid rgba(255,255,255,0.06);overflow:hidden;">
+        <tr><td style="background:linear-gradient(135deg,#1a0a00,#111);padding:28px 32px;border-bottom:1px solid rgba(239,68,68,0.2);">
+          <span style="font-size:22px;font-weight:700;color:#f87171;">InvisiThreat</span>
+          <span style="font-size:12px;color:rgba(255,255,255,0.35);margin-left:12px;">Account Deactivated</span>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <h2 style="color:#fff;font-size:22px;margin:0 0 14px;">Account access disabled</h2>
+          <p style="color:rgba(255,255,255,0.5);font-size:14px;line-height:1.6;margin:0 0 18px;">
+            {admin_nom} deactivated your account. You can no longer sign in until it is reactivated.
+          </p>
+          {f'<a href="{help_url}" style="display:inline-block;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);color:#f87171;font-weight:700;font-size:14px;text-decoration:none;padding:12px 28px;border-radius:10px;">Contact support</a>' if help_url else ''}
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+    plain = (
+        f"Hi {nom},\n\n"
+        f"{admin_nom} deactivated your account. You cannot sign in until it is reactivated."
+        + (f"\nContact support: {help_url}" if help_url else "")
+        + "\n"
     )
     return _send(email, subject, html, plain)
 
