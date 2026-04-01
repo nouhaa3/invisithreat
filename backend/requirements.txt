@@ -12,3 +12,6 @@ python-multipart
 sib-api-v3-sdk
 pyotp
 qrcode[pil]
+alembic
+slowapi
+limits

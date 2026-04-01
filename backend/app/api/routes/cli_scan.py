@@ -108,9 +108,6 @@ async def cli_upload_scan(
     """
     Called by scanner.exe after a local SAST scan.
     Creates a completed Scan with all findings and returns the platform URL.
-    
-    VIEWER users: limited to 2 trial scans
-    DEVELOPER or higher: unlimited scans
     """
     try:
         project_id = uuid.UUID(payload.project_id)
@@ -118,17 +115,6 @@ async def cli_upload_scan(
         raise HTTPException(status_code=400, detail="Invalid project_id format")
 
     project = _assert_access(db, project_id, current_user)
-
-    # Check trial scans limit for VIEWER role
-    if current_user.role.name == "Viewer":
-        if getattr(current_user, 'trial_scans_remaining', 0) <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Trial scan limit reached. Upgrade your role to continue scanning.",
-            )
-        # Decrement trial scans
-        current_user.trial_scans_remaining -= 1
-        db.commit()
 
     # Count by severity (lowercase to match frontend)
     by_sev = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}

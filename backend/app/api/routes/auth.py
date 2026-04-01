@@ -5,11 +5,12 @@ from sqlalchemy.orm import Session
 from typing import List
 from datetime import timedelta
 from app.db.session import get_db
-from app.schemas.auth import LoginResponse, Token, RefreshTokenRequest
+from app.schemas.auth import LoginResponse, Token, RefreshTokenRequest, ResendVerificationRequest, RoleRequest
 from app.schemas.user import UserCreate, UserWithRole, RoleUpdateRequest, UserProfileUpdateRequest, UserAdminResponse, ForgotPasswordRequest, VerifyResetCodeRequest, ResetPasswordRequest, SelfProfileUpdateRequest, ChangePasswordRequest
 from app.services.auth import authenticate_user, register_user, get_user_with_role
 from app.core.jwt import create_access_token, create_refresh_token, decode_token, get_current_user, require_admin, create_action_token, decode_action_token, create_totp_token
 from app.core.api_key_auth import get_user_from_api_key
+from app.core.rate_limit import limiter
 from app.core.config import settings
 from app.core.email import (
     notify_user_approved,
@@ -49,14 +50,17 @@ def _ensure_not_primary_admin_target(user: User, action: str) -> None:
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
 async def register(
     user_data: UserCreate,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """
     Register a new user with VIEWER role and email verification.
     User receives email verification link and must verify before login.
     """
+    _ = request
     user = register_user(db, user_data)
 
     # Create email verification token (valid for 24 hours)
@@ -76,12 +80,15 @@ async def register(
 
 
 @router.post("/resend-verification", tags=["Authentication"])
+@limiter.limit("3/minute")
 async def resend_verification_email(
-    payload: dict,
+    payload: ResendVerificationRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Resend email verification link for non-verified users."""
-    email = (payload.get("email") or "").strip().lower()
+    _ = request
+    email = payload.email.strip().lower()
     if not email:
         raise HTTPException(status_code=400, detail="email is required")
 
@@ -105,6 +112,7 @@ async def resend_verification_email(
 
 
 @router.post("/login", response_model=LoginResponse)
+@limiter.limit("10/minute")
 async def login(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -145,8 +153,10 @@ async def login(
 
 
 @router.post("/refresh", response_model=Token)
+@limiter.limit("30/minute")
 async def refresh_token(
     refresh_request: RefreshTokenRequest,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """
@@ -154,6 +164,7 @@ async def refresh_token(
     
     Returns new access and refresh tokens
     """
+    _ = request
     try:
         # Decode refresh token
         payload = decode_token(refresh_request.refresh_token)
@@ -287,11 +298,14 @@ async def get_current_cli_user_info(
 # ─── Forgot password flow ────────────────────────────────────────────────────
 
 @router.post("/forgot-password", tags=["Authentication"])
+@limiter.limit("5/minute")
 async def forgot_password(
     payload: ForgotPasswordRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Step 1 — request a reset code. A 6-digit code is emailed to the admin who relays it."""
+    _ = request
     user = db.query(User).filter(User.email == payload.email).first()
     # Always return the same response to not leak whether the email exists
     if not user or not user.is_active:
@@ -305,11 +319,14 @@ async def forgot_password(
 
 
 @router.post("/verify-reset-code", tags=["Authentication"])
+@limiter.limit("10/minute")
 async def verify_reset_code(
     payload: VerifyResetCodeRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Step 2 — verify the 6-digit code and get a short-lived reset token."""
+    _ = request
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not user.reset_code or not user.reset_code_expires:
         raise HTTPException(status_code=400, detail="Invalid code or request expired")
@@ -334,11 +351,14 @@ async def verify_reset_code(
 
 
 @router.post("/reset-password", tags=["Authentication"])
+@limiter.limit("5/minute")
 async def reset_password(
     payload: ResetPasswordRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Step 3 — set a new password using the reset token."""
+    _ = request
     user_id = decode_action_token(payload.reset_token, "reset_password")
     user = db.query(User).filter(User.id == _uuid.UUID(user_id)).first()
     if not user:
@@ -377,8 +397,10 @@ async def email_verify_user(token: str, db: Session = Depends(get_db)):
 
 
 @router.post("/request-role", tags=["Authentication"])
+@limiter.limit("5/minute")
 async def request_role(
-    payload: dict,  # {"role_name": "Developer"}
+    payload: RoleRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -387,6 +409,7 @@ async def request_role(
     Sets requested_role_id and notifies admins via dashboard.
     Only VIEWER role with no pending request can request.
     """
+    _ = request
     if str(current_user.role.name) != "Viewer":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -398,11 +421,13 @@ async def request_role(
             detail="You already have a pending role request"
         )
     
-    role_name = payload.get("role_name")
-    if not role_name:
+    role_name = payload.role_name
+
+    allowed_requests = {"Developer", "Security Manager"}
+    if role_name not in allowed_requests:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="role_name is required"
+            detail="Only Developer or Security Manager roles can be requested",
         )
     
     requested_role = db.query(Role).filter(Role.name == role_name).first()

@@ -714,7 +714,7 @@ export default function NewScanPage() {
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0">
                         <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                       </svg>
-                      Run the commands below from the folder where <span className="text-white/50 font-medium mx-0.5">invisithreat.exe</span> is saved.
+                      Run the commands below from the folder where <span className="text-white/50 font-medium mx-0.5">invisithreat.exe</span> is saved. Replace <span className="font-mono text-white/50 mx-0.5">YOUR_PROJECT_ID</span> with the ID above.
                     </p>
 
                     <StepCmd n={1} label="Login (once — skip if already logged in)">
@@ -722,7 +722,7 @@ export default function NewScanPage() {
                     </StepCmd>
 
                     <StepCmd n={2} label="Run the scan">
-                      <CodeBlock>{`.\\invisithreat.exe scan "PATH\\TO\\YOUR_PROJECT" --project-id YOUR_PROJECT_ID`}</CodeBlock>
+                      <CodeBlock>{`.\\invisithreat.exe scan "path\\to\\your-project" --project-id YOUR_PROJECT_ID`}</CodeBlock>
                     </StepCmd>
 
                     <div className="mt-3 rounded-xl px-4 py-3"

@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.core.jwt import get_current_user, create_access_token, create_refresh_token, decode_token
+from app.core.rate_limit import limiter
 from app.models.user import User
 from app.services.totp import generate_secret, get_totp_uri, generate_qr_base64, verify_totp
 
@@ -37,11 +38,14 @@ async def get_2fa_status(
 
 
 @router.post("/setup", response_model=SetupResponse)
+@limiter.limit("5/minute")
 async def setup_2fa(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Generate (or regenerate) a TOTP secret — not active until /enable is called."""
+    _ = request
     if current_user.totp_enabled:
         raise HTTPException(status_code=400, detail="2FA is already enabled. Disable it first.")
     secret = generate_secret()
@@ -55,12 +59,15 @@ async def setup_2fa(
 
 
 @router.post("/enable")
+@limiter.limit("5/minute")
 async def enable_2fa(
     body: CodeRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Confirm the setup by verifying the first TOTP code."""
+    _ = request
     if current_user.totp_enabled:
         raise HTTPException(status_code=400, detail="2FA is already enabled.")
     if not current_user.totp_secret:
@@ -73,12 +80,15 @@ async def enable_2fa(
 
 
 @router.post("/disable")
+@limiter.limit("5/minute")
 async def disable_2fa(
     body: CodeRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Disable 2FA after confirming with a valid TOTP code."""
+    _ = request
     if not current_user.totp_enabled:
         raise HTTPException(status_code=400, detail="2FA is not enabled.")
     if not verify_totp(current_user.totp_secret, body.code):
@@ -90,11 +100,14 @@ async def disable_2fa(
 
 
 @router.post("/verify-login")
+@limiter.limit("10/minute")
 async def verify_login_totp(
     body: VerifyLoginRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Complete a login that required 2FA: verify code and return full tokens."""
+    _ = request
     from app.services.auth import get_user_with_role
     from app.schemas.auth import LoginResponse
     from app.schemas.user import UserWithRole
