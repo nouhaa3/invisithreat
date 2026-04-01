@@ -3,6 +3,17 @@ import { useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { getProjects, createProject, createScan, getCLIToken } from '../services/projectService'
 import { listApiKeys, createApiKey } from '../services/apiKeyService'
+import AnalysisTypeSelector from '../components/AnalysisTypeSelector'
+
+const choiceClasses = (active, { compact = false, grow = false } = {}) => [
+  'text-left rounded-xl px-4 py-2.5 flex items-center gap-3 transition-all duration-150',
+  'border backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:ring-orange-400/70',
+  active
+    ? 'border-orange-400/40 bg-orange-500/10 focus-visible:ring-orange-400/80'
+    : 'border-white/10 bg-white/5 hover:border-orange-400/30 hover:bg-orange-500/5',
+  compact ? '' : 'w-full',
+  grow ? 'flex-1' : '',
+].filter(Boolean).join(' ')
 
 const getApiBase = () => {
   const env = import.meta.env.VITE_API_URL
@@ -228,14 +239,9 @@ export default function NewScanPage() {
                     <button
                       key={val}
                       onClick={() => { setProjectMode(val); setProjectError('') }}
-                      className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all duration-200"
-                      style={{
-                        background: projectMode === val ? 'rgba(255,107,43,0.1)' : 'rgba(255,255,255,0.03)',
-                        border: projectMode === val ? '1px solid rgba(255,107,43,0.25)' : '1px solid rgba(255,255,255,0.06)',
-                        color: projectMode === val ? '#FF8C5A' : 'rgba(255,255,255,0.35)',
-                      }}
+                      className={choiceClasses(projectMode === val, { grow: true })}
                     >
-                      {lbl}
+                      <span className={`text-sm font-medium ${projectMode === val ? 'text-orange-300' : 'text-white/70'}`}>{lbl}</span>
                     </button>
                   ))}
                 </div>
@@ -277,37 +283,17 @@ export default function NewScanPage() {
                         {['Python','JavaScript','TypeScript','Java','C#','Go','PHP','Ruby','Other'].map(lang => (
                           <button key={lang} type="button"
                             onClick={() => setNewProjectLanguage(lang)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                            style={{
-                              background: newProjectLanguage === lang ? 'rgba(255,107,43,0.12)' : 'rgba(255,255,255,0.03)',
-                              border: newProjectLanguage === lang ? '1px solid rgba(255,107,43,0.35)' : '1px solid rgba(255,255,255,0.07)',
-                              color: newProjectLanguage === lang ? '#FF8C5A' : 'rgba(255,255,255,0.35)',
-                            }}>{lang}</button>
+                            className={choiceClasses(newProjectLanguage === lang, { compact: true })}
+                          >
+                            <span className={`text-xs font-medium ${newProjectLanguage === lang ? 'text-orange-300' : 'text-white/70'}`}>{lang}</span>
+                          </button>
                         ))}
                       </div>
                     </div>
                     {/* Analysis Type */}
                     <div>
                       <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">Analysis Type</label>
-                      <div className="flex flex-col gap-2">
-                        {[
-                          ['SAST', 'Static code analysis'],
-                          ['Secrets', 'Hardcoded credentials & tokens'],
-                          ['Dependencies', 'Vulnerable packages'],
-                          ['Full (SAST + Secrets + Dependencies)', 'Everything'],
-                        ].map(([val, desc]) => (
-                          <button key={val} type="button"
-                            onClick={() => setNewProjectAnalysis(val)}
-                            className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-left transition-all"
-                            style={{
-                              background: newProjectAnalysis === val ? 'rgba(255,107,43,0.08)' : 'rgba(255,255,255,0.02)',
-                              border: newProjectAnalysis === val ? '1px solid rgba(255,107,43,0.2)' : '1px solid rgba(255,255,255,0.05)',
-                            }}>
-                            <span className="text-sm font-medium" style={{ color: newProjectAnalysis === val ? '#FF8C5A' : 'rgba(255,255,255,0.6)' }}>{val}</span>
-                            <span className="text-xs text-white/25 ml-auto">{desc}</span>
-                          </button>
-                        ))}
-                      </div>
+                      <AnalysisTypeSelector value={newProjectAnalysis} onChange={setNewProjectAnalysis} />
                     </div>
                     {/* Visibility */}
                     <div>
@@ -316,12 +302,10 @@ export default function NewScanPage() {
                         {[['private','Private'],['public','Public']].map(([val, lbl]) => (
                           <button key={val} type="button"
                             onClick={() => setNewProjectVisibility(val)}
-                            className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
-                            style={{
-                              background: newProjectVisibility === val ? 'rgba(255,107,43,0.1)' : 'rgba(255,255,255,0.03)',
-                              border: newProjectVisibility === val ? '1px solid rgba(255,107,43,0.25)' : '1px solid rgba(255,255,255,0.06)',
-                              color: newProjectVisibility === val ? '#FF8C5A' : 'rgba(255,255,255,0.35)',
-                            }}>{lbl}</button>
+                            className={choiceClasses(newProjectVisibility === val, { grow: true })}
+                          >
+                            <span className={`text-sm font-medium ${newProjectVisibility === val ? 'text-orange-300' : 'text-white/70'}`}>{lbl}</span>
+                          </button>
                         ))}
                       </div>
                     </div>
