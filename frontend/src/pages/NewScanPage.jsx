@@ -87,9 +87,9 @@ function StepIndicator({ current, steps }) {
   )
 }
 
-function SectionCard({ children }) {
+function SectionCard({ children, className = '' }) {
   return (
-    <div className="rounded-2xl p-6" style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)' }}>
+    <div className={`rounded-2xl p-6 ${className}`} style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)' }}>
       {children}
     </div>
   )
@@ -500,51 +500,46 @@ export default function NewScanPage() {
           {/* ─── CONFIGURE / SETUP (EXE) ───────────────────────────────────── */}
           {((isNewProject && step === 4) || (!isNewProject && step === 2)) && method === 'exe' && (
             <div className="animate-slide-up">
-              {/* Download card */}
-              <div className="flex items-center justify-between p-4 rounded-2xl mb-3"
-                style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.15)' }}>
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="1.8">
+              {/* Step 1: Download */}
+              <SectionCard className="mb-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-bold"
+                      style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)' }}>
+                      1
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Download invisithreat.exe</p>
+                      <p className="text-xs text-white/30 mt-0.5">Windows x64 · ~12 MB</p>
+                    </div>
+                  </div>
+                  <a
+                    href="/downloads/invisithreat.exe"
+                    download="invisithreat.exe"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95"
+                    style={{ background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                       <polyline points="7 10 12 15 17 10"/>
                       <line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white">Step 1 — Download invisithreat.exe</p>
-                    <p className="text-xs text-white/30 mt-0.5">Windows x64 · ~12 MB</p>
-                  </div>
+                    Download
+                  </a>
                 </div>
-                <a
-                  href="/downloads/invisithreat.exe"
-                  download="invisithreat.exe"
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95"
-                  style={{ background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)' }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
-                  Download
-                </a>
-              </div>
+              </SectionCard>
 
-              {/* API Key card */}
-              <SectionCard>
+              {/* Step 2: API Key card */}
+              <SectionCard className="mb-4">
                 <div className="flex items-center gap-3 mb-5 pb-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: 'rgba(255,107,43,0.08)', border: '1px solid rgba(255,107,43,0.12)' }}>
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FF6B2B" strokeWidth="1.8">
-                      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3M12 7L7 12" />
-                    </svg>
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-bold"
+                    style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)' }}>
+                    2
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-white">Get your API key</p>
+                    <p className="text-sm font-semibold text-white">Generate your API key</p>
                     <p className="text-xs text-white/30 mt-0.5">
-                      The scanner needs this key to send results to your project.
+                      The scanner uses this key to authenticate and send scan results back to your project.
                     </p>
                   </div>
                 </div>
@@ -606,32 +601,74 @@ export default function NewScanPage() {
 
                 {/* Existing keys list */}
                 {exeKeys.length > 0 && !exeNewKeyData && (
-                  <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/25 px-4 py-2.5"
-                      style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.01)' }}>
+                  <div className="mt-4 rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-3">
                       Your existing keys — still valid
                     </p>
-                    {exeKeys.slice(0, 3).map((k, i) => (
-                      <div key={k.id} className="flex items-center gap-3 px-4 py-3"
-                        style={{ borderBottom: i < Math.min(exeKeys.length, 3) - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FF6B2B" strokeWidth="1.8">
-                          <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5"/>
-                        </svg>
-                        <span className="text-xs text-white/60 flex-1">{k.name}</span>
-                        <code className="text-xs font-mono text-white/25">{k.key_prefix}••••••</code>
-                      </div>
-                    ))}
+                    <div className="space-y-2">
+                      {exeKeys.slice(0, 3).map((k, i) => (
+                        <div key={k.id} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'rgba(255,107,43,0.05)', border: '1px solid rgba(255,107,43,0.1)' }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FF6B2B" strokeWidth="1.8">
+                            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5"/>
+                          </svg>
+                          <span className="text-xs text-white/60 flex-1">{k.name}</span>
+                          <code className="text-xs font-mono text-white/25">{k.key_prefix}••••••</code>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
                 {exeKeys.length === 0 && !exeNewKeyData && exeKeysLoaded && (
-                  <div className="rounded-xl px-4 py-3 text-center"
+                  <div className="mt-4 rounded-xl px-4 py-3 text-center"
                     style={{ background: 'rgba(255,107,43,0.04)', border: '1px solid rgba(255,107,43,0.1)' }}>
                     <p className="text-xs" style={{ color: 'rgba(255,107,43,0.7)' }}>
                       You have no API keys yet. Generate one above to continue.
                     </p>
                   </div>
                 )}
+              </SectionCard>
+
+              {/* Step 3: Instructions */}
+              <SectionCard className="mb-4">
+                <div className="flex items-center gap-3 mb-5 pb-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-bold"
+                    style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)' }}>
+                    3
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">Run the scanner</p>
+                    <p className="text-xs text-white/30 mt-0.5">Execute the command in your terminal</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <StepCmd n={1} label="Open Command Prompt or PowerShell">
+                    <p className="text-xs text-white/40 ml-7 mb-2">Navigate to the folder where you downloaded invisithreat.exe</p>
+                  </StepCmd>
+
+                  <StepCmd n={2} label="Run the scanner">
+                    <CodeBlock>
+                      invisithreat.exe --project "{projectMode === 'new' ? newProjectName : selectedProject?.name}" --api-key "{exeNewKeyData?.plaintext || exeKeys?.[0]?.key_prefix || 'YOUR_API_KEY'}"
+                    </CodeBlock>
+                  </StepCmd>
+
+                  <StepCmd n={3} label="Check results">
+                    <p className="text-xs text-white/40 ml-7">The scanner will begin analyzing your project. Results will appear in your project dashboard shortly.</p>
+                  </StepCmd>
+                </div>
+
+                <div className="mt-5 p-4 rounded-xl"
+                  style={{ background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.15)' }}>
+                  <div className="flex items-start gap-2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                    </svg>
+                    <p className="text-xs text-blue-400 leading-relaxed">
+                      You can run the scanner from any location on your PC. The API key is required for authentication.
+                    </p>
+                  </div>
+                </div>
               </SectionCard>
 
               <button
@@ -646,7 +683,7 @@ export default function NewScanPage() {
                     Creating project...
                   </>
                 ) : (
-                  'I have my key — Create Project'
+                  'Finish'
                 )}
               </button>
             </div>
@@ -655,91 +692,194 @@ export default function NewScanPage() {
           {/* ─── CONFIGURE (CLI/GitHub) ───────────────────────────────────── */}
           {((isNewProject && step === 4) || (!isNewProject && step === 2)) && method !== 'exe' && (
             <div className="animate-slide-up">
-              <SectionCard>
-                <h2 className="text-sm font-semibold text-white mb-1">
-                  {method === 'cli' ? 'Confirm scan configuration' : 'Configure GitHub repository'}
-                </h2>
-                <p className="text-xs text-white/30 mb-5">
-                  {method === 'cli'
-                    ? 'A CLI token will be generated after confirmation. Use it to upload your scan results.'
-                    : 'Enter the repository URL to connect. The scan will run in an isolated environment.'}
-                </p>
-
-                {/* Summary */}
-                <div className="rounded-xl px-4 py-3 mb-4 flex items-center gap-3"
-                  style={{ background: 'rgba(255,107,43,0.05)', border: '1px solid rgba(255,107,43,0.1)' }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF6B2B" strokeWidth="2">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                  </svg>
-                  <div>
-                    <span className="text-xs text-white/50">Project: </span>
-                    <span className="text-xs text-white font-medium">
-                      {projectMode === 'new' ? newProjectName : selectedProject?.name}
-                    </span>
-                    <span className="text-xs text-white/30 ml-3">
-                      Method: <span className="text-white/50">{method === 'cli' ? 'Local CLI' : 'GitHub'}</span>
-                    </span>
-                  </div>
-                </div>
-
-                {method === 'github' && (
-                  <div className="flex flex-col gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">
-                        Repository URL
-                      </label>
-                      <input
-                        className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
-                        style={{ background: '#1c1c1c', border: '1px solid #2a2a2a' }}
-                        placeholder="https://github.com/username/repository"
-                        value={repoUrl}
-                        onChange={e => { setRepoUrl(e.target.value); setConfigError('') }}
-                        onFocus={e => { e.target.style.borderColor = 'rgba(255,107,43,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(255,107,43,0.1)' }}
-                        onBlur={e => { e.target.style.borderColor = '#2a2a2a'; e.target.style.boxShadow = '' }}
-                      />
+              {method === 'cli' ? (
+                <>
+                  {/* CLI: Step 1 - Installation */}
+                  <SectionCard className="mb-4">
+                    <div className="flex items-center gap-3 mb-5 pb-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-bold"
+                        style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)' }}>
+                        1
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-white">Install Python & Scanner</p>
+                        <p className="text-xs text-white/30 mt-0.5">Requires Python 3.8+ installed</p>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">
-                        Branch
-                      </label>
-                      <input
-                        className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
-                        style={{ background: '#1c1c1c', border: '1px solid #2a2a2a' }}
-                        placeholder="main"
-                        value={repoBranch}
-                        onChange={e => setRepoBranch(e.target.value)}
-                        onFocus={e => { e.target.style.borderColor = 'rgba(255,107,43,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(255,107,43,0.1)' }}
-                        onBlur={e => { e.target.style.borderColor = '#2a2a2a'; e.target.style.boxShadow = '' }}
-                      />
+
+                    <div className="space-y-3">
+                      <StepCmd n={1} label="Ensure Python is installed">
+                        <CodeBlock>python --version</CodeBlock>
+                      </StepCmd>
+
+                      <StepCmd n={2} label="Install invisithreat scanner">
+                        <CodeBlock>pip install invisithreat</CodeBlock>
+                      </StepCmd>
                     </div>
-                  </div>
-                )}
+                  </SectionCard>
 
-                {configError && (
-                  <div className="mt-4 px-4 py-3 rounded-xl border flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                    </svg>
-                    <p className="text-sm text-red-400">{configError}</p>
-                  </div>
-                )}
-              </SectionCard>
+                  {/* CLI: Step 2 - Token & config */}
+                  <SectionCard className="mb-4">
+                    <div className="flex items-center gap-3 mb-5 pb-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-bold"
+                        style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)' }}>
+                        2
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-white">Project configuration</p>
+                        <p className="text-xs text-white/30 mt-0.5">Confirm your project details</p>
+                      </div>
+                    </div>
 
-              <button
-                onClick={handleConfigure}
-                disabled={loading}
-                className="w-full mt-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}
-              >
-                {loading ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Creating scan...
-                  </>
-                ) : (
-                  'Launch Scan'
-                )}
-              </button>
+                    <div className="rounded-xl px-4 py-3 mb-4 flex items-center gap-3"
+                      style={{ background: 'rgba(255,107,43,0.05)', border: '1px solid rgba(255,107,43,0.1)' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF6B2B" strokeWidth="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                      </svg>
+                      <div>
+                        <span className="text-xs text-white/50">Project: </span>
+                        <span className="text-xs text-white font-medium">
+                          {projectMode === 'new' ? newProjectName : selectedProject?.name}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleConfigure}
+                      disabled={loading}
+                      className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}
+                    >
+                      {loading ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Creating project...
+                        </>
+                      ) : (
+                        'Finish'
+                      )}
+                    </button>
+                  </SectionCard>
+
+                  {/* CLI: Step 3 - Execution */}
+                  {cliToken && (
+                    <SectionCard className="mb-4">
+                      <div className="flex items-center gap-3 mb-5 pb-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-bold"
+                          style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)' }}>
+                          3
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white">Run the scanner</p>
+                          <p className="text-xs text-white/30 mt-0.5">Execute in your project directory</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 mb-4">
+                        <StepCmd n={1} label="Navigate to your project folder">
+                          <CodeBlock>cd /path/to/your/project</CodeBlock>
+                        </StepCmd>
+
+                        <StepCmd n={2} label="Run the scan with your token">
+                          <CodeBlock>
+                            invisithreat scan --token "{cliToken.token}" --project-id {createdProject?.id || 'PROJECT_ID'}
+                          </CodeBlock>
+                        </StepCmd>
+
+                        <StepCmd n={3} label="Wait for completion">
+                          <p className="text-xs text-white/40 ml-7">The scanner will analyze your code and automatically upload results.</p>
+                        </StepCmd>
+                      </div>
+
+                      <div className="p-4 rounded-xl"
+                        style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                        <div className="flex items-start gap-2">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                          <p className="text-xs text-green-400 leading-relaxed">
+                            Your CLI token will expire in 24 hours. Save it somewhere safe if you need to re-run scans.
+                          </p>
+                        </div>
+                      </div>
+                    </SectionCard>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* GitHub: Configuration */}
+                  <SectionCard className="mb-4">
+                    <div className="flex items-center gap-3 mb-5 pb-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-bold"
+                        style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)' }}>
+                        1
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-white">Connect GitHub repository</p>
+                        <p className="text-xs text-white/30 mt-0.5">The scan will run in an isolated sandbox environment</p>
+                      </div>
+                    </div>
+
+                    <h2 className="text-sm font-semibold text-white mb-1">
+                      Configure GitHub repository
+                    </h2>
+                    <p className="text-xs text-white/30 mb-5">
+                      Enter the repository URL to connect. The scan will run automatically on the specified branch.
+                    </p>
+                    <div className="flex flex-col gap-4 mb-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">
+                          Repository URL
+                        </label>
+                        <input
+                          className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+                          style={{ background: '#1c1c1c', border: '1px solid #2a2a2a' }}
+                          placeholder="https://github.com/username/repository"
+                          value={repoUrl}
+                          onChange={e => { setRepoUrl(e.target.value); setConfigError('') }}
+                          onFocus={e => { e.target.style.borderColor = 'rgba(255,107,43,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(255,107,43,0.1)' }}
+                          onBlur={e => { e.target.style.borderColor = '#2a2a2a'; e.target.style.boxShadow = '' }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">
+                          Branch
+                        </label>
+                        <input
+                          className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+                          style={{ background: '#1c1c1c', border: '1px solid #2a2a2a' }}
+                          placeholder="main"
+                          value={repoBranch}
+                          onChange={e => setRepoBranch(e.target.value)}
+                          onFocus={e => { e.target.style.borderColor = 'rgba(255,107,43,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(255,107,43,0.1)' }}
+                          onBlur={e => { e.target.style.borderColor = '#2a2a2a'; e.target.style.boxShadow = '' }}
+                        />
+                      </div>
+                    </div>
+
+                    {configError && (
+                      <div className="mb-4 px-4 py-3 rounded-xl border flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <p className="text-sm text-red-400">{configError}</p>
+                      </div>
+                    )}
+
+                    <div className="p-4 rounded-xl"
+                      style={{ background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.15)' }}>
+                      <div className="flex items-start gap-2">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" className="mt-0.5 flex-shrink-0">
+                          <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                        </svg>
+                        <p className="text-xs text-blue-400 leading-relaxed">
+                          The scan will start automatically once you confirm. Monitor progress in your project dashboard.
+                        </p>
+                      </div>
+                    </div>
+                  </SectionCard>
+                </>
+              )}
             </div>
           )}
         </div>
