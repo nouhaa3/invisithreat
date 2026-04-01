@@ -2,12 +2,12 @@ import PropTypes from 'prop-types'
 
 const ACCENT = '#ff8c5a'
 
-const OPTIONS = [
-  { value: 'SAST', title: 'SAST', desc: 'Static code analysis' },
-  { value: 'DAST', title: 'DAST', desc: 'Runtime / HTTP security checks' },
-  { value: 'Secrets', title: 'Secrets', desc: 'Hardcoded credentials & tokens' },
-  { value: 'Dependencies', title: 'Dependencies', desc: 'Vulnerable packages detection' },
-  { value: 'Full', title: 'Full Scan', desc: 'SAST + DAST + Secrets + Dependencies' },
+const PROJECT_TYPES = [
+  { value: 'Web Application', title: 'Web Application', desc: 'Browser-based frontends & SPAs' },
+  { value: 'Mobile Application', title: 'Mobile Application', desc: 'iOS/Android clients and APIs' },
+  { value: 'Desktop Application', title: 'Desktop Application', desc: 'Native or cross-platform apps' },
+  { value: 'API / Backend', title: 'API / Backend', desc: 'Services, microservices, and APIs' },
+  { value: 'Other', title: 'Other', desc: 'Scripts, tooling, or mixed workloads' },
 ]
 
 function Option({ option, active, onSelect }) {
@@ -39,17 +39,17 @@ Option.propTypes = {
   onSelect: PropTypes.func.isRequired,
 }
 
-export default function AnalysisTypeSelector({ value, onChange }) {
+export default function ProjectTypeSelector({ value, onChange }) {
   return (
     <div className="flex flex-col gap-2">
-      {OPTIONS.map((opt) => (
+      {PROJECT_TYPES.map((opt) => (
         <Option key={opt.value} option={opt} active={value === opt.value} onSelect={onChange} />
       ))}
     </div>
   )
 }
 
-AnalysisTypeSelector.propTypes = {
+ProjectTypeSelector.propTypes = {
   value: PropTypes.string,
   onChange: PropTypes.func.isRequired,
 }

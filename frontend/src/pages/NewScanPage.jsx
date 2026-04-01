@@ -4,16 +4,27 @@ import AppLayout from '../components/AppLayout'
 import { getProjects, createProject, createScan, getCLIToken } from '../services/projectService'
 import { listApiKeys, createApiKey } from '../services/apiKeyService'
 import AnalysisTypeSelector from '../components/AnalysisTypeSelector'
+import ProjectTypeSelector from '../components/ProjectTypeSelector'
 
+const ACCENT = '#ff8c5a'
 const choiceClasses = (active, { compact = false, grow = false } = {}) => [
   'text-left rounded-xl px-4 py-2.5 flex items-center gap-3 transition-all duration-150',
-  'border backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:ring-orange-400/70',
+  'border backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-0',
+  `focus-visible:ring-[${ACCENT}] focus-visible:ring-opacity-60`,
   active
-    ? 'border-orange-400/40 bg-orange-500/10 focus-visible:ring-orange-400/80'
-    : 'border-white/10 bg-white/5 hover:border-orange-400/30 hover:bg-orange-500/5',
+    ? `border-[${ACCENT}] border-opacity-50 bg-[rgba(255,140,90,0.08)]`
+    : 'border-white/10 bg-white/5 hover:border-[rgba(255,140,90,0.4)] hover:bg-[rgba(255,140,90,0.06)]',
   compact ? '' : 'w-full',
   grow ? 'flex-1' : '',
 ].filter(Boolean).join(' ')
+
+const primaryButtonClasses = [
+  'w-full py-3 rounded-xl text-sm font-semibold text-white',
+  'transition-all active:scale-[0.98] hover:shadow-[0_10px_30px_-12px_rgba(255,140,90,0.7)]',
+  'bg-gradient-to-r from-[#FF6B2B] to-[#FF8C5A]'
+].join(' ')
+
+const primaryButtonDisabled = 'disabled:opacity-40 disabled:cursor-not-allowed'
 
 const getApiBase = () => {
   const env = import.meta.env.VITE_API_URL
@@ -23,15 +34,15 @@ const getApiBase = () => {
 
 function StepIndicator({ current, steps }) {
   return (
-    <div className="flex items-center gap-2 mb-8">
+    <div className="flex items-center gap-5 mb-8 overflow-x-auto pb-2">
       {steps.map((label, i) => {
         const isComplete = i < current
         const isActive = i === current
         return (
-          <div key={label} className="flex items-center gap-2">
-            <div className="flex items-center gap-2">
+          <div key={label} className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
               <div
-                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300"
+                className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 flex-shrink-0"
                 style={{
                   background: isComplete
                     ? 'rgba(34,197,94,0.15)'
@@ -44,10 +55,12 @@ function StepIndicator({ current, steps }) {
                     ? '1px solid rgba(255,107,43,0.3)'
                     : '1px solid rgba(255,255,255,0.08)',
                   color: isComplete ? '#22c55e' : isActive ? '#FF6B2B' : '#ffffff40',
+                  minWidth: '24px',
+                  minHeight: '24px',
                 }}
               >
                 {isComplete ? (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 ) : (
@@ -55,7 +68,7 @@ function StepIndicator({ current, steps }) {
                 )}
               </div>
               <span
-                className="text-xs font-medium"
+                className="text-xs font-medium whitespace-nowrap flex-shrink-0"
                 style={{ color: isActive ? '#FF8C5A' : isComplete ? '#22c55e' : 'rgba(255,255,255,0.2)' }}
               >
                 {label}
@@ -63,8 +76,8 @@ function StepIndicator({ current, steps }) {
             </div>
             {i < steps.length - 1 && (
               <div
-                className="w-8 h-px"
-                style={{ background: isComplete ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.06)' }}
+                className="h-px flex-shrink-0"
+                style={{ width: '20px', background: isComplete ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.06)' }}
               />
             )}
           </div>
@@ -92,10 +105,11 @@ export default function NewScanPage() {
   const [selectedProject, setSelectedProject] = useState(null)
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectDesc, setNewProjectDesc] = useState('')
-  const [newProjectLanguage, setNewProjectLanguage] = useState('Other')
+  const [newProjectType, setNewProjectType] = useState('')
   const [newProjectAnalysis, setNewProjectAnalysis] = useState('SAST')
   const [newProjectVisibility, setNewProjectVisibility] = useState('private')
   const [projectError, setProjectError] = useState('')
+  const [projectTypeError, setProjectTypeError] = useState('')
 
   // Step 1 - Method
   const [method, setMethod] = useState(null) // 'cli' | 'github' | 'exe'
@@ -118,15 +132,22 @@ export default function NewScanPage() {
   const [cliToken, setCliToken] = useState(null)
   const [loading, setLoading] = useState(false)
 
+  const isNewProject = projectMode === 'new'
+  const configLabel = method === 'exe' ? 'Setup' : 'Configure'
+  const steps = isNewProject
+    ? ['Project', 'Project Type', 'Analysis', 'Method', configLabel]
+    : ['Project', 'Method', configLabel]
+
   useEffect(() => {
     getProjects().then(setProjects).catch(() => setProjects([]))
   }, [])
 
   useEffect(() => {
-    if (step === 2 && method === 'exe' && !exeKeysLoaded) {
+    const isConfigureStep = projectMode === 'new' ? step === 4 : step === 2
+    if (isConfigureStep && method === 'exe' && !exeKeysLoaded) {
       listApiKeys().then(k => { setExeKeys(k); setExeKeysLoaded(true) }).catch(() => setExeKeysLoaded(true))
     }
-  }, [step, method])
+  }, [step, method, projectMode, exeKeysLoaded])
 
   const handleExeGenerateKey = async () => {
     const name = exeNewKeyName.trim() || 'My Key'
@@ -141,10 +162,14 @@ export default function NewScanPage() {
     }
   }
 
-  // ─── Step 0: Project ────────────────────────────────────────────────────────
+  // ─── Step 0: Project info ───────────────────────────────────────────────────
   const handleStep0 = () => {
     if (projectMode === 'new' && !newProjectName.trim()) {
       setProjectError('Project name is required')
+      return
+    }
+    if (projectMode === 'new' && !newProjectDesc.trim()) {
+      setProjectError('Description is required')
       return
     }
     if (projectMode === 'existing' && !selectedProject) {
@@ -155,14 +180,28 @@ export default function NewScanPage() {
     setStep(1)
   }
 
-  // ─── Step 1: Method ─────────────────────────────────────────────────────────
-  const handleStep1 = () => {
-    if (!method) return
+  // ─── Step 1 (new only): Project type ───────────────────────────────────────
+  const handleStepProjectType = () => {
+    if (!newProjectType) {
+      setProjectTypeError('Project type is required')
+      return
+    }
+    setProjectTypeError('')
     setStep(2)
   }
 
-  // ─── Step 2: Configure ──────────────────────────────────────────────────────
-  const handleStep2 = async () => {
+  // ─── Step 2 (new): Analysis type ───────────────────────────────────────────
+  const handleStepAnalysis = () => setStep(3)
+
+  // ─── Method step (index depends on mode) ───────────────────────────────────
+  const handleMethodStep = () => {
+    if (!method) return
+    const nextStep = projectMode === 'new' ? 4 : 2
+    setStep(nextStep)
+  }
+
+  // ─── Configure / Setup step ────────────────────────────────────────────────
+  const handleConfigure = async () => {
     if (method === 'github' && !repoUrl.trim()) {
       setConfigError('Repository URL is required')
       return
@@ -174,8 +213,8 @@ export default function NewScanPage() {
       if (projectMode === 'new') {
         project = await createProject({
             name: newProjectName.trim(),
-            description: newProjectDesc.trim() || null,
-            language: newProjectLanguage,
+            description: newProjectDesc.trim(),
+            language: null,
             analysis_type: newProjectAnalysis,
             visibility: newProjectVisibility,
           })
@@ -198,7 +237,7 @@ export default function NewScanPage() {
         }
       }
 
-      setStep(3)
+      navigate(`/projects/${project.id}`)
     } catch (err) {
       setConfigError(err.response?.data?.detail || 'An error occurred. Please try again.')
     } finally {
@@ -210,101 +249,93 @@ export default function NewScanPage() {
     <AppLayout>
       <main className="flex-1 overflow-auto">
         <div className="max-w-2xl mx-auto px-8 py-8">
+          {projectMode === 'new'
+            ? null
+            : null}
           {/* Header */}
-          <div className="mb-8 animate-slide-up">
+          <div className="mb-12 animate-slide-up">
             <button
-              onClick={() => step > 0 && step < 3 ? setStep(s => s - 1) : navigate('/dashboard')}
-              className="flex items-center gap-2 text-white/30 hover:text-white/60 text-sm mb-4 transition-colors"
+              onClick={() => step > 0 ? setStep(s => s - 1) : navigate('/dashboard')}
+              className="inline-flex items-center gap-2 text-white/40 hover:text-white/70 text-xs mb-6 transition-colors px-3 py-1.5 rounded-lg"
+              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <polyline points="15 18 9 12 15 6" />
               </svg>
-              {step === 0 || step === 3 ? 'Back to Dashboard' : 'Back'}
+              <span>{step === 0 || step === (isNewProject ? 5 : 3) ? 'Back to Dashboard' : 'Back'}</span>
             </button>
-            <h1 className="text-2xl font-bold text-white">New Scan</h1>
-            <p className="text-white/30 text-sm mt-1">Analyse your project for security vulnerabilities</p>
+            <div className="mb-6">
+              <h1 className="text-3xl font-bold text-white mb-1">New Scan</h1>
+              <p className="text-white/40 text-sm">Analyse your project for security vulnerabilities</p>
+            </div>
           </div>
 
-          <StepIndicator current={step} steps={method === 'exe' ? ['Project', 'Method', 'Setup', 'Done'] : ['Project', 'Method', 'Configure', 'Done']} />
+          <div className="mb-8">
+            <StepIndicator current={step} steps={steps} />
+          </div>
 
           {/* ─── STEP 0: Project ─────────────────────────────────────────────── */}
           {step === 0 && (
             <div className="animate-slide-up">
               <SectionCard>
-                <h2 className="text-sm font-semibold text-white mb-4">Select or create a project</h2>
+                <h2 className="text-base font-semibold text-white mb-6 flex items-center gap-2">
+                  <div className="w-1 h-5 rounded" style={{ background: '#FF8C5A' }} />
+                  Tell us about your project
+                </h2>
 
                 {/* Toggle */}
-                <div className="flex gap-2 mb-5">
+                <div className="flex gap-3 mb-6 p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)' }}>
                   {[['new', 'New project'], ['existing', 'Existing project']].map(([val, lbl]) => (
                     <button
                       key={val}
-                      onClick={() => { setProjectMode(val); setProjectError('') }}
-                      className={choiceClasses(projectMode === val, { grow: true })}
+                      onClick={() => { setProjectMode(val); setProjectError(''); setProjectTypeError(''); setStep(0); setMethod(null) }}
+                      className="flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200"
+                      style={{
+                        background: projectMode === val ? 'rgba(255,107,43,0.12)' : 'rgba(255,255,255,0.03)',
+                        border: projectMode === val ? '1px solid rgba(255,107,43,0.35)' : '1px solid rgba(255,255,255,0.07)',
+                        color: projectMode === val ? '#FF8C5A' : 'rgba(255,255,255,0.35)'
+                      }}
                     >
-                      <span className={`text-sm font-medium ${projectMode === val ? 'text-orange-300' : 'text-white/70'}`}>{lbl}</span>
+                      {lbl}
                     </button>
                   ))}
                 </div>
 
-                {projectMode === 'new' ? (
+                {isNewProject ? (
                   <div className="flex flex-col gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">
-                        Project Name
-                      </label>
+                      <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">Project Name</label>
                       <input
-                        className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
-                        style={{ background: '#1c1c1c', border: '1px solid #2a2a2a' }}
+                        className="w-full px-4 py-3 rounded-xl text-sm text-white bg-[#1c1c1c] border border-white/10 transition-all focus:border-orange-400/50 focus:ring-2 focus:ring-orange-400/20 focus:outline-none hover:border-white/20"
                         placeholder="e.g. My API Backend"
                         value={newProjectName}
                         onChange={e => { setNewProjectName(e.target.value); setProjectError('') }}
-                        onFocus={e => { e.target.style.borderColor = 'rgba(255,107,43,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(255,107,43,0.1)' }}
-                        onBlur={e => { e.target.style.borderColor = '#2a2a2a'; e.target.style.boxShadow = '' }}
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">
-                        Description <span className="text-white/20 normal-case font-normal">(optional)</span>
-                      </label>
-                      <input
-                        className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
-                        style={{ background: '#1c1c1c', border: '1px solid #2a2a2a' }}
+                      <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">Description</label>
+                      <textarea
+                        rows={3}
+                        className="w-full px-4 py-3 rounded-xl text-sm text-white bg-[#1c1c1c] border border-white/10 transition-all focus:border-orange-400/50 focus:ring-2 focus:ring-orange-400/20 focus:outline-none hover:border-white/20 resize-none"
                         placeholder="Short description of this project"
                         value={newProjectDesc}
-                        onChange={e => setNewProjectDesc(e.target.value)}
-                        onFocus={e => { e.target.style.borderColor = 'rgba(255,107,43,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(255,107,43,0.1)' }}
-                        onBlur={e => { e.target.style.borderColor = '#2a2a2a'; e.target.style.boxShadow = '' }}
+                        onChange={e => { setNewProjectDesc(e.target.value); setProjectError('') }}
                       />
                     </div>
-                    {/* Language */}
                     <div>
-                      <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">Language</label>
-                      <div className="flex flex-wrap gap-2">
-                        {['Python','JavaScript','TypeScript','Java','C#','Go','PHP','Ruby','Other'].map(lang => (
-                          <button key={lang} type="button"
-                            onClick={() => setNewProjectLanguage(lang)}
-                            className={choiceClasses(newProjectLanguage === lang, { compact: true })}
-                          >
-                            <span className={`text-xs font-medium ${newProjectLanguage === lang ? 'text-orange-300' : 'text-white/70'}`}>{lang}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    {/* Analysis Type */}
-                    <div>
-                      <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">Analysis Type</label>
-                      <AnalysisTypeSelector value={newProjectAnalysis} onChange={setNewProjectAnalysis} />
-                    </div>
-                    {/* Visibility */}
-                    <div>
-                      <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">Visibility</label>
-                      <div className="flex gap-2">
+                      <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-3">Visibility</label>
+                      <div className="flex gap-3">
                         {[['private','Private'],['public','Public']].map(([val, lbl]) => (
                           <button key={val} type="button"
                             onClick={() => setNewProjectVisibility(val)}
-                            className={choiceClasses(newProjectVisibility === val, { grow: true })}
+                            className="flex-1 py-2.5 rounded-lg text-sm font-medium transition-all"
+                            style={{
+                              background: newProjectVisibility === val ? 'rgba(255,107,43,0.12)' : 'rgba(255,255,255,0.03)',
+                              border: newProjectVisibility === val ? '1px solid rgba(255,107,43,0.35)' : '1px solid rgba(255,255,255,0.07)',
+                              color: newProjectVisibility === val ? '#FF8C5A' : 'rgba(255,255,255,0.35)'
+                            }}
                           >
-                            <span className={`text-sm font-medium ${newProjectVisibility === val ? 'text-orange-300' : 'text-white/70'}`}>{lbl}</span>
+                            {lbl}
                           </button>
                         ))}
                       </div>
@@ -320,11 +351,7 @@ export default function NewScanPage() {
                           <button
                             key={p.id}
                             onClick={() => { setSelectedProject(p); setProjectError('') }}
-                            className="flex items-center justify-between px-4 py-3 rounded-xl text-left transition-all"
-                            style={{
-                              background: selectedProject?.id === p.id ? 'rgba(255,107,43,0.08)' : 'rgba(255,255,255,0.02)',
-                              border: selectedProject?.id === p.id ? '1px solid rgba(255,107,43,0.2)' : '1px solid rgba(255,255,255,0.05)',
-                            }}
+                            className={`${choiceClasses(selectedProject?.id === p.id)} justify-between`}
                           >
                             <span className="text-sm text-white font-medium">{p.name}</span>
                             <span className="text-xs text-white/30">{p.scan_count} scans</span>
@@ -336,7 +363,12 @@ export default function NewScanPage() {
                 )}
 
                 {projectError && (
-                  <p className="text-red-400 text-xs mt-3">{projectError}</p>
+                  <div className="mt-4 px-4 py-3 rounded-xl border flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <p className="text-sm text-red-400">{projectError}</p>
+                  </div>
                 )}
               </SectionCard>
 
@@ -349,11 +381,67 @@ export default function NewScanPage() {
               </button>
             </div>
           )}
-
-          {/* ─── STEP 1: Method ──────────────────────────────────────────────── */}
-          {step === 1 && (
+          {/* ─── STEP 1 (new): Project Type / STEP 1 (existing): Method ─────── */}
+          {isNewProject && step === 1 && (
             <div className="animate-slide-up">
-              <div className="grid grid-cols-3 gap-3 mb-4">
+              <SectionCard>
+                <h2 className="text-base font-semibold text-white mb-6 flex items-center gap-2">
+                  <div className="w-1 h-5 rounded" style={{ background: '#FF8C5A' }} />
+                  What type of project is this?
+                </h2>
+                <p className="text-xs text-white/40 mb-4">Choose the category that best describes your project</p>
+                <ProjectTypeSelector value={newProjectType} onChange={(val) => { setNewProjectType(val); setProjectTypeError('') }} />
+                {projectTypeError && (
+                  <div className="mt-4 px-4 py-3 rounded-xl border flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <p className="text-sm text-red-400">{projectTypeError}</p>
+                  </div>
+                )}
+              </SectionCard>
+              <button
+                onClick={handleStepProjectType}
+                className="w-full mt-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98]"
+                style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}
+              >
+                Continue
+              </button>
+            </div>
+          )}
+
+          {/* ─── STEP 2 (new): Analysis ─────────────────────────────────────── */}
+          {isNewProject && step === 2 && (
+            <div className="animate-slide-up">
+              <SectionCard>
+                <h2 className="text-base font-semibold text-white mb-6 flex items-center gap-2">
+                  <div className="w-1 h-5 rounded" style={{ background: '#FF8C5A' }} />
+                  What would you like to scan?
+                </h2>
+                <p className="text-xs text-white/40 mb-4">Select the analysis type that matches your security needs</p>
+                <AnalysisTypeSelector value={newProjectAnalysis} onChange={setNewProjectAnalysis} />
+              </SectionCard>
+              <button
+                onClick={handleStepAnalysis}
+                className="w-full mt-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98]"
+                style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}
+              >
+                Continue
+              </button>
+            </div>
+          )}
+
+          {/* ─── METHOD STEP ──────────────────────────────────────────────── */}
+          {((isNewProject && step === 3) || (!isNewProject && step === 1)) && (
+            <div className="animate-slide-up">
+              <div className="mb-8">
+                <h2 className="text-base font-semibold text-white mb-6 flex items-center gap-2">
+                  <div className="w-1 h-5 rounded" style={{ background: '#FF8C5A' }} />
+                  How would you like to scan?
+                </h2>
+                <p className="text-xs text-white/40 mb-6">Choose a scanning method that works best for your workflow</p>
+              </div>
+              <div className="grid grid-cols-3 gap-4 mb-4">
                 <MethodCard
                   active={method === 'exe'}
                   onClick={() => setMethod('exe')}
@@ -399,18 +487,18 @@ export default function NewScanPage() {
               </div>
 
               <button
-                onClick={handleStep1}
+                onClick={handleMethodStep}
                 disabled={!method}
-                className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-                style={method ? { background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' } : { background: '#2a2a2a' }}
+                className="w-full mt-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+                style={!method ? { background: '#2a2a2a' } : { background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}
               >
                 Continue
               </button>
             </div>
           )}
 
-          {/* ─── STEP 2: API Key (EXE) / Configure (others) ──────────────── */}
-          {step === 2 && method === 'exe' && (
+          {/* ─── CONFIGURE / SETUP (EXE) ───────────────────────────────────── */}
+          {((isNewProject && step === 4) || (!isNewProject && step === 2)) && method === 'exe' && (
             <div className="animate-slide-up">
               {/* Download card */}
               <div className="flex items-center justify-between p-4 rounded-2xl mb-3"
@@ -547,9 +635,9 @@ export default function NewScanPage() {
               </SectionCard>
 
               <button
-                onClick={handleStep2}
+                onClick={handleConfigure}
                 disabled={loading || (exeKeys.length === 0 && !exeNewKeyData)}
-                className="w-full mt-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full mt-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}
               >
                 {loading ? (
@@ -558,18 +646,14 @@ export default function NewScanPage() {
                     Creating project...
                   </>
                 ) : (
-                  <>
-                    I have my key — Create Project
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <polyline points="9 18 15 12 9 6"/>
-                    </svg>
-                  </>
+                  'I have my key — Create Project'
                 )}
               </button>
             </div>
           )}
 
-          {step === 2 && method !== 'exe' && (
+          {/* ─── CONFIGURE (CLI/GitHub) ───────────────────────────────────── */}
+          {((isNewProject && step === 4) || (!isNewProject && step === 2)) && method !== 'exe' && (
             <div className="animate-slide-up">
               <SectionCard>
                 <h2 className="text-sm font-semibold text-white mb-1">
@@ -632,14 +716,19 @@ export default function NewScanPage() {
                 )}
 
                 {configError && (
-                  <p className="text-red-400 text-xs mt-3">{configError}</p>
+                  <div className="mt-4 px-4 py-3 rounded-xl border flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <p className="text-sm text-red-400">{configError}</p>
+                  </div>
                 )}
               </SectionCard>
 
               <button
-                onClick={handleStep2}
+                onClick={handleConfigure}
                 disabled={loading}
-                className="w-full mt-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-60"
+                className="w-full mt-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}
               >
                 {loading ? (
@@ -651,130 +740,6 @@ export default function NewScanPage() {
                   'Launch Scan'
                 )}
               </button>
-            </div>
-          )}
-
-          {/* ─── STEP 3: Ready ───────────────────────────────────────────────── */}
-          {step === 3 && (
-            <div className="animate-slide-up">
-              <SectionCard>
-                {/* Success header */}
-                <div className="flex items-center gap-3 mb-5 pb-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-white font-semibold">
-                      {method === 'exe' ? 'Project created successfully' : 'Scan created successfully'}
-                    </p>
-                    <p className="text-white/30 text-xs mt-0.5">
-                      Project: <span className="text-white/50">{createdProject?.name}</span>
-                    </p>
-                  </div>
-                </div>
-
-                {method === 'exe' && createdProject && (
-                  <div>
-                    <p className="text-sm text-white/50 mb-4">Your project is ready. Follow these steps to run your first scan:</p>
-
-                    {/* Project ID */}
-                    <div className="mb-1 rounded-xl px-4 py-3" style={{ background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.15)' }}>
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">Your Project ID</p>
-                      <div className="flex items-center gap-2">
-                        <code className="flex-1 text-xs font-mono" style={{ color: '#60a5fa' }}>{createdProject.id}</code>
-                        <button onClick={() => navigator.clipboard.writeText(createdProject.id)}
-                          className="flex-shrink-0 text-white/20 hover:text-white/60 transition-colors">
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="9" y="9" width="13" height="13" rx="2"/>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-white/30 mb-4 mt-2 flex items-center gap-1.5">
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0">
-                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                      </svg>
-                      Run the commands below from the folder where <span className="text-white/50 font-medium mx-0.5">invisithreat.exe</span> is saved. Replace <span className="font-mono text-white/50 mx-0.5">YOUR_PROJECT_ID</span> with the ID above.
-                    </p>
-
-                    <StepCmd n={1} label="Login (once — skip if already logged in)">
-                      <CodeBlock>{`.\\invisithreat.exe login --server ${getApiBase()} --token YOUR_API_KEY`}</CodeBlock>
-                    </StepCmd>
-
-                    <StepCmd n={2} label="Run the scan">
-                      <CodeBlock>{`.\\invisithreat.exe scan "path\\to\\your-project" --project-id YOUR_PROJECT_ID`}</CodeBlock>
-                    </StepCmd>
-
-                    <div className="mt-3 rounded-xl px-4 py-3"
-                      style={{ background: 'rgba(34,197,94,0.04)', border: '1px solid rgba(34,197,94,0.12)' }}>
-                      <p className="text-xs" style={{ color: 'rgba(34,197,94,0.8)' }}>
-                        Results will appear on the project page automatically once the scan completes.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {method === 'cli' && cliToken && (
-                  <div>
-                    <p className="text-sm text-white/50 mb-3">
-                      Run these commands from your project directory:
-                    </p>
-
-                    <StepCmd n={1} label="Download the scanner">
-                      <CodeBlock>{`curl "${getApiBase()}/api/scanner/download" -o scan.py`}</CodeBlock>
-                    </StepCmd>
-
-                    <StepCmd n={2} label="Install dependency (one time)">
-                      <CodeBlock>pip install requests</CodeBlock>
-                    </StepCmd>
-
-                    <StepCmd n={3} label="Run the scan">
-                      <CodeBlock>{`python scan.py . "--token=${cliToken.upload_token}" --api-url ${getApiBase()}`}</CodeBlock>
-                    </StepCmd>
-
-                    <div className="mt-4 rounded-xl px-4 py-3"
-                      style={{ background: 'rgba(234,179,8,0.05)', border: '1px solid rgba(234,179,8,0.15)' }}>
-                      <p className="text-xs text-yellow-400/80">
-                        Token expires in 1 hour. Source code never leaves your machine — only the scan results are uploaded.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {method === 'github' && (
-                  <div>
-                    <p className="text-sm text-white/50 mb-3">
-                      Your GitHub repository is being scanned in an isolated environment.
-                    </p>
-                    <div className="flex flex-col gap-2">
-                      <InfoRow label="Repository" value={repoUrl} />
-                      <InfoRow label="Branch" value={repoBranch || 'main'} />
-                      <InfoRow label="Status" value="Pending" valueColor="#eab308" />
-                    </div>
-                  </div>
-                )}
-              </SectionCard>
-
-              <div className="flex gap-3 mt-4">
-                <button
-                  onClick={() => navigate(`/projects/${createdProject?.id}`)}
-                  className="flex-1 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98]"
-                  style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}
-                >
-                  View Project
-                </button>
-                <button
-                  onClick={() => navigate('/dashboard')}
-                  className="flex-1 py-3 rounded-xl text-sm font-semibold transition-all"
-                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.5)' }}
-                >
-                  Back to Dashboard
-                </button>
-              </div>
             </div>
           )}
         </div>
