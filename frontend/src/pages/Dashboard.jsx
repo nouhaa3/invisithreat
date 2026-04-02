@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext'
 import AppLayout from '../components/AppLayout'
 import RoleRequestModal from '../components/RoleRequestModal'
 import { getProjects, deleteProject, getDashboardStats } from '../services/projectService'
-import { getMe } from '../services/authService'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -197,7 +196,7 @@ function StatusBadge({ status }) {
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { user, updateUser } = useAuth()
+  const { user } = useAuth()
   const navigate  = useNavigate()
 
   const [projects,      setProjects]      = useState([])
@@ -208,15 +207,17 @@ export default function Dashboard() {
 
   const load = async () => {
     try {
-      const [proj, st, freshUser] = await Promise.all([getProjects(), getDashboardStats(), getMe()])
+      const proj = await getProjects()
       setProjects(proj)
-      setStats(st)
-      if (freshUser) updateUser(freshUser)
     } catch {
       setProjects([])
     } finally {
       setLoading(false)
     }
+
+    getDashboardStats()
+      .then(setStats)
+      .catch(() => setStats(null))
   }
 
   useEffect(() => { load() }, [])
@@ -281,8 +282,8 @@ export default function Dashboard() {
             style={{ background: '#101010', border: '1px solid rgba(255,255,255,0.06)' }}>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                ['Security score', loading ? '—' : stats?.security_score ?? 0, scoreColor],
-                ['Average risk', loading ? '—' : `${avgRisk.toFixed(1)}/10`, riskColor],
+                ['Security score', loading || !stats ? '—' : stats?.security_score ?? 0, scoreColor],
+                ['Average risk', loading || !stats ? '—' : `${avgRisk.toFixed(1)}/10`, riskColor],
                 ['Critical', bySev.critical || 0, '#f87171'],
                 ['High', bySev.high || 0, '#fb923c'],
               ].map(([label, value, color]) => (
@@ -321,11 +322,11 @@ export default function Dashboard() {
 
           {/* ── KPI row ────────────────────────────────────────────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6 animate-slide-up" style={{ animationDelay: '0.04s' }}>
-            <KpiCard label="Projects"      value={loading ? '—' : stats?.total_projects ?? 0}  sub="in workspace" />
-            <KpiCard label="Total Scans"   value={loading ? '—' : stats?.total_scans ?? 0}     sub="all time" />
-            <KpiCard label="Active Scans"  value={loading ? '—' : stats?.active_scans ?? 0}    sub="running / pending" accent={stats?.active_scans > 0 ? '#eab308' : undefined} />
-            <KpiCard label="Findings"      value={loading ? '—' : stats?.total_findings ?? 0}  sub="latest scans" accent={stats?.total_findings > 0 ? '#fb923c' : undefined} />
-            <KpiCard label="Avg Risk"      value={loading ? '—' : `${avgRisk.toFixed(1)}/10`}   sub="calculated from latest scans" accent={riskColor} />
+            <KpiCard label="Projects"      value={loading || !stats ? '—' : stats?.total_projects ?? 0}  sub="in workspace" />
+            <KpiCard label="Total Scans"   value={loading || !stats ? '—' : stats?.total_scans ?? 0}     sub="all time" />
+            <KpiCard label="Active Scans"  value={loading || !stats ? '—' : stats?.active_scans ?? 0}    sub="running / pending" accent={stats?.active_scans > 0 ? '#eab308' : undefined} />
+            <KpiCard label="Findings"      value={loading || !stats ? '—' : stats?.total_findings ?? 0}  sub="latest scans" accent={stats?.total_findings > 0 ? '#fb923c' : undefined} />
+            <KpiCard label="Avg Risk"      value={loading || !stats ? '—' : `${avgRisk.toFixed(1)}/10`}   sub="calculated from latest scans" accent={riskColor} />
           </div>
 
           {/* ── Charts row ─────────────────────────────────────────────────── */}
