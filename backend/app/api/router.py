@@ -13,6 +13,7 @@ from app.api.routes import cli_scan
 from app.api.routes import notifications
 from app.api.routes import audit_logs
 from app.api.routes import totp
+from app.api.routes import integrations
 
 api_router = APIRouter()
 
@@ -28,3 +29,4 @@ api_router.include_router(cli_scan.router)
 api_router.include_router(notifications.router)
 api_router.include_router(audit_logs.router)
 api_router.include_router(totp.router)
+api_router.include_router(integrations.router)

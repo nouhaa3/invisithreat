@@ -8,13 +8,19 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.scan import Scan, ScanStatus
+from app.models.github_repository import GitHubRepository
+from app.models.scan_tool import ScanTool
+from app.models.tool_execution import ToolExecution
 from app.services.risk_score import upsert_scan_risk_score
 
 
@@ -325,9 +331,243 @@ def _scan_directory(base: Path) -> dict:
     }
 
 
+def _severity_order(value: str) -> int:
+    return {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}.get((value or "info").lower(), 5)
+
+
+def _map_semgrep_severity(value: str) -> str:
+    v = (value or "").strip().lower()
+    if v in {"critical"}:
+        return "critical"
+    if v in {"error", "high"}:
+        return "high"
+    if v in {"warning", "medium"}:
+        return "medium"
+    if v in {"info", "low"}:
+        return "low"
+    return "info"
+
+
+def _map_bandit_severity(value: str) -> str:
+    v = (value or "").strip().lower()
+    if v == "high":
+        return "high"
+    if v == "medium":
+        return "medium"
+    if v == "low":
+        return "low"
+    return "info"
+
+
+def _rel_path(base: Path, path_value: str) -> str:
+    if not path_value:
+        return ""
+    p = Path(path_value)
+    try:
+        return str(p.resolve().relative_to(base.resolve()))
+    except Exception:
+        return str(p).replace("\\", "/")
+
+
+def _inject_token_in_clone_url(repo_url: str, github_token: str | None) -> str:
+    token = (github_token or "").strip()
+    if not token:
+        return repo_url
+    parsed = urlparse(repo_url)
+    if parsed.scheme != "https" or not parsed.netloc:
+        return repo_url
+    safe_netloc = f"x-access-token:{token}@{parsed.netloc}"
+    return urlunparse((parsed.scheme, safe_netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
+
+
+def _resolve_github_token(db: Session, scan: Scan, explicit_token: str | None) -> str | None:
+    token = (explicit_token or "").strip()
+    if token:
+        return token
+    repo = (
+        db.query(GitHubRepository)
+        .filter(GitHubRepository.project_id == scan.project_id)
+        .first()
+    )
+    if repo and repo.access_token:
+        return repo.access_token.strip()
+    fallback = (settings.GITHUB_DEFAULT_TOKEN or "").strip()
+    return fallback or None
+
+
+def _upsert_pipeline_execution(db: Session, scan: Scan, status_value: str) -> None:
+    tool = db.query(ScanTool).filter(ScanTool.name == "invisithreat-sast-pipeline").first()
+    if not tool:
+        tool = ScanTool(name="invisithreat-sast-pipeline", type="sast")
+        db.add(tool)
+        db.flush()
+
+    execution = db.query(ToolExecution).filter(ToolExecution.scan_id == scan.id).first()
+    now = datetime.now(timezone.utc)
+    if not execution:
+        execution = ToolExecution(
+            scan_id=scan.id,
+            scan_tool_id=tool.id,
+            started_at=now,
+            status=status_value,
+        )
+        db.add(execution)
+    else:
+        execution.scan_tool_id = tool.id
+        execution.status = status_value
+        if status_value == "running":
+            execution.started_at = now
+            execution.ended_at = None
+
+    if status_value in {"completed", "failed"}:
+        execution.ended_at = now
+
+    db.commit()
+
+
+def _run_semgrep_scan(base: Path) -> tuple[list[dict], dict]:
+    started = time.perf_counter()
+    run_info = {
+        "tool": "semgrep",
+        "status": "unavailable",
+        "return_code": None,
+        "duration_ms": 0,
+        "findings": 0,
+        "error": "",
+    }
+    findings: list[dict] = []
+
+    cmd = ["semgrep", "scan", "--config", "auto", "--json", "--quiet", str(base)]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    except FileNotFoundError:
+        run_info["error"] = "semgrep binary not found"
+        run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
+        return findings, run_info
+    except Exception as exc:
+        run_info["status"] = "failed"
+        run_info["error"] = str(exc)
+        run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
+        return findings, run_info
+
+    run_info["return_code"] = result.returncode
+    if result.returncode not in (0, 1):
+        run_info["status"] = "failed"
+        run_info["error"] = (result.stderr or result.stdout or "semgrep execution failed")[:500]
+        run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
+        return findings, run_info
+
+    try:
+        payload = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        run_info["status"] = "failed"
+        run_info["error"] = "invalid semgrep json output"
+        run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
+        return findings, run_info
+
+    for item in payload.get("results", []):
+        extra = item.get("extra") or {}
+        metadata = extra.get("metadata") or {}
+        line_no = (item.get("start") or {}).get("line") or 1
+        check_id = (item.get("check_id") or "SEMGREP").strip()
+        findings.append(
+            {
+                "id": str(uuid.uuid4()),
+                "rule_id": check_id,
+                "title": check_id,
+                "severity": _map_semgrep_severity(extra.get("severity")),
+                "category": metadata.get("category") or "sast",
+                "description": extra.get("message") or "Semgrep finding",
+                "recommendation": metadata.get("fix") or metadata.get("remediation") or "",
+                "file": _rel_path(base, item.get("path", "")),
+                "line": line_no,
+                "code": (extra.get("lines") or "").strip()[:200],
+                "source_tool": "semgrep",
+            }
+        )
+
+    run_info["status"] = "completed"
+    run_info["findings"] = len(findings)
+    run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
+    return findings, run_info
+
+
+def _run_bandit_scan(base: Path) -> tuple[list[dict], dict]:
+    started = time.perf_counter()
+    run_info = {
+        "tool": "bandit",
+        "status": "unavailable",
+        "return_code": None,
+        "duration_ms": 0,
+        "findings": 0,
+        "error": "",
+    }
+    findings: list[dict] = []
+
+    cmd = ["bandit", "-r", str(base), "-f", "json", "-q"]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    except FileNotFoundError:
+        run_info["error"] = "bandit binary not found"
+        run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
+        return findings, run_info
+    except Exception as exc:
+        run_info["status"] = "failed"
+        run_info["error"] = str(exc)
+        run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
+        return findings, run_info
+
+    run_info["return_code"] = result.returncode
+    if result.returncode not in (0, 1):
+        run_info["status"] = "failed"
+        run_info["error"] = (result.stderr or result.stdout or "bandit execution failed")[:500]
+        run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
+        return findings, run_info
+
+    try:
+        payload = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        run_info["status"] = "failed"
+        run_info["error"] = "invalid bandit json output"
+        run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
+        return findings, run_info
+
+    for item in payload.get("results", []):
+        test_id = (item.get("test_id") or "BANDIT").strip()
+        code_block = (item.get("code") or "").strip()
+        first_line = code_block.splitlines()[0].strip() if code_block else ""
+        findings.append(
+            {
+                "id": str(uuid.uuid4()),
+                "rule_id": test_id,
+                "title": item.get("test_name") or test_id,
+                "severity": _map_bandit_severity(item.get("issue_severity")),
+                "category": "python_security",
+                "description": item.get("issue_text") or "Bandit finding",
+                "recommendation": item.get("more_info") or "",
+                "file": _rel_path(base, item.get("filename", "")),
+                "line": item.get("line_number") or 1,
+                "code": first_line[:200],
+                "source_tool": "bandit",
+            }
+        )
+
+    run_info["status"] = "completed"
+    run_info["findings"] = len(findings)
+    run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
+    return findings, run_info
+
+
+def _scrub_token(value: str, token: str | None) -> str:
+    text = value or ""
+    if token:
+        text = text.replace(token, "***")
+    return text
+
+
 # ─── Background Task Entry Point ─────────────────────────────────────────────
 
-def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str) -> None:
+def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str, github_token: str | None = None) -> None:
     """
     Runs in a FastAPI BackgroundTask (separate thread).
     Creates its own DB session to avoid cross-thread SQLAlchemy issues.
@@ -347,34 +587,86 @@ def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str) -> No
             return
         scan.status = ScanStatus.running
         db.commit()
+        _upsert_pipeline_execution(db, scan, "running")
+
+        resolved_token = _resolve_github_token(db, scan, github_token)
+        authed_repo_url = _inject_token_in_clone_url(repo_url, resolved_token)
 
         # ── 2. Clone repo ───────────────────────────────────────────────────
-        tmpdir = tempfile.mkdtemp(prefix="invisithreat_")
-        clone_result = subprocess.run(
-            ["git", "clone", "--depth", "1", "--branch", branch, repo_url, tmpdir],
-            capture_output=True, text=True, timeout=120,
-        )
+        clone_targets = [(authed_repo_url, branch), (authed_repo_url, None)]
+        if authed_repo_url != repo_url:
+            clone_targets.extend([(repo_url, branch), (repo_url, None)])
 
-        if clone_result.returncode != 0:
-            # Try without branch specifier (fallback for default branch)
-            shutil.rmtree(tmpdir, ignore_errors=True)
+        clone_result = None
+        for target_url, target_branch in clone_targets:
+            if tmpdir:
+                shutil.rmtree(tmpdir, ignore_errors=True)
             tmpdir = tempfile.mkdtemp(prefix="invisithreat_")
-            clone_result = subprocess.run(
-                ["git", "clone", "--depth", "1", repo_url, tmpdir],
-                capture_output=True, text=True, timeout=120,
-            )
+            cmd = ["git", "clone", "--depth", "1"]
+            if target_branch:
+                cmd.extend(["--branch", target_branch])
+            cmd.extend([target_url, tmpdir])
 
-        if clone_result.returncode != 0:
-            raise RuntimeError(f"git clone failed: {clone_result.stderr[:500]}")
+            clone_result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            if clone_result.returncode == 0:
+                break
+
+        if not clone_result or clone_result.returncode != 0:
+            safe_error = _scrub_token((clone_result.stderr if clone_result else "git clone failed")[:500], resolved_token)
+            raise RuntimeError(f"git clone failed: {safe_error}")
 
         # ── 3. Scan cloned repo ─────────────────────────────────────────────
-        results = _scan_directory(Path(tmpdir))
+        base_path = Path(tmpdir)
+        regex_results = _scan_directory(base_path)
+        semgrep_findings, semgrep_run = _run_semgrep_scan(base_path)
+        bandit_findings, bandit_run = _run_bandit_scan(base_path)
+
+        merged_findings = regex_results.get("findings", []) + semgrep_findings + bandit_findings
+        deduped: list[dict] = []
+        seen = set()
+        for finding in merged_findings:
+            key = (
+                finding.get("rule_id", ""),
+                finding.get("file", ""),
+                finding.get("line", 0),
+                finding.get("title", ""),
+                finding.get("source_tool", ""),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(finding)
+
+        deduped.sort(key=lambda item: _severity_order(item.get("severity", "info")))
+        counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+        for finding in deduped:
+            sev = (finding.get("severity") or "info").lower()
+            counts[sev] = counts.get(sev, 0) + 1
+
+        results = {
+            "findings": deduped,
+            "summary": {
+                "total_findings": len(deduped),
+                "scanned_files": regex_results.get("summary", {}).get("scanned_files", 0),
+                **counts,
+                "tools": [
+                    {
+                        "tool": "regex_rules",
+                        "status": "completed",
+                        "findings": len(regex_results.get("findings", [])),
+                    },
+                    semgrep_run,
+                    bandit_run,
+                ],
+            },
+        }
 
         # ── 4. Save results ─────────────────────────────────────────────────
         scan.status = ScanStatus.completed
         scan.results_json = json.dumps(results)
         scan.completed_at = datetime.now(timezone.utc)
         db.commit()
+        _upsert_pipeline_execution(db, scan, "completed")
         upsert_scan_risk_score(db, scan)
 
     except Exception as exc:
@@ -385,6 +677,7 @@ def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str) -> No
                 scan.results_json = json.dumps({"error": str(exc), "findings": [], "summary": {"total_findings": 0, "scanned_files": 0}})
                 scan.completed_at = datetime.now(timezone.utc)
                 db.commit()
+                _upsert_pipeline_execution(db, scan, "failed")
         except Exception:
             pass
     finally:

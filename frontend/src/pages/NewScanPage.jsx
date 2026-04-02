@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { getProjects, createProject, createScan, getCLIToken } from '../services/projectService'
 import { listApiKeys, createApiKey } from '../services/apiKeyService'
+import { getGitHubAppInstallUrl, getGitHubOAuthStart, exchangeGitHubOAuthCode } from '../services/integrationService'
 import AnalysisTypeSelector from '../components/AnalysisTypeSelector'
 import ProjectTypeSelector from '../components/ProjectTypeSelector'
 
@@ -124,6 +125,12 @@ export default function NewScanPage() {
   // Step 2 - Configure
   const [repoUrl, setRepoUrl] = useState('')
   const [repoBranch, setRepoBranch] = useState('main')
+  const [githubToken, setGithubToken] = useState('')
+  const [githubAuthCode, setGitHubAuthCode] = useState('')
+  const [githubOAuthState, setGitHubOAuthState] = useState('')
+  const [githubOAuthLoading, setGitHubOAuthLoading] = useState(false)
+  const [githubExchangeLoading, setGitHubExchangeLoading] = useState(false)
+  const [githubInfo, setGitHubInfo] = useState('')
   const [configError, setConfigError] = useState('')
 
   // Step 3 - Created
@@ -159,6 +166,105 @@ export default function NewScanPage() {
       listApiKeys().then(setExeKeys).catch(() => {})
     } finally {
       setExeCreating(false)
+    }
+  }
+
+  const openLinkInNewTab = (url) => {
+    const w = window.open(url, '_blank', 'noopener,noreferrer')
+    if (!w) {
+      setConfigError('Popup blocked by browser. Please allow popups and try again.')
+    }
+  }
+
+  const handleGitHubOAuth = async () => {
+    setConfigError('')
+    setGitHubInfo('')
+    setGitHubOAuthLoading(true)
+    try {
+      const data = await getGitHubOAuthStart()
+      if (!data?.authorize_url) {
+        throw new Error('GitHub OAuth start URL not available')
+      }
+      setGitHubOAuthState(data.state || '')
+      if (data.state) {
+        try { window.localStorage.setItem('ivt_github_oauth_state', data.state) } catch {}
+      }
+      openLinkInNewTab(data.authorize_url)
+    } catch (err) {
+      setConfigError(err.response?.data?.detail || err.message || 'Unable to start GitHub OAuth')
+    } finally {
+      setGitHubOAuthLoading(false)
+    }
+  }
+
+  const handleGitHubAppInstall = async () => {
+    setConfigError('')
+    setGitHubInfo('')
+    setGitHubOAuthLoading(true)
+    try {
+      const data = await getGitHubAppInstallUrl()
+      if (!data?.install_url) {
+        throw new Error('GitHub App install URL not available')
+      }
+      openLinkInNewTab(data.install_url)
+    } catch (err) {
+      setConfigError(err.response?.data?.detail || err.message || 'Unable to open GitHub App install page')
+    } finally {
+      setGitHubOAuthLoading(false)
+    }
+  }
+
+  const handleGitHubCodeExchange = async () => {
+    if (!githubAuthCode.trim()) {
+      setConfigError('Paste the GitHub OAuth code first.')
+      return
+    }
+
+    setConfigError('')
+    setGitHubInfo('')
+    setGitHubExchangeLoading(true)
+
+    try {
+      let codeValue = githubAuthCode.trim()
+      let stateValue = githubOAuthState || ''
+      try {
+        if (codeValue.includes('://') || codeValue.includes('code=')) {
+          const callbackUrl = codeValue.includes('://') ? new URL(codeValue) : new URL(`https://dummy.local/?${codeValue.replace(/^\?/, '')}`)
+          codeValue = callbackUrl.searchParams.get('code') || codeValue
+          stateValue = callbackUrl.searchParams.get('state') || stateValue
+        }
+      } catch {
+        // Keep raw manual code input when it's not a URL/query-string payload.
+      }
+
+      if (!stateValue) {
+        try { stateValue = window.localStorage.getItem('ivt_github_oauth_state') || '' } catch {}
+      }
+
+      if (!stateValue) {
+        throw new Error('OAuth state missing. Click "Connect via OAuth" again before exchanging the code.')
+      }
+
+      const payload = {
+        code: codeValue,
+        state: stateValue,
+        project_id: projectMode === 'existing' ? selectedProject?.id : undefined,
+        repo_url: repoUrl.trim() || undefined,
+        repo_branch: repoBranch.trim() || 'main',
+      }
+      const data = await exchangeGitHubOAuthCode(payload)
+      if (!data?.access_token) {
+        throw new Error('No access token returned by GitHub exchange')
+      }
+      setGithubToken(data.access_token)
+      setGitHubAuthCode('')
+      setGitHubOAuthState('')
+      try { window.localStorage.removeItem('ivt_github_oauth_state') } catch {}
+      setGitHubInfo('OAuth token received. Private repository scan is now enabled.')
+    } catch (err) {
+      setConfigError(err.response?.data?.detail || err.message || 'Unable to exchange GitHub OAuth code')
+    } finally {
+      setGitHubExchangeLoading(false)
     }
   }
 
@@ -228,12 +334,14 @@ export default function NewScanPage() {
           method,
           repo_url: method === 'github' ? repoUrl.trim() : null,
           repo_branch: method === 'github' ? (repoBranch.trim() || 'main') : null,
+          repo_token: method === 'github' ? (githubToken.trim() || null) : null,
         })
         setCreatedScan(scan)
 
         if (method === 'cli') {
           const tokenData = await getCLIToken(project.id, scan.id)
           setCliToken(tokenData)
+          return
         }
       }
 
@@ -647,14 +755,20 @@ export default function NewScanPage() {
                     <p className="text-xs text-white/40 ml-7 mb-2">Navigate to the folder where you downloaded invisithreat.exe</p>
                   </StepCmd>
 
-                  <StepCmd n={2} label="Run the scanner">
+                  <StepCmd n={2} label="Authenticate once with your API key">
                     <CodeBlock>
-                      invisithreat.exe --project "{projectMode === 'new' ? newProjectName : selectedProject?.name}" --api-key "{exeNewKeyData?.plaintext || exeKeys?.[0]?.key_prefix || 'YOUR_API_KEY'}"
+                      {`invisithreat.exe login --server ${getApiBase()} --token "${exeNewKeyData?.plaintext || 'YOUR_API_KEY'}"`}
                     </CodeBlock>
                   </StepCmd>
 
-                  <StepCmd n={3} label="Check results">
-                    <p className="text-xs text-white/40 ml-7">The scanner will begin analyzing your project. Results will appear in your project dashboard shortly.</p>
+                  <StepCmd n={3} label="Run a scan">
+                    <CodeBlock>
+                      {`invisithreat.exe scan "C:\\path\\to\\your-project" --project-id ${projectMode === 'existing' ? selectedProject?.id : 'YOUR_PROJECT_UUID'}`}
+                    </CodeBlock>
+                  </StepCmd>
+
+                  <StepCmd n={4} label="Check results">
+                    <p className="text-xs text-white/40 ml-7">Scan results are uploaded automatically and will appear in your project page.</p>
                   </StepCmd>
                 </div>
 
@@ -702,7 +816,7 @@ export default function NewScanPage() {
                         1
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-white">Install Python & Scanner</p>
+                        <p className="text-sm font-semibold text-white">Prepare local scanner</p>
                         <p className="text-xs text-white/30 mt-0.5">Requires Python 3.8+ installed</p>
                       </div>
                     </div>
@@ -712,9 +826,20 @@ export default function NewScanPage() {
                         <CodeBlock>python --version</CodeBlock>
                       </StepCmd>
 
-                      <StepCmd n={2} label="Install invisithreat scanner">
-                        <CodeBlock>pip install invisithreat</CodeBlock>
+                      <StepCmd n={2} label="Download official scan script">
+                        <CodeBlock>{`curl "${getApiBase()}/api/scanner/download" -o scan.py`}</CodeBlock>
                       </StepCmd>
+
+                      <StepCmd n={3} label="Install runtime dependency (once)">
+                        <CodeBlock>pip install requests</CodeBlock>
+                      </StepCmd>
+                    </div>
+
+                    <div className="mt-5 p-4 rounded-xl"
+                      style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                      <p className="text-xs text-green-400 leading-relaxed">
+                        CI-native runner available: use <span className="font-mono text-white/80">./.github/actions/invisithreat-scan</span> in GitHub Actions to run scans automatically.
+                      </p>
                     </div>
                   </SectionCard>
 
@@ -746,7 +871,7 @@ export default function NewScanPage() {
 
                     <button
                       onClick={handleConfigure}
-                      disabled={loading}
+                      disabled={loading || !!cliToken}
                       className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                       style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}
                     >
@@ -755,8 +880,10 @@ export default function NewScanPage() {
                           <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                           Creating project...
                         </>
+                      ) : cliToken ? (
+                        'Token generated'
                       ) : (
-                        'Finish'
+                        'Generate upload token'
                       )}
                     </button>
                   </SectionCard>
@@ -782,7 +909,7 @@ export default function NewScanPage() {
 
                         <StepCmd n={2} label="Run the scan with your token">
                           <CodeBlock>
-                            invisithreat scan --token "{cliToken.token}" --project-id {createdProject?.id || 'PROJECT_ID'}
+                            {`python scan.py . --token "${cliToken.upload_token}" --api-url "${getApiBase()}"`}
                           </CodeBlock>
                         </StepCmd>
 
@@ -798,7 +925,7 @@ export default function NewScanPage() {
                             <polyline points="20 6 9 17 4 12"/>
                           </svg>
                           <p className="text-xs text-green-400 leading-relaxed">
-                            Your CLI token will expire in 24 hours. Save it somewhere safe if you need to re-run scans.
+                            Your CLI token expires in {Math.max(1, Math.round((cliToken.expires_in || 3600) / 60))} minutes.
                           </p>
                         </div>
                       </div>
@@ -827,6 +954,57 @@ export default function NewScanPage() {
                       Enter the repository URL to connect. The scan will run automatically on the specified branch.
                     </p>
                     <div className="flex flex-col gap-4 mb-4">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={handleGitHubOAuth}
+                          disabled={githubOAuthLoading}
+                          className="px-3 py-2 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
+                          style={{ background: 'rgba(255,107,43,0.12)', color: '#FF8C5A', border: '1px solid rgba(255,107,43,0.25)' }}
+                        >
+                          Connect via OAuth
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleGitHubAppInstall}
+                          disabled={githubOAuthLoading}
+                          className="px-3 py-2 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
+                          style={{ background: 'rgba(96,165,250,0.12)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.25)' }}
+                        >
+                          Install GitHub App
+                        </button>
+                      </div>
+                      <p className="text-xs text-white/35">
+                        OAuth flow opens GitHub in a new tab. After approval, copy the returned access token and paste it below for private repository scans.
+                      </p>
+                      <div>
+                        <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">
+                          OAuth code exchange (optional)
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            className="flex-1 px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+                            style={{ background: '#1c1c1c', border: '1px solid #2a2a2a' }}
+                            placeholder="Paste callback URL or only the code"
+                            value={githubAuthCode}
+                            onChange={e => setGitHubAuthCode(e.target.value)}
+                            onFocus={e => { e.target.style.borderColor = 'rgba(255,107,43,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(255,107,43,0.1)' }}
+                            onBlur={e => { e.target.style.borderColor = '#2a2a2a'; e.target.style.boxShadow = '' }}
+                          />
+                          <button
+                            type="button"
+                            onClick={handleGitHubCodeExchange}
+                            disabled={githubExchangeLoading}
+                            className="px-3 py-2 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
+                            style={{ background: 'rgba(255,107,43,0.12)', color: '#FF8C5A', border: '1px solid rgba(255,107,43,0.25)' }}
+                          >
+                            {githubExchangeLoading ? 'Exchanging...' : 'Exchange'}
+                          </button>
+                        </div>
+                        <p className="text-xs text-white/30 mt-2">
+                          Alternative: use the access token returned by the callback endpoint directly.
+                        </p>
+                      </div>
                       <div>
                         <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">
                           Repository URL
@@ -855,6 +1033,24 @@ export default function NewScanPage() {
                           onBlur={e => { e.target.style.borderColor = '#2a2a2a'; e.target.style.boxShadow = '' }}
                         />
                       </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">
+                          GitHub Access Token (optional)
+                        </label>
+                        <input
+                          className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+                          type="password"
+                          style={{ background: '#1c1c1c', border: '1px solid #2a2a2a' }}
+                          placeholder="Needed for private repos (fine-grained PAT or OAuth token)"
+                          value={githubToken}
+                          onChange={e => setGithubToken(e.target.value)}
+                          onFocus={e => { e.target.style.borderColor = 'rgba(255,107,43,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(255,107,43,0.1)' }}
+                          onBlur={e => { e.target.style.borderColor = '#2a2a2a'; e.target.style.boxShadow = '' }}
+                        />
+                        <p className="text-xs text-white/30 mt-2">
+                          Leave empty for public repositories.
+                        </p>
+                      </div>
                     </div>
 
                     {configError && (
@@ -863,6 +1059,15 @@ export default function NewScanPage() {
                           <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                         </svg>
                         <p className="text-sm text-red-400">{configError}</p>
+                      </div>
+                    )}
+
+                    {githubInfo && (
+                      <div className="mb-4 px-4 py-3 rounded-xl border flex items-center gap-2" style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        <p className="text-sm text-green-400">{githubInfo}</p>
                       </div>
                     )}
 
@@ -876,7 +1081,20 @@ export default function NewScanPage() {
                           The scan will start automatically once you confirm. Monitor progress in your project dashboard.
                         </p>
                       </div>
+                      <p className="text-xs text-white/35 mt-3">
+                        For automatic scans on every push, configure a GitHub webhook to:
+                        <span className="text-white/70 font-mono"> {getApiBase()}/api/integrations/github/webhook</span>
+                      </p>
                     </div>
+
+                    <button
+                      onClick={handleConfigure}
+                      disabled={loading}
+                      className="w-full mt-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}
+                    >
+                      {loading ? 'Starting GitHub scan...' : 'Start GitHub Scan'}
+                    </button>
                   </SectionCard>
                 </>
               )}

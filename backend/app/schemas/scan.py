@@ -60,6 +60,7 @@ class ScanCreate(BaseModel):
     method: Literal["cli", "github"]
     repo_url: Optional[str] = None
     repo_branch: Optional[str] = "main"
+    repo_token: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -67,6 +68,8 @@ class ScanCreate(BaseModel):
     def _require_repo_url_for_github(self):
         if self.method == "github" and not (self.repo_url and self.repo_url.strip()):
             raise ValueError("repo_url is required when method is 'github'")
+        if self.repo_token is not None:
+            self.repo_token = self.repo_token.strip() or None
         return self
 
 

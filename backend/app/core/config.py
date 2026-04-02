@@ -39,6 +39,14 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_USE_TLS: bool = True
 
+    # GitHub integrations
+    GITHUB_CLIENT_ID: str = ""
+    GITHUB_CLIENT_SECRET: str = ""
+    GITHUB_OAUTH_REDIRECT_URI: str = ""
+    GITHUB_APP_SLUG: str = ""
+    GITHUB_WEBHOOK_SECRET: str = ""
+    GITHUB_DEFAULT_TOKEN: str = ""
+
     @property
     def DATABASE_URL(self) -> str:
         """Return DB URL from DATABASE_URL when set, otherwise build from POSTGRES_* values."""

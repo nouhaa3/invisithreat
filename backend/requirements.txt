@@ -15,3 +15,6 @@ qrcode[pil]
 alembic
 slowapi
 limits
+bandit
+semgrep
+requests

@@ -22,9 +22,16 @@ from datetime import datetime, UTC
 from app.models.scan import Project as ProjectModel
 from app.models.member import ProjectMember as MemberModel
 from app.models.scan import Scan as ScanModel, ScanStatus
+from app.models.github_repository import GitHubRepository
 from app.services.risk_score import get_or_create_scan_risk_score
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
+
+
+def _guess_repo_name(repo_url: str) -> str:
+    cleaned = (repo_url or "").strip().rstrip("/")
+    tail = cleaned.split("/")[-1] if cleaned else "repository"
+    return tail[:-4] if tail.lower().endswith(".git") else tail
 
 
 # ─── Admin Routes ──────────────────────────────────────────────────────────────
@@ -126,12 +133,36 @@ async def create_new_scan(
     if data.method == "github":
         if not data.repo_url:
             raise HTTPException(status_code=400, detail="repo_url is required for GitHub scans")
+
+        repo_record = (
+            db.query(GitHubRepository)
+            .filter(GitHubRepository.project_id == project.id)
+            .first()
+        )
+        if not repo_record:
+            repo_record = GitHubRepository(
+                project_id=project.id,
+                name=_guess_repo_name(data.repo_url),
+                url=data.repo_url.strip(),
+                default_branch=(data.repo_branch or "main").strip() or "main",
+                access_token=(data.repo_token or None),
+            )
+            db.add(repo_record)
+        else:
+            repo_record.name = _guess_repo_name(data.repo_url)
+            repo_record.url = data.repo_url.strip()
+            repo_record.default_branch = (data.repo_branch or "main").strip() or "main"
+            if data.repo_token is not None:
+                repo_record.access_token = data.repo_token
+        db.commit()
+
         background_tasks.add_task(
             run_github_scan,
             scan_id=str(scan.id),
             repo_url=data.repo_url,
             branch=data.repo_branch or "main",
             db_url=settings.DATABASE_URL,
+            github_token=data.repo_token,
         )
 
     return scan

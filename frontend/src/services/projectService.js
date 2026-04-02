@@ -45,11 +45,12 @@ export const getScans = async (projectId) => {
   return res.data
 }
 
-export const createScan = async (projectId, { method, repo_url, repo_branch }) => {
+export const createScan = async (projectId, { method, repo_url, repo_branch, repo_token }) => {
   const res = await api.post(`/api/projects/${projectId}/scans`, {
     method,
     repo_url,
     repo_branch,
+    repo_token,
   })
   return res.data
 }
