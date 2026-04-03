@@ -248,6 +248,12 @@ export default function Dashboard() {
   const riskColor = avgRisk >= 7 ? '#f87171' : avgRisk >= 4 ? '#fb923c' : '#22c55e'
   const maxRisk = Number(stats?.risk_overview?.max_score || 0)
   const maxRiskColor = maxRisk >= 7 ? '#f87171' : maxRisk >= 4 ? '#fb923c' : '#22c55e'
+  const maxRiskProjectName = stats?.top_risky_projects?.find(p => typeof p.risk_score === 'number')?.name
+  const maxRiskSub = loading || !stats
+    ? 'highest project risk score'
+    : maxRiskProjectName
+      ? `project: ${maxRiskProjectName}`
+      : 'no scored projects yet'
 
   return (
     <>
@@ -288,7 +294,7 @@ export default function Dashboard() {
             <KpiCard label="Total Scans"   value={loading || !stats ? '—' : stats?.total_scans ?? 0}     sub="all time" />
             <KpiCard label="Active Scans"  value={loading || !stats ? '—' : stats?.active_scans ?? 0}    sub="running / pending" accent={stats?.active_scans > 0 ? '#eab308' : undefined} />
             <KpiCard label="Findings"      value={loading || !stats ? '—' : stats?.total_findings ?? 0}  sub="latest scans" accent={stats?.total_findings > 0 ? '#fb923c' : undefined} />
-            <KpiCard label="Max Risk"      value={loading || !stats ? '—' : `${maxRisk.toFixed(1)}/10`}   sub="highest project risk score" accent={maxRiskColor} />
+            <KpiCard label="Max Risk"      value={loading || !stats ? '—' : `${maxRisk.toFixed(1)}/10`}   sub={maxRiskSub} accent={maxRiskColor} />
           </div>
 
           {/* VIEWER Trial Info Banner */}
