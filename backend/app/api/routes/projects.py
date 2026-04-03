@@ -13,7 +13,7 @@ from app.schemas.scan import (
 )
 from app.services.project import (
     create_project, get_projects_for_user, get_project, get_project_accessible,
-    update_project, delete_project, enrich_project,
+    update_project, delete_project, enrich_project, get_scans_for_projects_batch,
     create_scan, get_scans_for_project
 )
 from app.services.github_scanner import run_github_scan
@@ -61,14 +61,38 @@ async def list_projects(
     current_user: User = Depends(require_permission(P.VIEW_SCAN_RESULTS)),
 ):
     projects = get_projects_for_user(db, current_user)
+    
+    # Get all scan data for all projects in ONE query (not 1+N)
+    project_ids = [p.id for p in projects]
+    scans_by_project = get_scans_for_projects_batch(db, project_ids)
+    
+    # Get user's memberships
     memberships = {
         m.project_id: m.role_projet.lower()
         for m in db.query(MemberModel).filter(MemberModel.user_id == current_user.id).all()
     }
-    return [
-        enrich_project(db, p, "owner" if p.owner_id == current_user.id else memberships.get(p.id, "viewer"))
-        for p in projects
-    ]
+    
+    # Build response with enriched data
+    result = []
+    for project in projects:
+        scans = scans_by_project.get(project.id, [])
+        last_status = scans[0].status.value if scans else None
+        user_role = "owner" if project.owner_id == current_user.id else memberships.get(project.id, "viewer")
+        
+        result.append({
+            "id": project.id,
+            "name": project.name,
+            "description": project.description,
+            "language": project.language,
+            "analysis_type": project.analysis_type,
+            "visibility": project.visibility,
+            "owner_id": project.owner_id,
+            "created_at": project.created_at,
+            "scan_count": len(scans),
+            "last_scan_status": last_status,
+            "user_role": user_role,
+        })
+    return result
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)

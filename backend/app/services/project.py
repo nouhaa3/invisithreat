@@ -101,6 +101,22 @@ def enrich_project(db: Session, project: Project, user_role: str = None) -> dict
     }
 
 
+def get_scans_for_projects_batch(db: Session, project_ids: list[uuid.UUID]) -> dict:
+    """Get all scans for multiple projects in a single query. Returns {project_id: [scans]}"""
+    if not project_ids:
+        return {}
+    
+    scans_by_project = {}
+    all_scans = db.query(Scan).filter(Scan.project_id.in_(project_ids)).order_by(Scan.started_at.desc()).all()
+    
+    for scan in all_scans:
+        if scan.project_id not in scans_by_project:
+            scans_by_project[scan.project_id] = []
+        scans_by_project[scan.project_id].append(scan)
+    
+    return scans_by_project
+
+
 def create_scan(db: Session, project: Project, method: str, repo_url: str = None, repo_branch: str = "main") -> Scan:
     scan = Scan(
         id=uuid.uuid4(),
