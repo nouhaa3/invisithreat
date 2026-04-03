@@ -49,6 +49,25 @@ python cli/scanner.py . --output report.json
 | JS-003      | MEDIUM   | Tokens in localStorage |
 | JS-004      | MEDIUM   | `console.log` in production |
 
+### Supported Languages
+
+| Language | Extensions | Level |
+|---|---|---|
+| Python | `.py` | Full |
+| JavaScript / TypeScript | `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs` | Full |
+| Java | `.java` | Full |
+| Go | `.go` | Full |
+| C# / .NET | `.cs`, `.csproj` | Full |
+| Rust | `.rs` | Full |
+| PHP | `.php` | Full |
+| Ruby | `.rb` | Full |
+| C / C++ | `.c`, `.cpp`, `.cc`, `.h`, `.hpp` | Full |
+| Kotlin | `.kt`, `.kts` | Full |
+| Swift | `.swift` | Full |
+| Dart | `.dart` | Full |
+| Configuration Files | `.yml`, `.yaml`, `.json`, `.toml`, `.ini`, `.cfg`, `.xml`, `.properties`, `.gradle`, `.tf`, `.tfvars`, `.hcl` | Full |
+| Shell Scripts | `.sh`, `.bash`, `.zsh` | Full |
+
 ## Exit Codes
 
 | Code | Meaning |

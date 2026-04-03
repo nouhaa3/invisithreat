@@ -181,13 +181,23 @@ The scanner automatically picks the right rules based on the file extension:
 | File type | Extensions |
 |---|---|
 | Python | `.py` |
-| JavaScript / TypeScript | `.js`, `.ts`, `.jsx`, `.tsx` |
+| JavaScript / TypeScript | `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs` |
+| Java | `.java`, `.class`, `.jar` |
+| Go | `.go` |
+| C# / .NET | `.cs`, `.csproj` |
+| Rust | `.rs` |
+| PHP | `.php` |
+| Ruby | `.rb` |
+| C / C++ | `.c`, `.cpp`, `.cc`, `.h`, `.hpp` |
+| Kotlin | `.kt`, `.kts` |
+| Swift | `.swift` |
+| Dart | `.dart` |
 | Environment config | `.env` |
-| Config files | `.yml`, `.yaml`, `.json`, `.toml`, `.ini`, `.cfg` |
-| Shell scripts | `.sh`, `.bash` |
+| Config files | `.yml`, `.yaml`, `.json`, `.toml`, `.ini`, `.cfg`, `.xml`, `.properties`, `.gradle`, `.tf`, `.tfvars`, `.hcl` |
+| Shell scripts | `.sh`, `.bash`, `.zsh` |
 
 It automatically **ignores** these folders: `node_modules/`, `.git/`, `venv/`,
-`__pycache__/`, `dist/`, `build/` — so scans stay fast and relevant.
+`__pycache__/`, `dist/`, `build/`, `.mypy_cache/`, `.pytest_cache/`, `coverage/` — so scans stay fast and relevant.
 
 ---
 
