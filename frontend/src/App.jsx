@@ -14,6 +14,7 @@ import AdminPage from './pages/AdminPage'
 import ProjectMembersPage from './pages/ProjectMembersPage'
 import SettingsPage from './pages/SettingsPage'
 import NotificationsPage from './pages/NotificationsPage'
+import GitHubOAuthCallbackPage from './pages/GitHubOAuthCallbackPage'
 
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth()
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
           <Route path="/verify-email" element={<PublicRoute><VerifyEmailPage /></PublicRoute>} />
           <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
+          <Route path="/auth/github/callback" element={<GitHubOAuthCallbackPage />} />
           <Route path="/dashboard" element={<PermissionRoute permission={PERMISSIONS.VIEW_DASHBOARD}><Dashboard /></PermissionRoute>} />
           <Route path="/scans/new" element={<PermissionRoute permission={PERMISSIONS.RUN_SCAN}><NewScanPage /></PermissionRoute>} />
           <Route path="/projects/:id" element={<PermissionRoute permission={PERMISSIONS.VIEW_SCAN_RESULTS}><ProjectDetail /></PermissionRoute>} />

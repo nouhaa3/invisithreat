@@ -156,6 +156,25 @@ export default function NewScanPage() {
     }
   }, [step, method, projectMode, exeKeysLoaded])
 
+  // Listen for GitHub OAuth callback from popup
+  useEffect(() => {
+    const handleMessage = (event) => {
+      // Only accept messages from same origin
+      if (event.origin !== window.location.origin) return
+      
+      if (event.data?.type === 'GITHUB_OAUTH_CODE') {
+        const { code, state } = event.data
+        setGitHubAuthCode(code)
+        setGitHubOAuthState(state)
+        try { window.localStorage.setItem('ivt_github_oauth_state', state) } catch {}
+        setGitHubInfo('✓ OAuth code received from GitHub. Ready to exchange.')
+      }
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
+
   const handleExeGenerateKey = async () => {
     const name = exeNewKeyName.trim() || 'My Key'
     setExeCreating(true)
@@ -169,28 +188,33 @@ export default function NewScanPage() {
     }
   }
 
-  const openLinkInNewTab = (url) => {
-    const w = window.open(url, '_blank', 'noopener,noreferrer')
-    if (!w) {
-      setConfigError('Popup blocked by browser. Please allow popups and try again.')
-    }
-  }
-
   const handleGitHubOAuth = async () => {
     setConfigError('')
     setGitHubInfo('')
     setGitHubOAuthLoading(true)
+    
+    // Open popup IMMEDIATELY (synchronous from click) to avoid browser blocking
+    const popup = window.open('about:blank', '_blank', 'width=500,height=600')
+    if (!popup) {
+      setConfigError('Popup blocked by browser. Please allow popups and try again.')
+      setGitHubOAuthLoading(false)
+      return
+    }
+    
     try {
       const data = await getGitHubOAuthStart()
       if (!data?.authorize_url) {
+        popup.close()
         throw new Error('GitHub OAuth start URL not available')
       }
       setGitHubOAuthState(data.state || '')
       if (data.state) {
         try { window.localStorage.setItem('ivt_github_oauth_state', data.state) } catch {}
       }
-      openLinkInNewTab(data.authorize_url)
+      // Redirect popup to GitHub OAuth URL
+      popup.location.href = data.authorize_url
     } catch (err) {
+      popup.close()
       setConfigError(err.response?.data?.detail || err.message || 'Unable to start GitHub OAuth')
     } finally {
       setGitHubOAuthLoading(false)
@@ -201,13 +225,25 @@ export default function NewScanPage() {
     setConfigError('')
     setGitHubInfo('')
     setGitHubOAuthLoading(true)
+    
+    // Open popup IMMEDIATELY (synchronous from click) to avoid browser blocking
+    const popup = window.open('about:blank', '_blank', 'width=500,height=600')
+    if (!popup) {
+      setConfigError('Popup blocked by browser. Please allow popups and try again.')
+      setGitHubOAuthLoading(false)
+      return
+    }
+    
     try {
       const data = await getGitHubAppInstallUrl()
       if (!data?.install_url) {
+        popup.close()
         throw new Error('GitHub App install URL not available')
       }
-      openLinkInNewTab(data.install_url)
+      // Redirect popup to GitHub App install URL
+      popup.location.href = data.install_url
     } catch (err) {
+      popup.close()
       setConfigError(err.response?.data?.detail || err.message || 'Unable to open GitHub App install page')
     } finally {
       setGitHubOAuthLoading(false)

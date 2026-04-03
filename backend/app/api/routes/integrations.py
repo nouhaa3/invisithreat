@@ -3,9 +3,10 @@ import hmac
 import secrets
 import time
 import uuid
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urlparse, parse_qs
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict
 import requests
 from sqlalchemy.orm import Session
@@ -208,12 +209,29 @@ async def github_oauth_exchange(
 
 
 @router.get("/github/oauth/callback")
-async def github_oauth_callback(code: str):
-    token_data = _exchange_github_code_for_token(code)
-    return {
-        "message": "OAuth successful. Copy access_token and paste it in the GitHub Access Token field.",
-        **token_data,
-    }
+async def github_oauth_callback(code: str = None, state: str = None, error: str = None, error_description: str = None):
+    """
+    GitHub OAuth callback — redirects to frontend with code/state or error
+    """
+    frontend_url = (settings.FRONTEND_URL or "http://localhost:3000").rstrip("/")
+    callback_url = f"{frontend_url}/auth/github/callback"
+    
+    # Build query params
+    params = {}
+    if error:
+        params['error'] = error
+        if error_description:
+            params['error_description'] = error_description
+    else:
+        if code:
+            params['code'] = code
+        if state:
+            params['state'] = state
+    
+    # Redirect to frontend callback page
+    query_string = urlencode(params) if params else ""
+    redirect_to = f"{callback_url}?{query_string}" if query_string else callback_url
+    return RedirectResponse(url=redirect_to, status_code=302)
 
 
 @router.post("/github/webhook")
