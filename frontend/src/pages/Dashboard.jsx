@@ -246,6 +246,8 @@ export default function Dashboard() {
     : '#f87171'
   const avgRisk = Number(stats?.risk_overview?.avg_score || 0)
   const riskColor = avgRisk >= 7 ? '#f87171' : avgRisk >= 4 ? '#fb923c' : '#22c55e'
+  const maxRisk = Number(stats?.risk_overview?.max_score || 0)
+  const maxRiskColor = maxRisk >= 7 ? '#f87171' : maxRisk >= 4 ? '#fb923c' : '#22c55e'
 
   return (
     <>
@@ -280,21 +282,13 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="mb-6 animate-slide-up rounded-2xl p-4 sm:p-5"
-            style={{ background: '#101010', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                ['Security score', loading || !stats ? '—' : stats?.security_score ?? 0, scoreColor],
-                ['Average risk', loading || !stats ? '—' : `${avgRisk.toFixed(1)}/10`, riskColor],
-                ['Critical', bySev.critical || 0, '#f87171'],
-                ['High', bySev.high || 0, '#fb923c'],
-              ].map(([label, value, color]) => (
-                <div key={label} className="rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-white/35">{label}</p>
-                  <p className="text-xl font-bold mt-1" style={{ color }}>{value}</p>
-                </div>
-              ))}
-            </div>
+          {/* ── KPI row ────────────────────────────────────────────────────── */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6 animate-slide-up" style={{ animationDelay: '0.04s' }}>
+            <KpiCard label="Projects"      value={loading || !stats ? '—' : stats?.total_projects ?? 0}  sub="in workspace" />
+            <KpiCard label="Total Scans"   value={loading || !stats ? '—' : stats?.total_scans ?? 0}     sub="all time" />
+            <KpiCard label="Active Scans"  value={loading || !stats ? '—' : stats?.active_scans ?? 0}    sub="running / pending" accent={stats?.active_scans > 0 ? '#eab308' : undefined} />
+            <KpiCard label="Findings"      value={loading || !stats ? '—' : stats?.total_findings ?? 0}  sub="latest scans" accent={stats?.total_findings > 0 ? '#fb923c' : undefined} />
+            <KpiCard label="Max Risk"      value={loading || !stats ? '—' : `${maxRisk.toFixed(1)}/10`}   sub="highest project risk score" accent={maxRiskColor} />
           </div>
 
           {/* VIEWER Trial Info Banner */}
@@ -322,13 +316,21 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ── KPI row ────────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6 animate-slide-up" style={{ animationDelay: '0.04s' }}>
-            <KpiCard label="Projects"      value={loading || !stats ? '—' : stats?.total_projects ?? 0}  sub="in workspace" />
-            <KpiCard label="Total Scans"   value={loading || !stats ? '—' : stats?.total_scans ?? 0}     sub="all time" />
-            <KpiCard label="Active Scans"  value={loading || !stats ? '—' : stats?.active_scans ?? 0}    sub="running / pending" accent={stats?.active_scans > 0 ? '#eab308' : undefined} />
-            <KpiCard label="Findings"      value={loading || !stats ? '—' : stats?.total_findings ?? 0}  sub="latest scans" accent={stats?.total_findings > 0 ? '#fb923c' : undefined} />
-            <KpiCard label="Avg Risk"      value={loading || !stats ? '—' : `${avgRisk.toFixed(1)}/10`}   sub="calculated from latest scans" accent={riskColor} />
+          <div className="mb-6 animate-slide-up rounded-2xl p-4 sm:p-5"
+            style={{ background: '#101010', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                ['Security score', loading || !stats ? '—' : stats?.security_score ?? 0, scoreColor],
+                ['Average risk', loading || !stats ? '—' : `${avgRisk.toFixed(1)}/10`, riskColor],
+                ['Critical', bySev.critical || 0, '#f87171'],
+                ['High', bySev.high || 0, '#fb923c'],
+              ].map(([label, value, color]) => (
+                <div key={label} className="rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-white/35">{label}</p>
+                  <p className="text-xl font-bold mt-1" style={{ color }}>{value}</p>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* ── Charts row ─────────────────────────────────────────────────── */}
