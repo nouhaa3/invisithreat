@@ -207,17 +207,19 @@ export default function Dashboard() {
 
   const load = async () => {
     try {
-      const proj = await getProjects()
+      // Load projects and stats in parallel
+      const [proj, statsData] = await Promise.all([
+        getProjects().catch(() => []),
+        getDashboardStats().catch(() => null)
+      ])
       setProjects(proj)
+      setStats(statsData)
     } catch {
       setProjects([])
+      setStats(null)
     } finally {
       setLoading(false)
     }
-
-    getDashboardStats()
-      .then(setStats)
-      .catch(() => setStats(null))
   }
 
   useEffect(() => { load() }, [])

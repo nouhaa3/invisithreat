@@ -10,6 +10,8 @@ from app.db.base import Base
 class ScanMethod(str, enum.Enum):
     cli = "cli"
     github = "github"
+    dast = "dast"
+    exe = "exe"
 
 
 class ScanStatus(str, enum.Enum):

@@ -76,7 +76,7 @@ class ScanCreate(BaseModel):
 class ScanResponse(BaseModel):
     id: uuid.UUID
     project_id: uuid.UUID
-    method: str
+    method: Optional[str] = None
     status: str
     repo_url: Optional[str] = None
     repo_branch: Optional[str] = None

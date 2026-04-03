@@ -18,7 +18,7 @@ from app.db.migrate import run_migrations
 logger = logging.getLogger(__name__)
 
 # Apply database migrations on startup
-run_migrations()
+# run_migrations()  # TODO: Fix Alembic revision conflict - database already initialized
 
 app = FastAPI(
     title=settings.APP_NAME,
