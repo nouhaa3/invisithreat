@@ -45,4 +45,25 @@ RULES = [
         "description": "Sensitive information logged.",
         "category": "Information Disclosure",
     },
+    {
+        "name": "Null Safety",
+        "pattern": r"!|\\.|\\.\\.|null-coalescing",
+        "severity": "MEDIUM",
+        "description": "Unsafe null handling.",
+        "category": "Code Quality",
+    },
+    {
+        "name": "Async Error Handling",
+        "pattern": r"async|await|Future|then|catchError",
+        "severity": "MEDIUM",
+        "description": "Async errors not properly handled.",
+        "category": "Code Quality",
+    },
+    {
+        "name": "XXE Vulnerability",
+        "pattern": r"XmlDocument|xml\\.parse|parseDocument",
+        "severity": "HIGH",
+        "description": "Potential XML External Entity vulnerability.",
+        "category": "Injection",
+    },
 ]

@@ -7,6 +7,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import uuid
@@ -23,8 +24,62 @@ from app.models.scan_tool import ScanTool
 from app.models.tool_execution import ToolExecution
 from app.services.risk_score import upsert_scan_risk_score
 
+# Try to import new modular rules system, fall back to legacy rules if unavailable
+try:
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "cli"))
+    from rules import get_rules_for_language, RULES_BY_LANGUAGE
+    USE_NEW_RULES = True
+except ImportError:
+    USE_NEW_RULES = False
+    get_rules_for_language = None
 
-# ─── Detection Rules (mirrors scripts/scan.py) ───────────────────────────────
+
+# ─── File Extension to Language Mapping ─────────────────────────────────────
+
+EXTENSION_TO_LANGUAGE = {
+    ".py": "python",
+    ".js": "javascript",
+    ".ts": "typescript",
+    ".jsx": "javascript",
+    ".tsx": "typescript",
+    ".mjs": "javascript",
+    ".java": "java",
+    ".go": "go",
+    ".rb": "ruby",
+    ".php": "php",
+    ".cs": "csharp",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".c": "c",
+    ".h": "c",
+    ".hpp": "cpp",
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+    ".swift": "swift",
+    ".dart": "dart",
+    ".sh": "shell",
+    ".bash": "bash",
+    ".zsh": "shell",
+    ".ps1": "shell",
+    ".yaml": "general",
+    ".yml": "general",
+    ".json": "general",
+    ".toml": "general",
+    ".ini": "general",
+    ".cfg": "general",
+    ".conf": "general",
+    ".env": "general",
+    ".xml": "general",
+    ".properties": "general",
+    ".gradle": "general",
+    ".tf": "general",
+    ".tfvars": "general",
+    ".hcl": "general",
+    ".dockerfile": "general",
+}
+
+
+# ─── Detection Rules (legacy system, kept for backward compatibility) ────────
 
 SKIP_DIRS = {
     ".git", ".hg", ".svn", "node_modules", "__pycache__", ".venv", "venv",
@@ -258,6 +313,59 @@ def _should_skip(path: Path) -> bool:
     return False
 
 
+def _get_language_specific_rules(file_ext: str) -> list:
+    """
+    Get language-specific rules for a file extension using the new modular rules system.
+    Each rule dict has: name, pattern (regex string), severity, description, category.
+    Compiles patterns into regex objects for efficient matching.
+    Falls back to legacy REGEX_RULES if new system is unavailable.
+    """
+    if not USE_NEW_RULES or get_rules_for_language is None:
+        return []
+    
+    # Map extension to language
+    language = EXTENSION_TO_LANGUAGE.get(file_ext.lower(), None)
+    if not language:
+        return []
+    
+    try:
+        rules = get_rules_for_language(language)
+        compiled_rules = []
+        
+        for rule in rules:
+            try:
+                pattern_str = rule.get("pattern", "")
+                if not pattern_str:
+                    continue
+                
+                # Compile the regex pattern
+                # Most patterns use case-insensitive matching, but respect explicit flags if present
+                flags = 0
+                if rule.get("name", "").lower() in ["hardcoded", "password", "credentials", "key", "secret", "debug"]:
+                    flags = re.IGNORECASE
+                
+                compiled = re.compile(pattern_str, flags)
+                
+                compiled_rules.append({
+                    "id": f"{language.upper()}_{hash(pattern_str) % 10000}",
+                    "name": rule.get("name", "Unknown"),
+                    "pattern": compiled,
+                    "severity": (rule.get("severity", "MEDIUM") or "MEDIUM").lower(),
+                    "category": rule.get("category", "Code Quality"),
+                    "description": rule.get("description", ""),
+                    "recommendation": rule.get("description", ""),
+                    "source": "modular_rules",
+                })
+            except (re.error, AttributeError, TypeError):
+                # Skip rules with invalid patterns
+                pass
+        
+        return compiled_rules
+    except Exception:
+        # If anything goes wrong, return empty list to fall back to legacy rules
+        return []
+
+
 def _scan_file(path: Path, base: Path) -> list:
     findings = []
     try:
@@ -269,7 +377,11 @@ def _scan_file(path: Path, base: Path) -> list:
     lines = content.splitlines()
     ext = path.suffix.lower()
 
-    for rule in REGEX_RULES:
+    # Try to use language-specific rules from the new modular system first
+    lang_specific_rules = _get_language_specific_rules(ext)
+    rules_to_use = lang_specific_rules if lang_specific_rules else REGEX_RULES
+
+    for rule in rules_to_use:
         if "extensions" in rule and ext not in rule["extensions"]:
             continue
         for match in rule["pattern"].finditer(content):
@@ -280,12 +392,12 @@ def _scan_file(path: Path, base: Path) -> list:
                 continue
             findings.append({
                 "id": str(uuid.uuid4()),
-                "rule_id": rule["id"],
-                "title": rule["title"],
-                "severity": rule["severity"],
-                "category": rule["category"],
-                "description": rule["description"],
-                "recommendation": RECOMMENDATIONS.get(rule["id"], ""),
+                "rule_id": rule.get("id", rule.get("rule_id", "")),
+                "title": rule.get("title", rule.get("name", "Unknown")),
+                "severity": rule.get("severity", "medium"),
+                "category": rule.get("category", "Code Quality"),
+                "description": rule.get("description", ""),
+                "recommendation": rule.get("recommendation", RECOMMENDATIONS.get(rule.get("id", ""), "")),
                 "file": rel,
                 "line": line_no,
                 "code": code_snippet[:200],

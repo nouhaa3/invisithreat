@@ -176,25 +176,24 @@ Issues  : 8
 
 ### Supported file types
 
-The scanner automatically picks the right rules based on the file extension:
+The scanner automatically picks the right rules based on the file extension and programming language:
 
-| File type | Extensions |
-|---|---|
-| Python | `.py` |
-| JavaScript / TypeScript | `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs` |
-| Java | `.java`, `.class`, `.jar` |
-| Go | `.go` |
-| C# / .NET | `.cs`, `.csproj` |
-| Rust | `.rs` |
-| PHP | `.php` |
-| Ruby | `.rb` |
-| C / C++ | `.c`, `.cpp`, `.cc`, `.h`, `.hpp` |
-| Kotlin | `.kt`, `.kts` |
-| Swift | `.swift` |
-| Dart | `.dart` |
-| Environment config | `.env` |
-| Config files | `.yml`, `.yaml`, `.json`, `.toml`, `.ini`, `.cfg`, `.xml`, `.properties`, `.gradle`, `.tf`, `.tfvars`, `.hcl` |
-| Shell scripts | `.sh`, `.bash`, `.zsh` |
+| Language | Extensions | Support Status | Vulnerabilities Detected |
+|---|---|---|---|
+| Python | `.py` | **COMPLET** ✓ | SQL Injection, Code Execution, Hardcoded Secrets, Weak Crypto (12 rules) |
+| JavaScript / TypeScript | `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs` | **COMPLET** ✓ | XSS, Code Execution, eval/exec, Tokens in localStorage (10 rules) |
+| Configuration | `.yml`, `.yaml`, `.json`, `.toml`, `.ini`, `.cfg`, `.xml`, `.properties`, `.gradle`, `.tf`, `.tfvars`, `.hcl` | **COMPLET** ✓ | Hardcoded Secrets, Exposed Credentials (6 rules) |
+| Java | `.java`, `.class`, `.jar` | **PARTIAL** ⚠ | Hardcoded Secrets, SQL Injection, Unsafe Deserialization, XXE, Reflection (9 rules) |
+| Go | `.go` | **PARTIAL** ⚠ | SQL Injection, Credentials, TLS, Command Injection, Race Conditions, XXE (10 rules) |
+| Rust | `.rs` | **PARTIAL** ⚠ | Unsafe Code, Hardcoded Secrets, SQL Injection, Weak Crypto, Integer Overflow (8 rules) |
+| PHP | `.php` | **PARTIAL** ⚠ | SQL Injection, Command Injection, Credentials, XSS, Type Juggling, XXE (9 rules) |
+| Ruby | `.rb` | **PARTIAL** ⚠ | SQL Injection, Command Injection, Secrets, XSS, Code Eval, Reflection, XXE (9 rules) |
+| C / C++ | `.c`, `.cpp`, `.cc`, `.h`, `.hpp` | **PARTIAL** ⚠ | Buffer Overflow, Format String, Use-After-Free, Integer Overflow, Weak Crypto (9 rules) |
+| Kotlin | `.kt`, `.kts` | **PARTIAL** ⚠ | SQL Injection, Secrets, Unsafe Deserialization, Weak Crypto, Null Safety, XXE (8 rules) |
+| Swift | `.swift` | **PARTIAL** ⚠ | Hardcoded Secrets, SQL Injection, Weak Crypto, Insecure Communication, Force Unwrap, XXE (9 rules) |
+| Dart | `.dart` | **PARTIAL** ⚠ | Hardcoded Secrets, SQL Injection, Weak Crypto, Insecure HTTP, Null Safety, XXE (9 rules) |
+| C# / .NET | `.cs`, `.csproj`, `.vb` | **PARTIAL** ⚠ | SQL Injection, Unsafe Deserialization, XSS, Weak Crypto, Command Injection, LDAP Injection (8 rules) |
+| Shell scripts | `.sh`, `.bash`, `.zsh`, `.ps1` | **PARTIAL** ⚠ | Command Injection, Hardcoded Credentials, Unquoted Variables, SQL in Scripts, Weak Permissions (7 rules) |
 
 It automatically **ignores** these folders: `node_modules/`, `.git/`, `venv/`,
 `__pycache__/`, `dist/`, `build/`, `.mypy_cache/`, `.pytest_cache/`, `coverage/` — so scans stay fast and relevant.

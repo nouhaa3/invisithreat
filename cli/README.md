@@ -51,22 +51,22 @@ python cli/scanner.py . --output report.json
 
 ### Supported Languages
 
-| Language | Extensions | Level |
-|---|---|---|
-| Python | `.py` | Full |
-| JavaScript / TypeScript | `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs` | Full |
-| Java | `.java` | Full |
-| Go | `.go` | Full |
-| C# / .NET | `.cs`, `.csproj` | Full |
-| Rust | `.rs` | Full |
-| PHP | `.php` | Full |
-| Ruby | `.rb` | Full |
-| C / C++ | `.c`, `.cpp`, `.cc`, `.h`, `.hpp` | Full |
-| Kotlin | `.kt`, `.kts` | Full |
-| Swift | `.swift` | Full |
-| Dart | `.dart` | Full |
-| Configuration Files | `.yml`, `.yaml`, `.json`, `.toml`, `.ini`, `.cfg`, `.xml`, `.properties`, `.gradle`, `.tf`, `.tfvars`, `.hcl` | Full |
-| Shell Scripts | `.sh`, `.bash`, `.zsh` | Full |
+| Language | Extensions | Support Status | Vulnerabilities |
+|---|---|---|---|
+| Python | `.py` | **COMPLET** ✓ | SQL Injection, Code Execution, Hardcoded Secrets, Weak Crypto (12 rules) |
+| JavaScript / TypeScript | `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs` | **COMPLET** ✓ | XSS, Code Execution, Tokens in localStorage, eval/exec (10 rules) |
+| Configuration Files | `.yml`, `.yaml`, `.json`, `.toml`, `.ini`, `.cfg`, `.xml`, `.properties`, `.gradle`, `.tf`, `.tfvars`, `.hcl` | **COMPLET** ✓ | Hardcoded Secrets, Exposed Credentials, Misconfiguration (6 rules) |
+| Java | `.java`, `.class`, `.jar` | **PARTIAL** ⚠ | Hardcoded Secrets, SQL Injection, Unsafe Deserialization, XXE, Reflection (9 rules) |
+| Go | `.go` | **PARTIAL** ⚠ | SQL Injection, Credentials, TLS, Command Injection, Race Conditions, XXE (10 rules) |
+| Rust | `.rs` | **PARTIAL** ⚠ | Unsafe Code, Hardcoded Secrets, SQL Injection, Weak Crypto, Integer Overflow (8 rules) |
+| PHP | `.php` | **PARTIAL** ⚠ | SQL Injection, Command Injection, Credentials, XSS, Type Juggling, XXE (9 rules) |
+| Ruby | `.rb` | **PARTIAL** ⚠ | SQL Injection, Command Injection, Secrets, XSS, Code Eval, Reflection, XXE (9 rules) |
+| C / C++ | `.c`, `.cpp`, `.cc`, `.h`, `.hpp` | **PARTIAL** ⚠ | Buffer Overflow, Format String, Use-After-Free, Integer Overflow, Weak Crypto (9 rules) |
+| Kotlin | `.kt`, `.kts` | **PARTIAL** ⚠ | SQL Injection, Secrets, Unsafe Deserialization, Weak Crypto, Null Safety, XXE (8 rules) |
+| Swift | `.swift` | **PARTIAL** ⚠ | Hardcoded Secrets, SQL Injection, Weak Crypto, Insecure Communication, Force Unwrap, XXE (9 rules) |
+| Dart | `.dart` | **PARTIAL** ⚠ | Hardcoded Secrets, SQL Injection, Weak Crypto, Insecure HTTP, Null Safety, XXE (9 rules) |
+| C# / .NET | `.cs`, `.csproj`, `.vb` | **PARTIAL** ⚠ | SQL Injection, Unsafe Deserialization, XSS, Weak Crypto, Command Injection (8 rules) |
+| Shell Scripts | `.sh`, `.bash`, `.zsh`, `.ps1` | **PARTIAL** ⚠ | Command Injection, Hardcoded Credentials, Unquoted Variables, SQL Injection (7 rules) |
 
 ## Exit Codes
 

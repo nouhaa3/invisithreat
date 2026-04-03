@@ -59,3 +59,6 @@ GENERAL_RULES = [
         "fix": "Verify this is not an encoded credential. Move secrets to vault.",
     },
 ]
+
+# Alias for consistency with other rule files
+RULES = GENERAL_RULES

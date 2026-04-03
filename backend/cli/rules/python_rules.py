@@ -118,3 +118,6 @@ PYTHON_RULES = [
         "fix": "Validate and sanitize file paths. Use os.path.abspath() and check prefix.",
     },
 ]
+
+# Alias for consistency with other rule files
+RULES = PYTHON_RULES

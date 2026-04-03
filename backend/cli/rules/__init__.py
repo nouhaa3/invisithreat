@@ -5,7 +5,7 @@ Automatically loads all language-specific security rules
 
 from . import general_rules, python_rules, js_rules, java_rules, go_rules
 from . import rust_rules, php_rules, ruby_rules, cpp_rules, kotlin_rules
-from . import swift_rules, dart_rules
+from . import swift_rules, dart_rules, csharp_rules, shell_rules
 
 # Aggregate all rules by language
 RULES_BY_LANGUAGE = {
@@ -20,9 +20,13 @@ RULES_BY_LANGUAGE = {
     "ruby": ruby_rules.RULES,
     "c": cpp_rules.RULES,
     "cpp": cpp_rules.RULES,
+    "csharp": csharp_rules.RULES,
+    "dotnet": csharp_rules.RULES,
     "kotlin": kotlin_rules.RULES,
     "swift": swift_rules.RULES,
     "dart": dart_rules.RULES,
+    "shell": shell_rules.RULES,
+    "bash": shell_rules.RULES,
 }
 
 def get_rules_for_language(language: str):

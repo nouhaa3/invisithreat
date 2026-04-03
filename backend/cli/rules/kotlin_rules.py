@@ -38,4 +38,25 @@ RULES = [
         "description": "Potential command execution.",
         "category": "Code Execution",
     },
+    {
+        "name": "Null Safety Violation",
+        "pattern": r"!!\s*\.|\.let.*!!|\.run.*!!",
+        "severity": "MEDIUM",
+        "description": "Unsafe null pointer dereference.",
+        "category": "Code Quality",
+    },
+    {
+        "name": "Type Variance Abuse",
+        "pattern": r"Any|uncheckedCast|@Suppress|out|in",
+        "severity": "MEDIUM",
+        "description": "Potential type safety issue.",
+        "category": "Code Quality",
+    },
+    {
+        "name": "XXE Vulnerability",
+        "pattern": r"DocumentBuilderFactory|SAXParser|XMLReader",
+        "severity": "HIGH",
+        "description": "Potential XML External Entity vulnerability.",
+        "category": "Injection",
+    },
 ]

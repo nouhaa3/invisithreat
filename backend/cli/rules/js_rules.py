@@ -94,3 +94,6 @@ JS_RULES = [
         "fix": "Remove or mask sensitive data from logs.",
     },
 ]
+
+# Alias for consistency with other rule files
+RULES = JS_RULES

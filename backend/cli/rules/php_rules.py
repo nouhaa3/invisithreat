@@ -45,4 +45,25 @@ RULES = [
         "description": "Potential directory traversal via input.",
         "category": "Path Traversal",
     },
+    {
+        "name": "Dynamic Variable Name",
+        "pattern": r"\$\$|eval\s*\(|create_function",
+        "severity": "HIGH",
+        "description": "Dynamic variable analysis or code execution.",
+        "category": "Code Injection",
+    },
+    {
+        "name": "Type Juggling",
+        "pattern": r"==\s*['\"]|in_array.*true",
+        "severity": "MEDIUM",
+        "description": "PHP type juggling can cause security issues.",
+        "category": "Code Quality",
+    },
+    {
+        "name": "XXE Vulnerability",
+        "pattern": r"simplexml_load_file|DOMDocument::load",
+        "severity": "HIGH",
+        "description": "Potential XML External Entity (XXE) vulnerability.",
+        "category": "Injection",
+    },
 ]

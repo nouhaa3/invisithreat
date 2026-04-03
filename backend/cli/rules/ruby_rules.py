@@ -45,4 +45,25 @@ RULES = [
         "description": "Potential mass assignment vulnerability.",
         "category": "Code Quality",
     },
+    {
+        "name": "Code Eval",
+        "pattern": r"eval\s*\(|instance_eval|class_eval",
+        "severity": "CRITICAL",
+        "description": "Dynamic code evaluation detected.",
+        "category": "Code Execution",
+    },
+    {
+        "name": "Reflection Metaprogramming",
+        "pattern": r"method\(|send|__send__|define_method",
+        "severity": "MEDIUM",
+        "description": "Reflection or metaprogramming could enable injection.",
+        "category": "Code Quality",
+    },
+    {
+        "name": "XXE Vulnerability",
+        "pattern": r"Nokogiri\.parse|REXML::Document\.new",
+        "severity": "HIGH",
+        "description": "Potential XML External Entity (XXE) vulnerability.",
+        "category": "Injection",
+    },
 ]

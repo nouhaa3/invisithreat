@@ -45,4 +45,25 @@ RULES = [
         "description": "Hardcoded URL in code.",
         "category": "Configuration",
     },
+    {
+        "name": "Force Unwrapping",
+        "pattern": r"!|guard.*else|if let.*else",
+        "severity": "MEDIUM",
+        "description": "Unsafe force unwrapping of optional types.",
+        "category": "Code Quality",
+    },
+    {
+        "name": "Memory Management",
+        "pattern": r"unowned|weak|@autoreleasepool|deinit",
+        "severity": "MEDIUM",
+        "description": "Complex memory management with potential leaks.",
+        "category": "Memory Safety",
+    },
+    {
+        "name": "XXE Vulnerability",
+        "pattern": r"XMLParser|XMLDocument|parseXML",
+        "severity": "HIGH",
+        "description": "Potential XML External Entity vulnerability.",
+        "category": "Injection",
+    },
 ]

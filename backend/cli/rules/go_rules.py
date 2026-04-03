@@ -7,7 +7,7 @@ RULES = [
         "name": "SQL Injection",
         "pattern": r"fmt\.\s*Sprintf\s*\([^,]+[+\*]|Query\s*\(\s*[\"'].*[+\*]",
         "severity": "HIGH",
-        "description": "SQL query built with string concatenation — vulnerable to injection.",
+        "description": "SQL query built with string concatenation ï¿½ vulnerable to injection.",
         "category": "Injection",
     },
     {
@@ -44,5 +44,33 @@ RULES = [
         "severity": "MEDIUM",
         "description": "Debug mode or profiling enabled in production.",
         "category": "Configuration",
+    },
+    {
+        "name": "Race Condition",
+        "pattern": r"go\s+func|sync\.Map|sync\.RWMutex",
+        "severity": "MEDIUM",
+        "description": "Concurrent code without proper synchronization.",
+        "category": "Code Quality",
+    },
+    {
+        "name": "Path Traversal",
+        "pattern": r"filepath\.Join|os\.Open.*\+|path\.Join",
+        "severity": "HIGH",
+        "description": "Potential path traversal vulnerability.",
+        "category": "Path Traversal",
+    },
+    {
+        "name": "Weak Random Generation",
+        "pattern": r"math/rand\.|rand\.Intn|rand\.Float",
+        "severity": "MEDIUM",
+        "description": "Weak random â€” use crypto/rand.",
+        "category": "Cryptography",
+    },
+    {
+        "name": "XXE Vulnerability",
+        "pattern": r"xml\.Decoder|xml\.Unmarshal|ParseFile",
+        "severity": "HIGH",
+        "description": "Potential XML External Entity (XXE) vulnerability.",
+        "category": "Injection",
     },
 ]

@@ -7,7 +7,7 @@ RULES = [
         "name": "Unsafe Code Block",
         "pattern": r"unsafe\s*\{",
         "severity": "MEDIUM",
-        "description": "Unsafe code block detected — ensure it is necessary and reviewed.",
+        "description": "Unsafe code block detected ï¿½ ensure it is necessary and reviewed.",
         "category": "Code Quality",
     },
     {
@@ -37,5 +37,26 @@ RULES = [
         "severity": "MEDIUM",
         "description": "Deprecated or potentially unsafe cryptography library.",
         "category": "Cryptography",
+    },
+    {
+        "name": "Integer Overflow",
+        "pattern": r"as\s+(u8|u16|u32|i32|i64|usize)|wrapping_\w+|overflow",
+        "severity": "MEDIUM",
+        "description": "Integer overflow/underflow risk detected.",
+        "category": "Code Quality",
+    },
+    {
+        "name": "Panic Safety",
+        "pattern": r"unwrap\(\)|expect\(|panic!|unreachable!",
+        "severity": "MEDIUM",
+        "description": "Potential panic/abort without proper error handling.",
+        "category": "Code Quality",
+    },
+    {
+        "name": "Path Traversal",
+        "pattern": r"File::open|std::fs::read|PathBuf::from.*\+",
+        "severity": "HIGH",
+        "description": "Potential path traversal vulnerability.",
+        "category": "Path Traversal",
     },
 ]

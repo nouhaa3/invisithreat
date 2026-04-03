@@ -45,4 +45,25 @@ RULES = [
         "description": "Weak cryptographic function.",
         "category": "Cryptography",
     },
+    {
+        "name": "Integer Overflow",
+        "pattern": r"size_t|int\s*\+\s*int|unsigned|overflow",
+        "severity": "MEDIUM",
+        "description": "Integer overflow/underflow risk.",
+        "category": "Memory Safety",
+    },
+    {
+        "name": "Unchecked Function Return",
+        "pattern": r"malloc|calloc|realloc|fopen|recv",
+        "severity": "MEDIUM",
+        "description": "Return value not checked (could be NULL).",
+        "category": "Error Handling",
+    },
+    {
+        "name": "XXE/XML Parsing",
+        "pattern": r"libxml2|xml2-config|xmlParseFile",
+        "severity": "HIGH",
+        "description": "XXE vulnerability in XML parsing.",
+        "category": "Injection",
+    },
 ]
