@@ -725,6 +725,54 @@ export default function ProjectDetail() {
             ))}
           </div>
 
+          {/* Scan History — Top */}
+          <div className="rounded-2xl overflow-hidden animate-slide-up mb-6"
+            style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)', animationDelay: '0.07s' }}>
+            <div className="flex items-center justify-between px-5 py-4"
+              style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <span className="text-xs font-semibold text-white/40 uppercase tracking-widest">Scan History</span>
+              <div className="flex items-center gap-3">
+                {hasActive && (
+                  <span className="flex items-center gap-1.5 text-xs text-yellow-400/60">
+                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                    Live
+                  </span>
+                )}
+                {scans.length > 0 && (
+                  <span className="text-xs text-white/20">{scans.length} scan{scans.length !== 1 ? 's' : ''}</span>
+                )}
+              </div>
+            </div>
+
+            {scans.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5">
+                    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                </div>
+                <p className="text-white/40 text-sm font-medium mb-1">No scans yet</p>
+                <p className="text-white/20 text-xs mb-5 text-center max-w-xs">
+                  Start your first scan to detect vulnerabilities in this project.
+                </p>
+                {canEdit && (
+                <button
+                  onClick={() => navigate('/scans/new')}
+                  className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white"
+                  style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 14px rgba(255,107,43,0.2)' }}
+                >
+                  Start Scan
+                </button>
+                )}
+              </div>
+            ) : (
+              scans.map(scan => (
+                <ScanRow key={scan.id} scan={scan} onRescan={canEdit ? handleRescan : null} rescanning={rescanning} />
+              ))
+            )}
+          </div>
+
           {/* Current Vulnerabilities — always visible, latest completed scan */}
           {(() => {
             const completed = scans.filter(s => s.status === 'completed')
@@ -800,54 +848,6 @@ export default function ProjectDetail() {
               </div>
             )
           })()}
-
-          {/* Scan history */}
-          <div className="rounded-2xl overflow-hidden animate-slide-up"
-            style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)', animationDelay: '0.1s' }}>
-            <div className="flex items-center justify-between px-5 py-4"
-              style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-              <span className="text-xs font-semibold text-white/40 uppercase tracking-widest">Scan History</span>
-              <div className="flex items-center gap-3">
-                {hasActive && (
-                  <span className="flex items-center gap-1.5 text-xs text-yellow-400/60">
-                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-                    Live
-                  </span>
-                )}
-                {scans.length > 0 && (
-                  <span className="text-xs text-white/20">{scans.length} scan{scans.length !== 1 ? 's' : ''}</span>
-                )}
-              </div>
-            </div>
-
-            {scans.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
-                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5">
-                    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  </svg>
-                </div>
-                <p className="text-white/40 text-sm font-medium mb-1">No scans yet</p>
-                <p className="text-white/20 text-xs mb-5 text-center max-w-xs">
-                  Start your first scan to detect vulnerabilities in this project.
-                </p>
-                {canEdit && (
-                <button
-                  onClick={() => navigate('/scans/new')}
-                  className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white"
-                  style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 14px rgba(255,107,43,0.2)' }}
-                >
-                  Start Scan
-                </button>
-                )}
-              </div>
-            ) : (
-              scans.map(scan => (
-                <ScanRow key={scan.id} scan={scan} onRescan={canEdit ? handleRescan : null} rescanning={rescanning} />
-              ))
-            )}
-          </div>
 
           {/* Project meta */}
           <div className="mt-4 rounded-2xl px-5 py-4 animate-slide-up"
