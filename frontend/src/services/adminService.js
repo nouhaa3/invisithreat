@@ -38,3 +38,19 @@ export const adminUpdateUser = async (userId, { nom, email }) => {
   const res = await api.patch(`/api/auth/admin/users/${userId}/profile`, { nom, email })
   return res.data
 }
+
+// Bulk operations
+export const adminBulkDeleteUsers = async (userIds) => {
+  const res = await api.post('/api/auth/admin/users/bulk/delete', { user_ids: userIds })
+  return res.data
+}
+
+export const adminBulkActivateUsers = async (userIds) => {
+  const res = await api.patch('/api/auth/admin/users/bulk/activate', { user_ids: userIds })
+  return res.data
+}
+
+export const adminBulkDeactivateUsers = async (userIds) => {
+  const res = await api.patch('/api/auth/admin/users/bulk/deactivate', { user_ids: userIds })
+  return res.data
+}

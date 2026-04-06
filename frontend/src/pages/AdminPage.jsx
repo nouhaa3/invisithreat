@@ -11,6 +11,9 @@ import {
   adminRejectUser,
   adminDeleteUser,
   adminUpdateUser,
+  adminBulkDeleteUsers,
+  adminBulkActivateUsers,
+  adminBulkDeactivateUsers,
 } from '../services/adminService'
 
 const ROLES = ['Admin', 'Developer', 'Security Manager', 'Viewer']
@@ -47,6 +50,11 @@ export default function AdminPage() {
   const [filterRole, setFilterRole] = useState('All')
   const [editingUser, setEditingUser] = useState(null)  // { id, nom, email }
   const [saving, setSaving]           = useState({})
+  const [selectedUserIds, setSelectedUserIds] = useState(new Set())
+  const [bulkProcessing, setBulkProcessing] = useState(false)
+  const [toolbarPos, setToolbarPos] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
 
   useEffect(() => {
     if (me && me.role_name !== 'Admin') navigate('/dashboard', { replace: true })
@@ -140,6 +148,107 @@ export default function AdminPage() {
       setSaving(p => ({ ...p, [editingUser.id]: false }))
     }
   }
+
+  // Bulk operations
+  const handleBulkDelete = async () => {
+    if (selectedUserIds.size === 0) return
+    const count = selectedUserIds.size
+    if (!window.confirm(`Permanently delete ${count} user(s)? This cannot be undone.`)) return
+    
+    setBulkProcessing(true)
+    try {
+      const result = await adminBulkDeleteUsers(Array.from(selectedUserIds))
+      setUsers(prev => prev.filter(u => !selectedUserIds.has(u.id)))
+      setSelectedUserIds(new Set())
+      alert(`Successfully deleted ${result.success_count} user(s)${result.failed_count > 0 ? `. Failed: ${result.failed_count}` : ''}`)
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to delete users')
+    } finally {
+      setBulkProcessing(false)
+    }
+  }
+
+  const handleBulkActivate = async () => {
+    if (selectedUserIds.size === 0) return
+    const count = selectedUserIds.size
+    
+    setBulkProcessing(true)
+    try {
+      const result = await adminBulkActivateUsers(Array.from(selectedUserIds))
+      setUsers(prev => prev.map(u => selectedUserIds.has(u.id) ? { ...u, is_active: true } : u))
+      setSelectedUserIds(new Set())
+      alert(`Successfully activated ${result.success_count} user(s)${result.failed_count > 0 ? `. Failed: ${result.failed_count}` : ''}`)
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to activate users')
+    } finally {
+      setBulkProcessing(false)
+    }
+  }
+
+  const handleBulkDeactivate = async () => {
+    if (selectedUserIds.size === 0) return
+    const count = selectedUserIds.size
+    if (!window.confirm(`Deactivate ${count} user(s)? They will receive a notification.`)) return
+    
+    setBulkProcessing(true)
+    try {
+      const result = await adminBulkDeactivateUsers(Array.from(selectedUserIds))
+      setUsers(prev => prev.map(u => selectedUserIds.has(u.id) ? { ...u, is_active: false } : u))
+      setSelectedUserIds(new Set())
+      alert(`Successfully deactivated ${result.success_count} user(s)${result.failed_count > 0 ? `. Failed: ${result.failed_count}` : ''}`)
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to deactivate users')
+    } finally {
+      setBulkProcessing(false)
+    }
+  }
+
+  const toggleUserSelection = (userId, isMe) => {
+    if (isMe) return // Can't select your own user
+    setSelectedUserIds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(userId)) {
+        newSet.delete(userId)
+      } else {
+        newSet.add(userId)
+      }
+      return newSet
+    })
+  }
+
+  const toggleSelectAll = (filteredUsers, isMe) => {
+    if (selectedUserIds.size === filteredUsers.filter(u => u.id !== me?.id).length) {
+      setSelectedUserIds(new Set())
+    } else {
+      const allIds = new Set(filteredUsers.filter(u => u.id !== me?.id).map(u => u.id))
+      setSelectedUserIds(allIds)
+    }
+  }
+
+  const handleToolbarMouseDown = (e) => {
+    setIsDragging(true)
+    setDragOffset({
+      x: e.clientX - toolbarPos.x,
+      y: e.clientY - toolbarPos.y,
+    })
+  }
+
+  useEffect(() => {
+    if (!isDragging) return
+    const handleMouseMove = (e) => {
+      setToolbarPos({
+        x: e.clientX - dragOffset.x,
+        y: e.clientY - dragOffset.y,
+      })
+    }
+    const handleMouseUp = () => setIsDragging(false)
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging, dragOffset])
 
   const pending  = users.filter(u => u.is_pending)
   const active   = users.filter(u => !u.is_pending)
@@ -316,11 +425,20 @@ export default function AdminPage() {
 
             <div className="grid grid-cols-12 gap-4 px-5 py-3 text-xs font-semibold uppercase tracking-widest text-white/25"
               style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-              <div className="col-span-4">User</div>
-              <div className="col-span-3 text-center">Role</div>
+              <div className="col-span-1 flex items-center justify-center">
+                <input
+                  type="checkbox"
+                  checked={selectedUserIds.size === filtered.filter(u => u.id !== me?.id).length && filtered.filter(u => u.id !== me?.id).length > 0}
+                  onChange={() => toggleSelectAll(filtered, me?.id)}
+                  className="w-4 h-4 rounded cursor-pointer accent-orange-500"
+                  disabled={filtered.filter(u => u.id !== me?.id).length === 0}
+                />
+              </div>
+              <div className="col-span-3 text-center">User</div>
+              <div className="col-span-2 text-center">Role</div>
               <div className="col-span-2 text-center">Status</div>
               <div className="col-span-2 text-center">Joined</div>
-              <div className="col-span-1 text-right">Actions</div>
+              <div className="col-span-2 text-right">Actions</div>
             </div>
 
             {loading ? (
@@ -335,13 +453,29 @@ export default function AdminPage() {
             ) : (
               filtered.map((u, idx) => {
                 const isMe = u.id === me?.id
+                const isSelected = selectedUserIds.has(u.id)
                 return (
                   <div key={u.id}
-                    className="grid grid-cols-12 gap-4 px-5 py-4 items-center transition-colors hover:bg-white/[0.015]"
-                    style={{ borderBottom: idx < filtered.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                    className={`grid grid-cols-12 gap-4 px-5 py-4 items-center transition-all duration-200 ${isSelected ? 'bg-white/[0.04]' : 'hover:bg-white/[0.015]'}`}
+                    style={{
+                      borderBottom: idx < filtered.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                      borderLeft: isSelected ? '3px solid #FF8C5A' : '3px solid transparent',
+                      paddingLeft: isSelected ? '17px' : '20px',
+                    }}>
+
+                    {/* Checkbox */}
+                    <div className="col-span-1 flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleUserSelection(u.id, isMe)}
+                        disabled={isMe}
+                        className="w-4 h-4 rounded cursor-pointer accent-orange-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                      />
+                    </div>
 
                     {/* User */}
-                    <div className="col-span-4 flex items-center gap-3 min-w-0">
+                    <div className="col-span-3 flex items-center gap-3 min-w-0">
                       <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0"
                         style={{ background: 'rgba(255,107,43,0.1)', border: '1px solid rgba(255,107,43,0.15)', color: '#FF8C5A' }}>
                         {u.nom?.charAt(0).toUpperCase()}
@@ -377,7 +511,7 @@ export default function AdminPage() {
                     </div>
 
                     {/* Role selector */}
-                    <div className="col-span-3 flex justify-center">
+                    <div className="col-span-2 flex justify-center">
                       {isMe || u.requested_role_id ? (
                         <RoleBadge role={u.role_name} />
                       ) : (
@@ -433,7 +567,7 @@ export default function AdminPage() {
                     </div>
 
                     {/* Actions: edit + delete */}
-                    <div className="col-span-1 flex justify-end gap-2">
+                    <div className="col-span-2 flex justify-end gap-2">
                       {!isMe && editingUser?.id === u.id ? (
                         <>
                           <button
@@ -501,6 +635,110 @@ export default function AdminPage() {
               })
             )}
           </div>
+
+          {/* ── Bulk actions toolbar ─────────────────────────────────────────── */}
+          {selectedUserIds.size > 0 && (
+            <div className="fixed px-4 z-50 pointer-events-none animate-slide-up"
+              style={{
+                left: `${toolbarPos.x}px`,
+                top: `${toolbarPos.y}px`,
+                animation: 'slideUpBouncy 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+              }}>
+              <style>{`
+                @keyframes slideUpBouncy {
+                  0% { opacity: 0; transform: translateY(48px); }
+                  100% { opacity: 1; transform: translateY(0); }
+                }
+              `}</style>
+              <div className="rounded-2xl overflow-hidden shadow-2xl pointer-events-auto cursor-move select-none"
+                onMouseDown={handleToolbarMouseDown}
+                style={{
+                  background: 'rgba(17, 17, 17, 0.95)',
+                  border: '1px solid rgba(255,107,43,0.4)',
+                  backdropFilter: 'blur(20px)',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.3), 0 0 40px rgba(0,0,0,0.5)',
+                }}>
+                <div className="flex items-center justify-between gap-6 px-6 py-4">
+                  
+                  {/* Left: Selection info */}
+                  <div className="flex items-center gap-3 min-w-max">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-lg"
+                      style={{
+                        background: 'rgba(255,107,43,0.15)',
+                        border: '1px solid rgba(255,107,43,0.3)',
+                      }}>
+                      <span className="text-xs font-bold text-orange-400">
+                        {selectedUserIds.size}
+                      </span>
+                    </div>
+                    <span className="text-sm font-semibold text-white">
+                      {selectedUserIds.size} user{selectedUserIds.size !== 1 ? 's' : ''} selected
+                    </span>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="h-6 w-px bg-white/10" />
+
+                  {/* Right: Actions */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSelectedUserIds(new Set())}
+                      disabled={bulkProcessing}
+                      className="px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 disabled:opacity-50"
+                      style={{
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        color: 'rgba(255,255,255,0.5)',
+                      }}>
+                      Cancel
+                    </button>
+                    
+                    <button
+                      onClick={handleBulkActivate}
+                      disabled={bulkProcessing}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 disabled:opacity-50"
+                      style={{
+                        background: 'rgba(34,197,94,0.12)',
+                        border: '1px solid rgba(34,197,94,0.3)',
+                        color: '#22c55e',
+                      }}>
+                      {bulkProcessing && <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />}
+                      Activate
+                    </button>
+
+                    <button
+                      onClick={handleBulkDeactivate}
+                      disabled={bulkProcessing}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 disabled:opacity-50"
+                      style={{
+                        background: 'rgba(245,158,11,0.12)',
+                        border: '1px solid rgba(245,158,11,0.3)',
+                        color: '#fbbf24',
+                      }}>
+                      {bulkProcessing && <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />}
+                      Deactivate
+                    </button>
+
+                    <button
+                      onClick={handleBulkDelete}
+                      disabled={bulkProcessing}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 disabled:opacity-50"
+                      style={{
+                        background: 'rgba(239,68,68,0.12)',
+                        border: '1px solid rgba(239,68,68,0.3)',
+                        color: '#f87171',
+                      }}>
+                      {bulkProcessing && <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />}
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Padding for bulk toolbar */}
+          {selectedUserIds.size > 0 && <div className="h-24" />}
         </div>
       </main>
     </AppLayout>
