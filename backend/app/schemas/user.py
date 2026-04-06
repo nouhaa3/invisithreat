@@ -98,3 +98,15 @@ class ChangePasswordRequest(BaseModel):
     """Payload to change own password"""
     current_password: str
     new_password: str = Field(..., min_length=8, max_length=100)
+
+
+class BulkUserActionRequest(BaseModel):
+    """Payload for bulk user operations"""
+    user_ids: list[uuid.UUID] = Field(..., min_items=1, max_items=1000)
+
+
+class BulkUserActionResponse(BaseModel):
+    """Response for bulk user operations"""
+    success_count: int
+    failed_count: int
+    errors: dict[str, str] = {}  # user_id -> error message

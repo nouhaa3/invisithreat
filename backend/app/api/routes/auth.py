@@ -6,7 +6,7 @@ from typing import List
 from datetime import timedelta
 from app.db.session import get_db
 from app.schemas.auth import LoginResponse, Token, RefreshTokenRequest, ResendVerificationRequest, RoleRequest
-from app.schemas.user import UserCreate, UserWithRole, RoleUpdateRequest, UserProfileUpdateRequest, UserAdminResponse, ForgotPasswordRequest, VerifyResetCodeRequest, ResetPasswordRequest, SelfProfileUpdateRequest, ChangePasswordRequest
+from app.schemas.user import UserCreate, UserWithRole, RoleUpdateRequest, UserProfileUpdateRequest, UserAdminResponse, ForgotPasswordRequest, VerifyResetCodeRequest, ResetPasswordRequest, SelfProfileUpdateRequest, ChangePasswordRequest, BulkUserActionRequest, BulkUserActionResponse
 from app.services.auth import authenticate_user, register_user, get_user_with_role
 from app.core.jwt import create_access_token, create_refresh_token, decode_token, get_current_user, require_admin, create_action_token, decode_action_token, create_totp_token
 from app.core.api_key_auth import get_user_from_api_key
@@ -766,3 +766,169 @@ async def admin_delete_user(
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     db.delete(user)
     db.commit()
+
+
+# ─── Bulk user operations ─────────────────────────────────────────────────────
+
+@router.post("/admin/users/bulk/delete", response_model=BulkUserActionResponse, tags=["Admin"])
+async def admin_bulk_delete_users(
+    payload: BulkUserActionRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Admin only — bulk delete multiple user accounts."""
+    success_count = 0
+    failed_count = 0
+    errors = {}
+    
+    for user_id in payload.user_ids:
+        try:
+            user = db.query(User).filter(User.id == user_id).first()
+            if not user:
+                failed_count += 1
+                errors[str(user_id)] = "User not found"
+                continue
+            
+            # Check if it's the primary admin
+            if _is_primary_admin(user):
+                failed_count += 1
+                errors[str(user_id)] = "Primary admin account is protected and cannot be deleted"
+                continue
+            
+            # Check if user is trying to delete themselves
+            if str(user.id) == str(admin.id):
+                failed_count += 1
+                errors[str(user_id)] = "Cannot delete your own account"
+                continue
+            
+            db.delete(user)
+            success_count += 1
+        except HTTPException as e:
+            failed_count += 1
+            errors[str(user_id)] = e.detail
+        except Exception as e:
+            failed_count += 1
+            errors[str(user_id)] = "An unexpected error occurred"
+    
+    db.commit()
+    
+    # Create audit log for bulk deletion
+    if success_count > 0:
+        create_audit_log(db, admin.id, "bulk_delete_users", f"Deleted {success_count} user(s)")
+    
+    return BulkUserActionResponse(success_count=success_count, failed_count=failed_count, errors=errors)
+
+
+@router.patch("/admin/users/bulk/activate", response_model=BulkUserActionResponse, tags=["Admin"])
+async def admin_bulk_activate_users(
+    payload: BulkUserActionRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Admin only — bulk activate multiple user accounts."""
+    if not email_is_configured():
+        raise HTTPException(status_code=503, detail="Email service is not configured. Contact an administrator.")
+    
+    success_count = 0
+    failed_count = 0
+    errors = {}
+    
+    for user_id in payload.user_ids:
+        try:
+            user = db.query(User).filter(User.id == user_id).first()
+            if not user:
+                failed_count += 1
+                errors[str(user_id)] = "User not found"
+                continue
+            
+            # Check if it's the primary admin
+            if _is_primary_admin(user):
+                failed_count += 1
+                errors[str(user_id)] = "Primary admin account is protected and cannot be modified"
+                continue
+            
+            # Check if user is trying to activate themselves
+            if str(user.id) == str(admin.id):
+                failed_count += 1
+                errors[str(user_id)] = "Cannot deactivate your own account"
+                continue
+            
+            # Only activate if not already active
+            if not user.is_active:
+                user.is_active = True
+                user.is_pending = False
+                db.flush()
+                notify_user_account_activated(user.nom, user.email, admin.nom, settings.FRONTEND_URL)
+            
+            success_count += 1
+        except HTTPException as e:
+            failed_count += 1
+            errors[str(user_id)] = e.detail
+        except Exception as e:
+            failed_count += 1
+            errors[str(user_id)] = "An unexpected error occurred"
+    
+    db.commit()
+    
+    # Create audit log for bulk activation
+    if success_count > 0:
+        create_audit_log(db, admin.id, "bulk_activate_users", f"Activated {success_count} user(s)")
+    
+    return BulkUserActionResponse(success_count=success_count, failed_count=failed_count, errors=errors)
+
+
+@router.patch("/admin/users/bulk/deactivate", response_model=BulkUserActionResponse, tags=["Admin"])
+async def admin_bulk_deactivate_users(
+    payload: BulkUserActionRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Admin only — bulk deactivate multiple user accounts."""
+    if not email_is_configured():
+        raise HTTPException(status_code=503, detail="Email service is not configured. Contact an administrator.")
+    
+    success_count = 0
+    failed_count = 0
+    errors = {}
+    
+    for user_id in payload.user_ids:
+        try:
+            user = db.query(User).filter(User.id == user_id).first()
+            if not user:
+                failed_count += 1
+                errors[str(user_id)] = "User not found"
+                continue
+            
+            # Check if it's the primary admin
+            if _is_primary_admin(user):
+                failed_count += 1
+                errors[str(user_id)] = "Primary admin account is protected and cannot be modified"
+                continue
+            
+            # Check if user is trying to deactivate themselves
+            if str(user.id) == str(admin.id):
+                failed_count += 1
+                errors[str(user_id)] = "Cannot deactivate your own account"
+                continue
+            
+            # Only deactivate if active
+            if user.is_active:
+                user.is_active = False
+                db.flush()
+                notify_user_account_deactivated(user.nom, user.email, admin.nom, settings.FRONTEND_URL)
+            
+            success_count += 1
+        except HTTPException as e:
+            failed_count += 1
+            errors[str(user_id)] = e.detail
+        except Exception as e:
+            failed_count += 1
+            errors[str(user_id)] = "An unexpected error occurred"
+    
+    db.commit()
+    
+    # Create audit log for bulk deactivation
+    if success_count > 0:
+        create_audit_log(db, admin.id, "bulk_deactivate_users", f"Deactivated {success_count} user(s)")
+    
+    return BulkUserActionResponse(success_count=success_count, failed_count=failed_count, errors=errors)
