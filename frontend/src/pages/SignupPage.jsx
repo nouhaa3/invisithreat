@@ -43,7 +43,12 @@ export default function SignupPage() {
     setLoading(true)
     setServerError('')
     try {
-      const data = await register({ nom: form.nom, email: form.email, password: form.password })
+      const data = await register({ 
+        nom: form.nom, 
+        email: form.email, 
+        password: form.password,
+        confirmPassword: form.confirmPassword 
+      })
       // Backend now returns { status: 'email_verification_required', ... }
       if (data?.status === 'email_verification_required') {
         setVerificationData({

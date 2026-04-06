@@ -16,13 +16,14 @@ export const login = async (email, password) => {
 }
 
 /**
- * Register - JSON body with nom, email, password
+ * Register - JSON body with nom, email, password, password_confirm
  */
-export const register = async ({ nom, email, password }) => {
+export const register = async ({ nom, email, password, confirmPassword }) => {
   const response = await api.post('/api/auth/register', {
     nom,
     email,
     password,
+    password_confirm: confirmPassword,
   })
   return response.data
 }
