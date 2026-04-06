@@ -88,9 +88,10 @@ class UserAdminResponse(UserWithRole):
 
 
 class SelfProfileUpdateRequest(BaseModel):
-    """Payload for a user updating their own name or email"""
+    """Payload for a user updating their own name, email, or profile picture"""
     nom: Optional[str] = Field(None, min_length=2, max_length=100)
     email: Optional[EmailStr] = None
+    profile_picture: Optional[str] = Field(None, description="Base64 encoded profile picture data")
 
 
 class ChangePasswordRequest(BaseModel):

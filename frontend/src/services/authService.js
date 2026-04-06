@@ -122,10 +122,10 @@ export const resetPassword = async (reset_token, new_password) => {
 }
 
 /**
- * Update own profile (name and/or email)
+ * Update own profile (name, email, and/or profile picture)
  */
-export const updateMyProfile = async ({ nom, email }) => {
-  const response = await api.patch('/api/auth/me', { nom, email })
+export const updateMyProfile = async ({ nom, email, profile_picture }) => {
+  const response = await api.patch('/api/auth/me', { nom, email, profile_picture })
   return response.data  // UserWithRole
 }
 

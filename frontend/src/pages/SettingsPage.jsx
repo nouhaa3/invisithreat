@@ -6,6 +6,7 @@ import { updateMyProfile, changeMyPassword } from '../services/authService'
 import { listApiKeys, createApiKey, revokeApiKey } from '../services/apiKeyService'
 import { getMyAuditLogs } from '../services/auditLogService'
 import * as totpService from '../services/totpService'
+import ImageCropper from '../components/ImageCropper'
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
@@ -248,17 +249,81 @@ function GeneralTab() {
 function ProfileTab({ user, updateUser }) {
   const [nom, setNom]     = useState(user?.nom ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
+  const [profilePicture, setProfilePicture] = useState(user?.profile_picture ?? null)
+  const [previewImage, setPreviewImage] = useState(user?.profile_picture ?? null)
   const [saving, setSaving] = useState(false)
   const [toast, setToast]   = useState(null)
+  const [showCropper, setShowCropper] = useState(false)
+  const [cropperImage, setCropperImage] = useState(null)
+  const fileInputRef = useRef(null)
 
-  const dirty = nom !== (user?.nom ?? '') || email !== (user?.email ?? '')
+  const dirty = nom !== (user?.nom ?? '') || email !== (user?.email ?? '') || profilePicture !== (user?.profile_picture ?? null)
+
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setToast({ type: 'error', msg: 'Please select a valid image file.' })
+      return
+    }
+
+    // Validate file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      setToast({ type: 'error', msg: 'Image must be smaller than 5MB.' })
+      return
+    }
+
+    // Convert to base64 and show cropper
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const base64Data = event.target.result
+      setCropperImage(base64Data)
+      setShowCropper(true)
+      setToast(null)
+    }
+    reader.onerror = () => {
+      setToast({ type: 'error', msg: 'Failed to read image file.' })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleCropConfirm = (croppedImageData) => {
+    setProfilePicture(croppedImageData)
+    setPreviewImage(croppedImageData)
+    setShowCropper(false)
+    setCropperImage(null)
+    setToast(null)
+  }
+
+  const handleCropCancel = () => {
+    setShowCropper(false)
+    setCropperImage(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const removeProfilePicture = () => {
+    setProfilePicture(null)
+    setPreviewImage(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+    setToast(null)
+  }
 
   const submit = async (e) => {
     e.preventDefault()
     if (!nom.trim()) return
     setSaving(true); setToast(null)
     try {
-      const updated = await updateMyProfile({ nom: nom.trim(), email: email.trim() || undefined })
+      const updatePayload = { nom: nom.trim(), email: email.trim() || undefined }
+      if (profilePicture !== (user?.profile_picture ?? null)) {
+        updatePayload.profile_picture = profilePicture
+      }
+      const updated = await updateMyProfile(updatePayload)
       updateUser(updated)
       setToast({ type: 'success', msg: 'Profile updated successfully.' })
     } catch (err) {
@@ -274,14 +339,30 @@ function ProfileTab({ user, updateUser }) {
 
   return (
     <div>
+      {showCropper && (
+        <ImageCropper
+          imageData={cropperImage}
+          onConfirm={handleCropConfirm}
+          onCancel={handleCropCancel}
+        />
+      )}
+
       <SectionHeader title="Account Profile" subtitle="Your personal information visible to team members." />
 
       {/* Identity card */}
       <div className="flex items-center gap-5 p-5 rounded-2xl mb-7"
         style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold flex-shrink-0"
-          style={{ background: 'rgba(255,107,43,0.1)', border: '1px solid rgba(255,107,43,0.2)', color: ORANGE_LIGHT }}>
-          {initials}
+        <div 
+          className="relative w-16 h-16 rounded-2xl flex-shrink-0 overflow-hidden flex items-center justify-center text-xl font-bold"
+          style={{ 
+            backgroundImage: previewImage ? `url('${previewImage}')` : 'none',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundColor: 'rgba(255,107,43,0.1)',
+            border: '1px solid rgba(255,107,43,0.2)',
+            color: ORANGE_LIGHT
+          }}>
+          {!previewImage && initials}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-lg font-bold text-white truncate">{user?.nom}</p>
@@ -294,6 +375,39 @@ function ProfileTab({ user, updateUser }) {
       </div>
 
       <form onSubmit={submit} className="flex flex-col gap-5">
+        <Field label="Profile Picture">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleImageChange}
+            className="hidden"
+          />
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all"
+              style={{ background: ORANGE, border: `1px solid ${ORANGE}` }}
+            >
+              Choose Image
+            </button>
+            {previewImage && (
+              <button
+                type="button"
+                onClick={removeProfilePicture}
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white/60 transition-all"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          {previewImage && (
+            <p className="text-xs text-white/40 mt-2">Image selected and ready to save</p>
+          )}
+        </Field>
+
         <div className="grid grid-cols-2 gap-4">
           <Field label="Full Name">
             <TextInput value={nom} onChange={e => setNom(e.target.value)} placeholder="Your name" autoComplete="name" />
