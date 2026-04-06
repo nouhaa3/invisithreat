@@ -13,7 +13,6 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.db.migrate import run_migrations
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,7 @@ app = FastAPI(
     openapi_url="/api/openapi.json"
 )
 
-# CORS middleware
+# CORS middleware - restricted configuration for security
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -39,8 +38,8 @@ app.add_middleware(
         "http://localhost:3002",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
 )
 
 # Rate limiting middleware

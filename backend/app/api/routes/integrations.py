@@ -3,7 +3,7 @@ import hmac
 import secrets
 import time
 import uuid
-from urllib.parse import urlencode, urlparse, parse_qs
+from urllib.parse import urlencode, urlparse
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse

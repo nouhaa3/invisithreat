@@ -27,7 +27,7 @@ from app.services.risk_score import upsert_scan_risk_score
 # Try to import new modular rules system, fall back to legacy rules if unavailable
 try:
     sys.path.insert(0, str(Path(__file__).parent.parent.parent / "cli"))
-    from rules import get_rules_for_language, RULES_BY_LANGUAGE
+    from rules import get_rules_for_language
     USE_NEW_RULES = True
 except ImportError:
     USE_NEW_RULES = False
@@ -361,7 +361,7 @@ def _get_language_specific_rules(file_ext: str) -> list:
                 pass
         
         return compiled_rules
-    except Exception:
+    except (ValueError, KeyError, RuntimeError) as exc:
         # If anything goes wrong, return empty list to fall back to legacy rules
         return []
 
@@ -477,7 +477,7 @@ def _rel_path(base: Path, path_value: str) -> str:
     p = Path(path_value)
     try:
         return str(p.resolve().relative_to(base.resolve()))
-    except Exception:
+    except (OSError, ValueError):
         return str(p).replace("\\", "/")
 
 
@@ -551,12 +551,12 @@ def _run_semgrep_scan(base: Path) -> tuple[list[dict], dict]:
 
     cmd = ["semgrep", "scan", "--config", "auto", "--json", "--quiet", str(base)]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=900, check=False)
     except FileNotFoundError:
         run_info["error"] = "semgrep binary not found"
         run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
         return findings, run_info
-    except Exception as exc:
+    except (OSError, subprocess.TimeoutExpired) as exc:
         run_info["status"] = "failed"
         run_info["error"] = str(exc)
         run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
@@ -618,12 +618,12 @@ def _run_bandit_scan(base: Path) -> tuple[list[dict], dict]:
 
     cmd = ["bandit", "-r", str(base), "-f", "json", "-q"]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=900, check=False)
     except FileNotFoundError:
         run_info["error"] = "bandit binary not found"
         run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
         return findings, run_info
-    except Exception as exc:
+    except (OSError, subprocess.TimeoutExpired) as exc:
         run_info["status"] = "failed"
         run_info["error"] = str(exc)
         run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
@@ -638,7 +638,7 @@ def _run_bandit_scan(base: Path) -> tuple[list[dict], dict]:
 
     try:
         payload = json.loads(result.stdout or "{}")
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, TypeError) as exc:
         run_info["status"] = "failed"
         run_info["error"] = "invalid bandit json output"
         run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
@@ -719,7 +719,7 @@ def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str, githu
                 cmd.extend(["--branch", target_branch])
             cmd.extend([target_url, tmpdir])
 
-            clone_result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            clone_result = subprocess.run(cmd, capture_output=True, text=True, timeout=180, check=False)
             if clone_result.returncode == 0:
                 break
 
@@ -781,7 +781,7 @@ def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str, githu
         _upsert_pipeline_execution(db, scan, "completed")
         upsert_scan_risk_score(db, scan)
 
-    except Exception as exc:
+    except (RuntimeError, OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
         try:
             scan = db.query(Scan).filter(Scan.id == scan_id).first()
             if scan:

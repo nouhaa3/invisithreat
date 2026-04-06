@@ -1,0 +1,72 @@
+# Docker Compose with HTTPS support
+# Usage: docker-compose -f docker-compose.https.yml up
+
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: invisithreat-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - invisithreat_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: invisithreat-backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      SECRET_KEY: ${SECRET_KEY}
+      FRONTEND_URL: ${FRONTEND_URL}
+      BACKEND_URL: https://localhost:8443
+      # ... other env vars ...
+    ports:
+      - "8443:8443"  # HTTPS port
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/certs:/app/certs:ro
+    command: >
+      uvicorn app.main:app 
+      --host 0.0.0.0 
+      --port 8443
+      --ssl-keyfile=/app/certs/server.key
+      --ssl-certfile=/app/certs/server.crt
+    networks:
+      - invisithreat_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: invisithreat-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: https://localhost:8443/api
+    depends_on:
+      - backend
+    networks:
+      - invisithreat_network
+
+volumes:
+  postgres_data:
+
+networks:
+  invisithreat_network:
+    driver: bridge
