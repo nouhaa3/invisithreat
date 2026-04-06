@@ -8,9 +8,9 @@ services:
     image: postgres:16-alpine
     container_name: invisithreat-db
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-invisithreat_db}
+      POSTGRES_USER: ${POSTGRES_USER:-invisithreat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-invisithreat_password}
     ports:
       - "5432:5432"
     healthcheck:
@@ -29,9 +29,14 @@ services:
       dockerfile: Dockerfile
     container_name: invisithreat-backend
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      SECRET_KEY: ${SECRET_KEY}
-      FRONTEND_URL: ${FRONTEND_URL}
+      APP_NAME: ${APP_NAME:-InvisiThreat}
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://invisithreat:invisithreat_password@db:5432/invisithreat_db}
+      SECRET_KEY: ${SECRET_KEY:-CHANGE_THIS_SECRET_KEY}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       BACKEND_URL: https://localhost:8443
       # ... other env vars ...
     ports:

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from typing import Optional
 from datetime import datetime
 import uuid
@@ -14,8 +14,18 @@ class UserCreate(BaseModel):
     """Schema for user registration - user automatically gets VIEWER role"""
     email: EmailStr
     nom: str = Field(..., min_length=2, max_length=100)
+    prenomsecond: Optional[str] = Field(None, min_length=2, max_length=100)
     password: str = Field(..., min_length=8, max_length=100)
+    password_confirm: str = Field(..., min_length=8, max_length=100)
     # role_name removed - users always start as VIEWER
+    
+    @field_validator("password_confirm")
+    @classmethod
+    def passwords_match(cls, v, info):
+        """Validate that password and password_confirm match"""
+        if "password" in info.data and v != info.data["password"]:
+            raise ValueError("Passwords do not match")
+        return v
 
 
 class UserLogin(BaseModel):

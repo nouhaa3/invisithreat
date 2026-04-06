@@ -2,15 +2,14 @@
 Tests for main FastAPI application and authentication
 """
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import pytest
 import json
 import uuid
 
 from app.main import app
-from app.db.base import Base
-from app.db.session import get_db
+from app.db.base import Base, import_models
+from app.db.session import get_db, engine as db_engine, SessionLocal
 from app.models.user import User
 from app.models.role import Role
 from app.core.security import hash_password
@@ -18,17 +17,17 @@ from app.schemas.user import UserCreate
 from app.services.auth import register_user
 from datetime import datetime, UTC
 
-# Setup test database
-SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///:memory:"
-engine = create_engine(SQLALCHEMY_TEST_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Ensure all models are imported before creating tables
+import_models()
 
-Base.metadata.create_all(bind=engine)
+# Use the same engine that the app uses (but overridden to SQLite by conftest)
+engine = db_engine
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def override_get_db():
     try:
-        db = TestingSessionLocal()
+        db = SessionLocal()
         yield db
     finally:
         db.close()
@@ -38,9 +37,54 @@ app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def cleanup_users():
+    """Auto-cleanup users before each test to ensure isolation"""
+    yield  # Let test run
+    # After test, clean up users
+    db = TestingSessionLocal()
+    try:
+        db.query(User).delete()
+        db.commit()
+    finally:
+        db.close()
+
+
+@pytest.fixture
+def unique_email():
+    """Generate unique email for each test"""
+    return f"test-{uuid.uuid4().hex[:8]}@test.com"
+
+
+@pytest.fixture
+def setup_roles():
+    """Create default roles for testing"""
+    db = TestingSessionLocal()
+    try:
+        roles_data = [
+            {"name": "Admin", "description": "Administrator"},
+            {"name": "Security Manager", "description": "Security Manager"},
+            {"name": "Developer", "description": "Developer"},
+            {"name": "Viewer", "description": "Viewer"},
+        ]
+        # Check if roles already exist
+        existing_roles = db.query(Role).filter(Role.name.in_([r["name"] for r in roles_data])).all()
+        existing_names = {r.name for r in existing_roles}
+        
+        for role_data in roles_data:
+            if role_data["name"] not in existing_names:
+                role = Role(name=role_data["name"], description=role_data["description"])
+                db.add(role)
+        db.commit()
+        yield db
+    finally:
+        db.close()
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # BASIC TESTS
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def test_read_root():
     """Test root endpoint"""
@@ -69,38 +113,13 @@ def test_docs_accessible():
 # AUTHENTICATION TESTS
 # ──────────────────────────────────────────────────────────────────────────────
 
-@pytest.fixture
-def test_db():
-    """Create a fresh database for each test"""
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    db = TestingSessionLocal()
-    yield db
-    db.close()
 
-
-@pytest.fixture
-def setup_roles(test_db):
-    """Create default roles for testing"""
-    roles_data = [
-        {"name": "admin", "description": "Administrator"},
-        {"name": "security_manager", "description": "Security Manager"},
-        {"name": "developer", "description": "Developer"},
-        {"name": "viewer", "description": "Viewer"},
-    ]
-    for role_data in roles_data:
-        role = Role(name=role_data["name"], description=role_data["description"])
-        test_db.add(role)
-    test_db.commit()
-    return test_db
-
-
-def test_user_registration(setup_roles):
+def test_user_registration(setup_roles, unique_email):
     """Test user registration"""
     response = client.post(
         "/api/auth/register",
         json={
-            "email": "test@example.com",
+            "email": unique_email,
             "nom": "Test User",
             "prenomsecond": "User",
             "password": "SecurePass123!",
@@ -110,7 +129,7 @@ def test_user_registration(setup_roles):
     assert response.status_code == 201
     data = response.json()
     assert data["status"] == "email_verification_required"
-    assert data["email"] == "test@example.com"
+    assert data["email"] == unique_email
 
 
 def test_user_registration_invalid_email(setup_roles):
@@ -128,12 +147,12 @@ def test_user_registration_invalid_email(setup_roles):
     assert response.status_code == 422
 
 
-def test_user_registration_password_mismatch(setup_roles):
+def test_user_registration_password_mismatch(setup_roles, unique_email):
     """Test registration with mismatched passwords"""
     response = client.post(
         "/api/auth/register",
         json={
-            "email": "test@example.com",
+            "email": unique_email,
             "nom": "Test",
             "prenomsecond": "User",
             "password": "Pass123!",
@@ -155,11 +174,11 @@ def test_login_nonexistent_user(setup_roles):
     assert response.status_code == 401
 
 
-def test_login_wrong_password(setup_roles):
+def test_login_wrong_password(setup_roles, unique_email):
     """Test login with wrong password"""
     db = TestingSessionLocal()
     user_data = UserCreate(
-        email="test@example.com",
+        email=unique_email,
         nom="Test",
         prenomsecond="User",
         password="CorrectPass123!",
@@ -172,18 +191,18 @@ def test_login_wrong_password(setup_roles):
     response = client.post(
         "/api/auth/login",
         data={
-            "username": "test@example.com",
+            "username": unique_email,
             "password": "WrongPass123!",
         }
     )
     assert response.status_code == 401
 
 
-def test_successful_login(setup_roles):
+def test_successful_login(setup_roles, unique_email):
     """Test successful user login"""
     db = TestingSessionLocal()
     user_data = UserCreate(
-        email="test@example.com",
+        email=unique_email,
         nom="Test",
         prenomsecond="User",
         password="CorrectPass123!",
@@ -196,7 +215,7 @@ def test_successful_login(setup_roles):
     response = client.post(
         "/api/auth/login",
         data={
-            "username": "test@example.com",
+            "username": unique_email,
             "password": "CorrectPass123!",
         }
     )
@@ -207,11 +226,11 @@ def test_successful_login(setup_roles):
     assert data["token_type"] == "bearer"
 
 
-def test_logout(setup_roles):
+def test_logout(setup_roles, unique_email):
     """Test user logout"""
     db = TestingSessionLocal()
     user_data = UserCreate(
-        email="test@example.com",
+        email=unique_email,
         nom="Test",
         prenomsecond="User",
         password="CorrectPass123!",
@@ -225,7 +244,7 @@ def test_logout(setup_roles):
     login_response = client.post(
         "/api/auth/login",
         data={
-            "username": "test@example.com",
+            "username": unique_email,
             "password": "CorrectPass123!",
         }
     )
@@ -243,11 +262,11 @@ def test_logout(setup_roles):
 # PROJECT TESTS
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_create_project(setup_roles):
+def test_create_project(setup_roles, unique_email):
     """Test project creation"""
     db = TestingSessionLocal()
     user_data = UserCreate(
-        email="test@example.com",
+        email=unique_email,
         nom="Test",
         prenomsecond="User",
         password="Pass123!",
@@ -255,11 +274,15 @@ def test_create_project(setup_roles):
     )
     user = register_user(db, user_data)
     user.is_verified = True
+    # Assign Developer role for project creation permission
+    dev_role = db.query(Role).filter(Role.name == "Developer").first()
+    if dev_role:
+        user.role_id = dev_role.id
     db.commit()
     
     login_response = client.post(
         "/api/auth/login",
-        data={"username": "test@example.com", "password": "Pass123!"}
+        data={"username": unique_email, "password": "Pass123!"}
     )
     token = login_response.json()["access_token"]
     
@@ -268,7 +291,9 @@ def test_create_project(setup_roles):
         json={
             "name": "Test Project",
             "description": "A test project",
-            "github_repo_url": "https://github.com/test/repo",
+            "language": "Python",
+            "analysis_type": "SAST",
+            "visibility": "private"
         },
         headers={"Authorization": f"Bearer {token}"}
     )
@@ -278,11 +303,11 @@ def test_create_project(setup_roles):
     assert data["name"] == "Test Project"
 
 
-def test_list_projects(setup_roles):
+def test_list_projects(setup_roles, unique_email):
     """Test listing projects"""
     db = TestingSessionLocal()
     user_data = UserCreate(
-        email="test@example.com",
+        email=unique_email,
         nom="Test",
         prenomsecond="User",
         password="Pass123!",
@@ -290,11 +315,15 @@ def test_list_projects(setup_roles):
     )
     user = register_user(db, user_data)
     user.is_verified = True
+    # Assign Developer role for project access permission
+    dev_role = db.query(Role).filter(Role.name == "Developer").first()
+    if dev_role:
+        user.role_id = dev_role.id
     db.commit()
     
     login_response = client.post(
         "/api/auth/login",
-        data={"username": "test@example.com", "password": "Pass123!"}
+        data={"username": unique_email, "password": "Pass123!"}
     )
     token = login_response.json()["access_token"]
     
@@ -307,11 +336,11 @@ def test_list_projects(setup_roles):
     assert isinstance(data, list)
 
 
-def test_get_project_not_found(setup_roles):
-    """Test getting nonexistent project"""
+def test_get_project_not_found(setup_roles, unique_email):
+    """Test retrieving non-existent project"""
     db = TestingSessionLocal()
     user_data = UserCreate(
-        email="test@example.com",
+        email=unique_email,
         nom="Test",
         prenomsecond="User",
         password="Pass123!",
@@ -319,11 +348,15 @@ def test_get_project_not_found(setup_roles):
     )
     user = register_user(db, user_data)
     user.is_verified = True
+    # Assign Developer role for project access permission
+    dev_role = db.query(Role).filter(Role.name == "Developer").first()
+    if dev_role:
+        user.role_id = dev_role.id
     db.commit()
     
     login_response = client.post(
         "/api/auth/login",
-        data={"username": "test@example.com", "password": "Pass123!"}
+        data={"username": unique_email, "password": "Pass123!"}
     )
     token = login_response.json()["access_token"]
     project_id = str(uuid.uuid4())
@@ -339,11 +372,11 @@ def test_get_project_not_found(setup_roles):
 # DASHBOARD TESTS
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_dashboard_metrics(setup_roles):
+def test_dashboard_metrics(setup_roles, unique_email):
     """Test dashboard metrics endpoint"""
     db = TestingSessionLocal()
     user_data = UserCreate(
-        email="test@example.com",
+        email=unique_email,
         nom="Test",
         prenomsecond="User",
         password="Pass123!",
@@ -351,16 +384,20 @@ def test_dashboard_metrics(setup_roles):
     )
     user = register_user(db, user_data)
     user.is_verified = True
+    # Assign Developer role for dashboard access
+    dev_role = db.query(Role).filter(Role.name == "Developer").first()
+    if dev_role:
+        user.role_id = dev_role.id
     db.commit()
     
     login_response = client.post(
         "/api/auth/login",
-        data={"username": "test@example.com", "password": "Pass123!"}
+        data={"username": unique_email, "password": "Pass123!"}
     )
     token = login_response.json()["access_token"]
     
     response = client.get(
-        "/api/dashboard/metrics",
+        "/api/dashboard/stats",
         headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 200
@@ -396,11 +433,11 @@ def test_rate_limiting_registration():
 # SCAN TESTS
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_trigger_scan_without_project(setup_roles):
-    """Test triggering scan without existing project"""
+def test_trigger_scan_without_project(setup_roles, unique_email):
+    """Test triggering scan without project"""
     db = TestingSessionLocal()
     user_data = UserCreate(
-        email="test@example.com",
+        email=unique_email,
         nom="Test",
         prenomsecond="User",
         password="Pass123!",
@@ -408,18 +445,26 @@ def test_trigger_scan_without_project(setup_roles):
     )
     user = register_user(db, user_data)
     user.is_verified = True
+    # Assign Developer role to allow project operations
+    dev_role = db.query(Role).filter(Role.name == "Developer").first()
+    if dev_role:
+        user.role_id = dev_role.id
     db.commit()
     
     login_response = client.post(
         "/api/auth/login",
-        data={"username": "test@example.com", "password": "Pass123!"}
+        data={"username": unique_email, "password": "Pass123!"}
     )
     token = login_response.json()["access_token"]
     project_id = str(uuid.uuid4())
     
     response = client.post(
         f"/api/projects/{project_id}/scans",
-        json={"branch": "main"},
+        json={
+            "method": "github",
+            "repo_url": "https://github.com/test/repo",
+            "repo_branch": "main"
+        },
         headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 404
@@ -432,7 +477,7 @@ def test_trigger_scan_without_project(setup_roles):
 def test_access_protected_endpoint_without_token():
     """Test accessing protected endpoint without token"""
     response = client.get("/api/projects")
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 def test_access_protected_endpoint_with_invalid_token():

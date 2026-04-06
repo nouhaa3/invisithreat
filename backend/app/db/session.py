@@ -7,11 +7,18 @@ from typing import Generator
 from app.core.config import settings
 
 # Create SQLAlchemy engine
-engine = create_engine(
-    settings.DATABASE_URL,
-    pool_pre_ping=True,
-    echo=False,  # Set to True for SQL query logging
-)
+# For SQLite in-memory testing, allow cross-thread access
+engine_kwargs = {
+    "pool_pre_ping": True,
+    "echo": False,  # Set to True for SQL query logging
+}
+
+# Check if using SQLite (for testing) and enable check_same_thread=False
+db_url = settings.DATABASE_URL
+if "sqlite" in db_url:
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+
+engine = create_engine(db_url, **engine_kwargs)
 
 # Create SessionLocal class
 SessionLocal = sessionmaker(
