@@ -3,6 +3,7 @@ Dashboard statistics endpoint
 """
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import datetime, UTC, timedelta
 from collections import defaultdict
 import json
@@ -32,15 +33,20 @@ async def get_dashboard_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(P.VIEW_DASHBOARD)),
 ):
-    # 1. Collect accessible projects (owned + member)
-    owned = db.query(Project).filter(Project.owner_id == current_user.id).all()
-    owned_ids = {p.id for p in owned}
-    memberships = db.query(ProjectMember).filter(ProjectMember.user_id == current_user.id).all()
-    member_project_ids = [m.project_id for m in memberships if m.project_id not in owned_ids]
-    member_projects = db.query(Project).filter(Project.id.in_(member_project_ids)).all() if member_project_ids else []
-    all_projects = owned + member_projects
-    all_project_ids = [p.id for p in all_projects]
-
+    from sqlalchemy import and_
+    
+    # 1. Get all accessible projects in ONE query (owned + member)
+    owned = db.query(Project.id).filter(Project.owner_id == current_user.id).subquery()
+    member_projects = db.query(Project.id).join(
+        ProjectMember, and_(Project.id == ProjectMember.project_id, ProjectMember.user_id == current_user.id)
+    ).subquery()
+    
+    # Get all project IDs accessible to user
+    all_project_ids = db.query(Project.id).filter(
+        (Project.id.in_(db.query(owned))) | (Project.id.in_(db.query(member_projects)))
+    ).all()
+    all_project_ids = [p.id for p in all_project_ids]
+    
     if not all_project_ids:
         return {
             "total_projects": 0,
@@ -59,25 +65,38 @@ async def get_dashboard_stats(
             },
         }
 
-    # 2. All scans for these projects
-    all_scans = db.query(Scan).filter(Scan.project_id.in_(all_project_ids)).all()
-    total_scans = len(all_scans)
-    active_scans = sum(1 for s in all_scans if s.status in (ScanStatus.pending, ScanStatus.running))
+    # 2. Get all projects for later use
+    all_projects = db.query(Project).filter(Project.id.in_(all_project_ids)).all()
+    
+    # 3. Get ONLY completed scans (not all scans) - much smaller dataset
+    completed_scans = db.query(Scan).filter(
+        Scan.project_id.in_(all_project_ids),
+        Scan.status == ScanStatus.completed
+    ).order_by(Scan.started_at.desc()).all()
+    
+    # 4. Get active scan count in ONE query
+    active_scan_count = db.query(func.count(Scan.id)).filter(
+        Scan.project_id.in_(all_project_ids),
+        Scan.status.in_([ScanStatus.pending, ScanStatus.running])
+    ).scalar() or 0
 
-    # 3. Aggregate findings from latest completed scan per project
+    # 5. Group scans by project and get latest completed per project
+    scans_by_project = {}
+    for scan in completed_scans:
+        if scan.project_id not in scans_by_project:
+            scans_by_project[scan.project_id] = scan
+
+    # 6. Aggregate findings and risk scores
     severity_totals = defaultdict(int)
-    project_risk = []  # (project_name, project_id, critical, high)
+    project_risk = []
     risk_rows = []
 
     for p in all_projects:
-        proj_scans = sorted(
-            [s for s in all_scans if s.project_id == p.id and s.status == ScanStatus.completed],
-            key=lambda s: s.started_at or datetime.min,
-            reverse=True,
-        )
-        if not proj_scans:
+        latest_scan = scans_by_project.get(p.id)
+        if not latest_scan:
             continue
-        findings = _parse_findings(proj_scans[0].results_json)
+        
+        findings = _parse_findings(latest_scan.results_json)
         crit = high = med = low = info = 0
         for f in findings:
             sev = (f.get("severity") or "info").lower()
@@ -86,31 +105,27 @@ async def get_dashboard_stats(
             elif sev == "medium":   med  += 1; severity_totals["medium"] += 1
             elif sev == "low":      low  += 1; severity_totals["low"] += 1
             else:                   info += 1; severity_totals["info"] += 1
-        if crit + high > 0:
-            project_row = {"id": str(p.id), "name": p.name, "critical": crit, "high": high, "medium": med, "low": low}
-            risk = get_or_create_scan_risk_score(db, proj_scans[0])
-            if risk:
-                project_row["risk_score"] = round(float(risk.score), 2)
-                risk_rows.append(risk)
-            project_risk.append(project_row)
-        else:
-            risk = get_or_create_scan_risk_score(db, proj_scans[0])
-            if risk:
-                risk_rows.append(risk)
-                project_risk.append({
-                    "id": str(p.id),
-                    "name": p.name,
-                    "critical": crit,
-                    "high": high,
-                    "medium": med,
-                    "low": low,
-                    "risk_score": round(float(risk.score), 2),
-                })
+        
+        risk = get_or_create_scan_risk_score(db, latest_scan)
+        risk_score = round(float(risk.score), 2) if risk else 0.0
+        
+        project_row = {
+            "id": str(p.id),
+            "name": p.name,
+            "critical": crit,
+            "high": high,
+            "medium": med,
+            "low": low,
+            "risk_score": risk_score,
+        }
+        project_risk.append(project_row)
+        if risk:
+            risk_rows.append(risk)
 
     # Sort top risky projects
     top_risky = sorted(project_risk, key=lambda x: (x.get("risk_score", 0), x["critical"], x["high"]), reverse=True)[:5]
 
-    # 4. Security score (100 → penalise per severity)
+    # Security score
     total_findings = sum(severity_totals.values())
     penalty = (
         severity_totals["critical"] * 15 +
@@ -120,10 +135,10 @@ async def get_dashboard_stats(
     )
     security_score = max(0, 100 - penalty)
 
-    # 5. Scan trend — last 14 days
+    # Scan trend — last 14 days (only from completed scans)
     now = datetime.now(UTC)
     trend_map = defaultdict(int)
-    for s in all_scans:
+    for s in completed_scans:
         if s.started_at:
             ts = s.started_at if s.started_at.tzinfo else s.started_at.replace(tzinfo=UTC)
             days_ago = (now - ts).days
@@ -131,7 +146,6 @@ async def get_dashboard_stats(
                 day_label = ts.strftime("%b %d")
                 trend_map[day_label] += 1
 
-    # Build ordered 14-day list
     scan_trend = []
     for i in range(13, -1, -1):
         day = now - timedelta(days=i)
@@ -154,8 +168,8 @@ async def get_dashboard_stats(
 
     return {
         "total_projects": len(all_projects),
-        "total_scans": total_scans,
-        "active_scans": active_scans,
+        "total_scans": len(completed_scans),
+        "active_scans": active_scan_count,
         "security_score": security_score,
         "total_findings": total_findings,
         "by_severity": {

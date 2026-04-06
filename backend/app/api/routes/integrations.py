@@ -107,7 +107,7 @@ def _exchange_github_code_for_token(code: str) -> dict:
             timeout=20,
         )
     except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail=f"GitHub OAuth exchange failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"GitHub OAuth exchange failed: {exc}") from exc
 
     if response.status_code >= 400:
         raise HTTPException(status_code=502, detail="GitHub OAuth endpoint rejected the request")

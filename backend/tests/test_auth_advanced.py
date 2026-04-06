@@ -3,9 +3,6 @@ Advanced Authentication Tests
 Tests login flows, token refresh, and 2FA functionality
 """
 import requests
-import json
-import pytest
-import time
 from uuid import uuid4
 
 BASE_URL = "http://localhost:8000"
@@ -30,7 +27,8 @@ class TestUserRegistration:
                 "prenomsecond": "User",
                 "password": TEST_USER_PASSWORD,
                 "password_confirm": TEST_USER_PASSWORD,
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [201, 400]  # 201 success or 400 duplicate
         if response.status_code == 201:
@@ -48,7 +46,8 @@ class TestUserRegistration:
                 "prenomsecond": "Pass",
                 "password": "123",  # Too weak
                 "password_confirm": "123",
-            }
+            },
+            timeout=30
         )
         # Should fail validation
         assert response.status_code in [422, 400]
@@ -63,7 +62,8 @@ class TestUserRegistration:
                 "prenomsecond": "Field",
                 "password": TEST_USER_PASSWORD,
                 "password_confirm": TEST_USER_PASSWORD,
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [422, 400]
     
@@ -80,7 +80,8 @@ class TestUserRegistration:
                 "prenomsecond": "User",
                 "password": TEST_USER_PASSWORD,
                 "password_confirm": TEST_USER_PASSWORD,
-            }
+            },
+            timeout=30
         )
         
         if response1.status_code == 201:
@@ -93,7 +94,8 @@ class TestUserRegistration:
                     "prenomsecond": "User",
                     "password": TEST_USER_PASSWORD,
                     "password_confirm": TEST_USER_PASSWORD,
-                }
+                },
+                timeout=30
             )
             # Should fail with conflict or bad request
             assert response2.status_code in [400, 409, 422]
@@ -109,7 +111,8 @@ class TestLoginFlow:
             data={
                 # Missing username
                 "password": TEST_USER_PASSWORD,
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [422, 400]
     
@@ -120,7 +123,8 @@ class TestLoginFlow:
             data={
                 "username": TEST_USER_EMAIL,
                 # Missing password
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [422, 400]
     
@@ -131,7 +135,8 @@ class TestLoginFlow:
             data={
                 "username": f"nonexistent-{str(uuid4())}@test.com",
                 "password": TEST_USER_PASSWORD,
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [401, 422]
     
@@ -142,7 +147,8 @@ class TestLoginFlow:
             data={
                 "username": TEST_USER_EMAIL,
                 "password": "WrongPassword123!",
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [401, 422]
     
@@ -153,7 +159,8 @@ class TestLoginFlow:
             data={
                 "username": TEST_USER_EMAIL,
                 "password": "",
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [401, 422]
     
@@ -164,7 +171,8 @@ class TestLoginFlow:
             data={
                 "username": "not-an-email",
                 "password": TEST_USER_PASSWORD,
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [401, 422]
 
@@ -176,7 +184,8 @@ class TestTokenRefresh:
         """Try to refresh without refresh token"""
         response = requests.post(
             f"{API_URL}/auth/refresh-token",
-            json={}  # No token
+            json={},  # No token
+            timeout=30
         )
         # Endpoint might not exist (404) or reject empty token
         assert response.status_code in [400, 404, 422]
@@ -187,7 +196,8 @@ class TestTokenRefresh:
             f"{API_URL}/auth/refresh-token",
             json={
                 "refresh_token": "invalid_token_12345"
-            }
+            },
+            timeout=30
         )
         # Endpoint might not exist (404) or reject invalid token
         assert response.status_code in [400, 401, 404, 422]
@@ -199,7 +209,8 @@ class TestTokenRefresh:
             f"{API_URL}/auth/refresh-token",
             json={
                 "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.expired.signature"
-            }
+            },
+            timeout=30
         )
         # Endpoint might not exist (404) or reject expired token
         assert response.status_code in [400, 401, 404, 422]
@@ -210,7 +221,8 @@ class TestTokenRefresh:
             f"{API_URL}/auth/refresh-token",
             json={
                 "refresh_token": ""
-            }
+            },
+            timeout=30
         )
         # Endpoint might not exist (404) or reject empty token
         assert response.status_code in [400, 404, 422]
@@ -221,7 +233,7 @@ class TestSessionManagement:
     
     def test_logout_without_token(self):
         """Logout without authentication"""
-        response = requests.post(f"{API_URL}/auth/logout")
+        response = requests.post(f"{API_URL}/auth/logout", timeout=30)
         assert response.status_code in [401, 403]
     
     def test_logout_invalid_token(self):
@@ -230,7 +242,8 @@ class TestSessionManagement:
             f"{API_URL}/auth/logout",
             headers={
                 "Authorization": "Bearer invalid_token_xyz"
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [401, 403]
     
@@ -241,7 +254,8 @@ class TestSessionManagement:
             f"{API_URL}/auth/logout",
             headers={
                 "Authorization": "Bearer fake_token"
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [401, 403]
 
@@ -255,7 +269,8 @@ class TestPasswordReset:
             f"{API_URL}/auth/forgot-password",
             json={
                 "email": f"nonexistent-{str(uuid4())}@test.com"
-            }
+            },
+            timeout=30
         )
         # Should succeed (for security) or fail gracefully
         assert response.status_code in [200, 202, 400]
@@ -266,7 +281,8 @@ class TestPasswordReset:
             f"{API_URL}/auth/forgot-password",
             json={
                 "email": "not-an-email"
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [400, 422]
     
@@ -276,7 +292,8 @@ class TestPasswordReset:
             f"{API_URL}/auth/forgot-password",
             json={
                 "email": ""
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [400, 422]
     
@@ -289,7 +306,8 @@ class TestPasswordReset:
                 "code": "invalid_code_12345",
                 "new_password": "NewPassword123!",
                 "confirm_password": "NewPassword123!",
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [400, 401, 422]
     
@@ -302,7 +320,8 @@ class TestPasswordReset:
                 "code": "some_code",
                 "new_password": "Password1!",
                 "confirm_password": "Different123!",
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [400, 422]
 
@@ -316,7 +335,8 @@ class TestAuthHeaders:
             f"{API_URL}/projects",
             headers={
                 "Authorization": "InvalidFormat token123"
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [401, 403]
     
@@ -326,7 +346,8 @@ class TestAuthHeaders:
             f"{API_URL}/projects",
             headers={
                 "Authorization": "Bearer "
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [401, 403]
     
@@ -336,7 +357,8 @@ class TestAuthHeaders:
             f"{API_URL}/projects",
             headers={
                 "Authorization": "totally.random.token"
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [401, 403]
     
@@ -347,7 +369,8 @@ class TestAuthHeaders:
             headers={
                 "Authorization": "Bearer token1",
                 # Note: Can't easily send duplicate headers with requests
-            }
+            },
+            timeout=30
         )
         # Should handle gracefully
         assert response.status_code in [200, 401, 403]
@@ -358,13 +381,14 @@ class TestAuthRateLimiting:
     
     def test_multiple_login_attempts(self):
         """Multiple failed login attempts"""
-        for i in range(3):
+        for _ in range(3):
             response = requests.post(
                 f"{API_URL}/auth/login",
                 data={
-                    "username": f"user{i}@test.com",
+                    "username": f"user{_}@test.com",
                     "password": "wrongpass",
-                }
+                },
+                timeout=30
             )
             # Should eventually hit rate limit or succeed/fail consistently
             assert response.status_code in [401, 422, 429]
@@ -372,7 +396,7 @@ class TestAuthRateLimiting:
     def test_multiple_registration_attempts(self):
         """Multiple registration attempts in rapid succession"""
         responses = []
-        for i in range(3):
+        for _ in range(3):
             response = requests.post(
                 f"{API_URL}/auth/register",
                 json={
@@ -381,7 +405,8 @@ class TestAuthRateLimiting:
                     "prenomsecond": "User",
                     "password": TEST_USER_PASSWORD,
                     "password_confirm": TEST_USER_PASSWORD,
-                }
+                },
+                timeout=30
             )
             responses.append(response.status_code)
         
@@ -399,7 +424,8 @@ class TestAuthEdgeCases:
             data={
                 "username": "  test@example.com  ",
                 "password": TEST_USER_PASSWORD,
-            }
+            },
+            timeout=30
         )
         # Should trim whitespace or reject
         assert response.status_code in [200, 401, 422]
@@ -414,7 +440,8 @@ class TestAuthEdgeCases:
                 "prenomsecond": "O'Connor",
                 "password": TEST_USER_PASSWORD,
                 "password_confirm": TEST_USER_PASSWORD,
-            }
+            },
+            timeout=30
         )
         # May succeed or fail with 429 (rate) or 400/422 (validation)
         assert response.status_code in [200, 201, 400, 429]
@@ -430,7 +457,8 @@ class TestAuthEdgeCases:
             data={
                 "username": email_lower,
                 "password": TEST_USER_PASSWORD,
-            }
+            },
+            timeout=30
         )
         
         response2 = requests.post(
@@ -438,7 +466,8 @@ class TestAuthEdgeCases:
             data={
                 "username": email_upper,
                 "password": TEST_USER_PASSWORD,
-            }
+            },
+            timeout=30
         )
         
         # Both should have same result (both fail or both succeed)

@@ -14,8 +14,8 @@ class User(Base):
     email = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
     profile_picture = Column(String, nullable=True)
-    date_creation = Column(DateTime, default=lambda: datetime.now(UTC))
-    is_active = Column(Boolean, default=True)    # true for VIEWER, set to true on signup
+    date_creation = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
+    is_active = Column(Boolean, default=True, index=True)    # true for VIEWER, set to true on signup
     is_pending = Column(Boolean, default=True)    # waiting for admin approval of OLD flow (deprecated)
     is_verified = Column(Boolean, default=False)  # email verification status
     reset_code = Column(String, nullable=True)

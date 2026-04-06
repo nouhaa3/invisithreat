@@ -3,8 +3,6 @@ SAST Scanning Tests
 Tests security scanning workflows, file handling, and results
 """
 import requests
-import json
-import pytest
 from uuid import uuid4
 
 BASE_URL = "http://localhost:8000"
@@ -18,7 +16,8 @@ class TestScanCreation:
         """Try to create scan without authentication"""
         response = requests.post(
             f"{API_URL}/projects/invalid-id/scans",
-            json={"branch": "main"}
+            json={"branch": "main"},
+            timeout=30
         )
         assert response.status_code in [401, 403, 404]
     
@@ -27,7 +26,8 @@ class TestScanCreation:
         response = requests.post(
             f"{API_URL}/projects/nonexistent-uuid/scans",
             json={"branch": "main"},
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [401, 403, 404]
     
@@ -36,7 +36,8 @@ class TestScanCreation:
         response = requests.post(
             f"{API_URL}/projects/test-id/scans",
             json={},  # Missing branch
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [400, 401, 403, 404, 422]
     
@@ -45,7 +46,8 @@ class TestScanCreation:
         response = requests.post(
             f"{API_URL}/projects/test-id/scans",
             json={"branch": ""},  # Empty branch
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [400, 401, 403, 404, 422]
 
@@ -58,7 +60,8 @@ class TestScanFileHandling:
         files = {"file": ("test.py", b"print('hello')")}
         response = requests.post(
             f"{API_URL}/projects/test-id/scans/upload",
-            files=files
+            files=files,
+            timeout=30
         )
         assert response.status_code in [401, 403, 404]
     
@@ -68,7 +71,8 @@ class TestScanFileHandling:
         response = requests.post(
             f"{API_URL}/projects/test-id/scans/upload",
             files=files,
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [400, 401, 403, 404, 422]
     
@@ -80,7 +84,7 @@ class TestScanFileHandling:
             f"{API_URL}/projects/test-id/scans/upload",
             files=files,
             headers={"Authorization": "Bearer fake_token"},
-            timeout=30
+            timeout=60
         )
         # Should reject or handle gracefully
         assert response.status_code in [400, 401, 403, 404, 413, 422]
@@ -94,7 +98,8 @@ class TestScanFileHandling:
         response = requests.post(
             f"{API_URL}/projects/test-id/scans/upload",
             files=files,
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [400, 401, 403, 404, 422]
     
@@ -104,7 +109,8 @@ class TestScanFileHandling:
         response = requests.post(
             f"{API_URL}/projects/test-id/scans/upload",
             files=files,
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         # Should reject or scan safely
         assert response.status_code in [400, 401, 403, 404, 422]
@@ -117,7 +123,8 @@ class TestScanResults:
         """Get results for non-existent scan"""
         response = requests.get(
             f"{API_URL}/projects/test-id/scans/nonexistent-scan-id",
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [401, 403, 404]
     
@@ -125,14 +132,16 @@ class TestScanResults:
         """Get results with invalid scan ID format"""
         response = requests.get(
             f"{API_URL}/projects/test-id/scans/not-a-uuid",
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [400, 401, 403, 404, 422]
     
     def test_get_scan_results_without_auth(self):
         """Get scan results without authentication"""
         response = requests.get(
-            f"{API_URL}/projects/test-id/scans/scan-id"
+            f"{API_URL}/projects/test-id/scans/scan-id",
+            timeout=30
         )
         # Should return 401 or 403 for unauthorized
         assert response.status_code in [200, 401, 403, 404]
@@ -142,7 +151,8 @@ class TestScanResults:
         # This would need a real scan result
         response = requests.get(
             f"{API_URL}/projects/test-id/scans/test-scan-id",
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         if response.status_code == 200:
             data = response.json()
@@ -187,7 +197,8 @@ class TestScanFiltering:
     def test_list_scans_without_auth(self):
         """List scans without authentication"""
         response = requests.get(
-            f"{API_URL}/projects/test-id/scans"
+            f"{API_URL}/projects/test-id/scans",
+            timeout=30
         )
         assert response.status_code in [401, 403]
     
@@ -195,7 +206,8 @@ class TestScanFiltering:
         """List scans with pagination"""
         response = requests.get(
             f"{API_URL}/projects/test-id/scans?skip=0&limit=10",
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         # Should handle pagination or return error
         assert response.status_code in [200, 401, 403, 404]
@@ -204,7 +216,8 @@ class TestScanFiltering:
         """List scans with invalid limit"""
         response = requests.get(
             f"{API_URL}/projects/test-id/scans?skip=0&limit=-1",
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [400, 401, 403, 404, 422]
     
@@ -212,7 +225,8 @@ class TestScanFiltering:
         """Filter scans by severity"""
         response = requests.get(
             f"{API_URL}/projects/test-id/scans?severity=high",
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [200, 401, 403, 404]
 
@@ -224,7 +238,8 @@ class TestScanStatus:
         """Get status of pending scan"""
         response = requests.get(
             f"{API_URL}/projects/test-id/scans/pending-scan/status",
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [200, 401, 403, 404]
     
@@ -232,7 +247,8 @@ class TestScanStatus:
         """Get status of running scan"""
         response = requests.get(
             f"{API_URL}/projects/test-id/scans/running-scan/status",
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [200, 401, 403, 404]
     
@@ -240,7 +256,8 @@ class TestScanStatus:
         """Get status of completed scan"""
         response = requests.get(
             f"{API_URL}/projects/test-id/scans/completed-scan/status",
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [200, 401, 403, 404]
     
@@ -248,7 +265,8 @@ class TestScanStatus:
         """Get status with invalid scan ID"""
         response = requests.get(
             f"{API_URL}/projects/test-id/scans/invalid-id/status",
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [400, 401, 403, 404]
 
@@ -260,7 +278,8 @@ class TestScanCancellation:
         """Cancel non-existent scan"""
         response = requests.post(
             f"{API_URL}/projects/test-id/scans/nonexistent/cancel",
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [401, 403, 404]
     
@@ -268,7 +287,8 @@ class TestScanCancellation:
         """Try to cancel already completed scan"""
         response = requests.post(
             f"{API_URL}/projects/test-id/scans/completed-scan/cancel",
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         # Should fail or succeed depending on implementation
         assert response.status_code in [200, 400, 401, 403, 404]
@@ -276,7 +296,8 @@ class TestScanCancellation:
     def test_delete_scan_without_auth(self):
         """Delete scan without authentication"""
         response = requests.delete(
-            f"{API_URL}/projects/test-id/scans/scan-id"
+            f"{API_URL}/projects/test-id/scans/scan-id",
+            timeout=30
         )
         # Should return 401, 403, or 404
         assert response.status_code in [200, 401, 403, 404]
@@ -285,7 +306,8 @@ class TestScanCancellation:
         """Delete non-existent scan"""
         response = requests.delete(
             f"{API_URL}/projects/test-id/scans/nonexistent",
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [401, 403, 404]
 
@@ -299,7 +321,8 @@ class TestScanResourceManagement:
         response = requests.post(
             f"{API_URL}/projects/test-id/scans",
             json={"branch": "slow_repo", "timeout": 5},
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [200, 201, 400, 401, 403, 404]
     
@@ -308,6 +331,7 @@ class TestScanResourceManagement:
         response = requests.post(
             f"{API_URL}/projects/test-id/scans",
             json={"branch": "main", "max_memory": 512},  # 512MB limit
-            headers={"Authorization": "Bearer fake_token"}
+            headers={"Authorization": "Bearer fake_token"},
+            timeout=30
         )
         assert response.status_code in [200, 201, 400, 401, 403, 404]

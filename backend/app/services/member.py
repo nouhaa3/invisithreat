@@ -20,6 +20,7 @@ def _get_project_owner(db: Session, project_id: uuid.UUID, current_user: User) -
 
 
 def list_members(db: Session, project_id: uuid.UUID, current_user: User) -> list:
+    from sqlalchemy.orm import joinedload
     # Allow owner or existing member to view the list
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
@@ -32,7 +33,10 @@ def list_members(db: Session, project_id: uuid.UUID, current_user: User) -> list
     if not is_owner and not is_member:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    members = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
+    # Eager load users to avoid N+1 queries
+    members = db.query(ProjectMember).options(joinedload(ProjectMember.user)).filter(
+        ProjectMember.project_id == project_id
+    ).all()
     result = []
     for m in members:
         result.append({

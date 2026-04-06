@@ -4,7 +4,7 @@ as a completed scan in the platform.
 """
 import uuid, json
 from datetime import datetime, UTC
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 from typing import Optional, List
@@ -82,19 +82,37 @@ async def cli_list_projects(
     current_user: User = Depends(get_user_from_api_key),
 ):
     """List all projects accessible to the authenticated user (for scanner.exe `projects` command)."""
-    owned = db.query(Project).filter(Project.owner_id == current_user.id).all()
-    membership_pids = [
-        m.project_id for m in db.query(ProjectMember)
-        .filter(ProjectMember.user_id == current_user.id).all()
-    ]
-    member_projects = db.query(Project).filter(Project.id.in_(membership_pids)).all()
-    all_projects = {str(p.id): p for p in owned + member_projects}.values()
-
+    from sqlalchemy import func, or_
+    
+    # Get all accessible projects in ONE query (owned OR member)
+    all_projects = db.query(Project).filter(
+        or_(
+            Project.owner_id == current_user.id,
+            Project.id.in_(
+                db.query(ProjectMember.project_id).filter(ProjectMember.user_id == current_user.id)
+            )
+        )
+    ).all()
+    
+    if not all_projects:
+        return []
+    
+    # Get scan counts for ALL projects in ONE query (not N queries)
+    project_ids = [p.id for p in all_projects]
+    scan_counts = db.query(
+        Scan.project_id, func.count(Scan.id).label('count')
+    ).filter(Scan.project_id.in_(project_ids)).group_by(Scan.project_id).all()
+    
+    # Build a map of {project_id: count}
+    count_map = {scan_count[0]: scan_count[1] for scan_count in scan_counts}
+    
     result = []
     for p in all_projects:
-        scan_count = db.query(Scan).filter(Scan.project_id == p.id).count()
         result.append(ProjectListItem(
-            id=p.id, name=p.name, description=p.description, scan_count=scan_count
+            id=p.id,
+            name=p.name,
+            description=p.description,
+            scan_count=count_map.get(p.id, 0)
         ))
     return result
 
@@ -111,8 +129,8 @@ async def cli_upload_scan(
     """
     try:
         project_id = uuid.UUID(payload.project_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid project_id format")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid project_id format") from exc
 
     project = _assert_access(db, project_id, current_user)
 

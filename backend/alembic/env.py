@@ -9,6 +9,13 @@ from logging.config import fileConfig
 from pathlib import Path
 from typing import Any
 
+# Load .env BEFORE importing app config
+from dotenv import load_dotenv
+backend_dir = Path(__file__).resolve().parent.parent
+env_path = backend_dir / ".env"
+if env_path.exists():
+    load_dotenv(str(env_path), override=True)
+
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 

@@ -55,7 +55,7 @@ class Project(Base):
     analysis_type = Column(String, nullable=True, default="SAST")
     visibility = Column(String, nullable=True, default="private")
     status = Column(String, nullable=True, default="active")
-    owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
     owner = relationship("User", back_populates="projects")
@@ -70,9 +70,9 @@ class Scan(Base):
     __tablename__ = "scans"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)
     method = Column(Enum(ScanMethod), nullable=False)
-    status = Column(Enum(ScanStatus), default=ScanStatus.pending, nullable=False)
+    status = Column(Enum(ScanStatus), default=ScanStatus.pending, nullable=False, index=True)
 
     # For GitHub scans
     repo_url = Column(String, nullable=True)
@@ -82,7 +82,7 @@ class Scan(Base):
     results_json = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
 
-    started_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    started_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     completed_at = Column(DateTime, nullable=True)
 
     project = relationship("Project", back_populates="scans")

@@ -43,7 +43,30 @@ async def admin_list_all_projects(
 ):
     """Admin only — list every project across all users."""
     projects = db.query(ProjectModel).order_by(ProjectModel.created_at.desc()).all()
-    return [enrich_project(db, p) for p in projects]
+    
+    # Get all scans for all projects in ONE query (not 1+N)
+    project_ids = [p.id for p in projects]
+    scans_by_project = get_scans_for_projects_batch(db, project_ids)
+    
+    # Build response with enriched data using batch scan data
+    result = []
+    for project in projects:
+        scans = scans_by_project.get(project.id, [])
+        last_status = scans[0].status.value if scans else None
+        result.append({
+            "id": project.id,
+            "name": project.name,
+            "description": project.description,
+            "language": project.language,
+            "analysis_type": project.analysis_type,
+            "visibility": project.visibility,
+            "owner_id": project.owner_id,
+            "created_at": project.created_at,
+            "scan_count": len(scans),
+            "last_scan_status": last_status,
+            "user_role": "admin",
+        })
+    return result
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_new_project(

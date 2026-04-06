@@ -15,12 +15,12 @@ class TestHTTPStatusCodes:
     
     def test_404_not_found(self):
         """Non-existent endpoint returns 404"""
-        response = requests.get(f"{API_URL}/this-does-not-exist", timeout=30)
+        response = requests.get(f"{API_URL}/this-does-not-exist", timeout=5)
         assert response.status_code == 404
     
     def test_405_method_not_allowed(self):
         """Wrong HTTP method returns 405"""
-        response = requests.delete(f"{API_URL}/health", timeout=30)
+        response = requests.delete(f"{API_URL}/health", timeout=5)
         assert response.status_code == 405
     
     def test_400_bad_request_missing_json(self):
@@ -28,14 +28,14 @@ class TestHTTPStatusCodes:
         response = requests.post(
             f"{API_URL}/auth/login",
             data="",
-            timeout=30
+            timeout=5
         )
         # Should be 400 or 422 for malformed
         assert response.status_code in [400, 422]
     
     def test_401_unauthorized(self):
         """Protected endpoint without auth returns 401"""
-        response = requests.get(f"{API_URL}/projects", timeout=30)
+        response = requests.get(f"{API_URL}/projects", timeout=5)
         assert response.status_code in [401, 403]
     
     def test_403_forbidden(self):
@@ -43,7 +43,7 @@ class TestHTTPStatusCodes:
         response = requests.get(
             f"{API_URL}/projects",
             headers={"Authorization": "Bearer invalid"},
-            timeout=30
+            timeout=5
         )
         assert response.status_code in [401, 403]
 
@@ -59,7 +59,7 @@ class TestInputValidation:
                 "username": "'; DROP TABLE users; --",
                 "password": "test"
             },
-            timeout=30
+            timeout=5
         )
         # Should not execute SQL, just reject or handle
         assert response.status_code in [200, 400, 401, 422, 429]
@@ -75,7 +75,7 @@ class TestInputValidation:
                 "password": "Pass123!",
                 "password_confirm": "Pass123!",
             },
-            timeout=30
+            timeout=5
         )
         # Should reject or sanitize
         assert response.status_code in [400, 422]
@@ -89,7 +89,7 @@ class TestInputValidation:
                 "description": "test",
             },
             headers={"Authorization": "Bearer fake"},
-            timeout=30
+            timeout=5
         )
         # Should not execute commands
         assert response.status_code in [400, 401, 403, 404, 422]
@@ -105,7 +105,7 @@ class TestInputValidation:
                 "password": "Pass123!",
                 "password_confirm": "Pass123!",
             },
-            timeout=30
+            timeout=5
         )
         assert response.status_code in [400, 422]
 
@@ -125,7 +125,7 @@ class TestBoundaryValues:
                 "password": "Pass123!",
                 "password_confirm": "Pass123!",
             },
-            timeout=30
+            timeout=5
         )
         assert response.status_code in [400, 422]
     
@@ -140,7 +140,7 @@ class TestBoundaryValues:
                 "password": "Pass123!",
                 "password_confirm": "Pass123!",
             },
-            timeout=30
+            timeout=5
         )
         # Should handle or reject gracefully
         assert response.status_code in [200, 201, 400, 422, 429]
@@ -149,7 +149,7 @@ class TestBoundaryValues:
         """Negative numbers in numeric fields"""
         response = requests.get(
             f"{API_URL}/projects?skip=-10&limit=-5",
-            timeout=30
+            timeout=5
         )
         # Should handle gracefully - may require auth (401/403) or validate params
         assert response.status_code in [200, 400, 401, 403, 422]
@@ -165,7 +165,7 @@ class TestBoundaryValues:
                 "password": "",
                 "password_confirm": "",
             },
-            timeout=30
+            timeout=5
         )
         assert response.status_code in [400, 422]
     
@@ -173,7 +173,7 @@ class TestBoundaryValues:
         """Very large integer value"""
         response = requests.get(
             f"{API_URL}/projects/9223372036854775807",  # Max 64-bit int
-            timeout=30
+            timeout=5
         )
         assert response.status_code in [400, 401, 403, 404]
 
@@ -187,7 +187,7 @@ class TestDataTypeErrors:
             f"{API_URL}/auth/register",
             data="not a json",
             headers={"Content-Type": "application/json"},
-            timeout=30
+            timeout=5
         )
         assert response.status_code in [400, 422]
     
@@ -196,7 +196,7 @@ class TestDataTypeErrors:
         response = requests.post(
             f"{API_URL}/auth/register",
             json=["item1", "item2"],
-            timeout=30
+            timeout=5
         )
         assert response.status_code in [400, 422]
     
@@ -211,7 +211,7 @@ class TestDataTypeErrors:
                 "password": None,
                 "password_confirm": None,
             },
-            timeout=30
+            timeout=5
         )
         assert response.status_code in [400, 422]
     
@@ -223,7 +223,7 @@ class TestDataTypeErrors:
                 "username": True,
                 "password": False,
             },
-            timeout=30
+            timeout=5
         )
         assert response.status_code in [400, 422]
 
@@ -235,7 +235,7 @@ class TestConcurrency:
         """Multiple rapid requests to same endpoint"""
         responses = []
         for _ in range(5):
-            response = requests.get(f"{API_URL}/health", timeout=30)
+            response = requests.get(f"{API_URL}/health", timeout=5)
             responses.append(response.status_code)
         
         # All should succeed
@@ -243,8 +243,8 @@ class TestConcurrency:
     
     def test_concurrent_different_endpoints(self):
         """Concurrent requests to different endpoints"""
-        response_health = requests.get(f"{API_URL}/health", timeout=30)
-        response_docs = requests.get(f"{API_URL}/docs", timeout=30)
+        response_health = requests.get(f"{API_URL}/health", timeout=5)
+        response_docs = requests.get(f"{API_URL}/docs", timeout=5)
         
         assert response_health.status_code == 200
         assert response_docs.status_code == 200
@@ -264,7 +264,7 @@ class TestMemoryAndPerformance:
         response = requests.post(
             f"{API_URL}/auth/register",
             json=nested,
-            timeout=30
+            timeout=5
         )
         # Should handle or reject
         assert response.status_code in [400, 422]
@@ -276,7 +276,7 @@ class TestMemoryAndPerformance:
             f"{API_URL}/projects",
             json={"items": large_array},
             headers={"Authorization": "Bearer fake"},
-            timeout=30
+            timeout=5
         )
         assert response.status_code in [400, 401, 403, 404, 413, 422]
 
@@ -295,7 +295,7 @@ class TestSpecialCharacters:
                 "password": "Pass123!",
                 "password_confirm": "Pass123!",
             },
-            timeout=30
+            timeout=5
         )
         assert response.status_code in [400, 422]
     
@@ -310,7 +310,7 @@ class TestSpecialCharacters:
                 "password": "Pass123!",
                 "password_confirm": "Pass123!",
             },
-            timeout=30
+            timeout=5
         )
         assert response.status_code in [400, 422]
     
@@ -325,7 +325,7 @@ class TestSpecialCharacters:
                 "password": "Pass123!",
                 "password_confirm": "Pass123!",
             },
-            timeout=30
+            timeout=5
         )
         # Should handle special chars
         assert response.status_code in [400, 422]
@@ -336,7 +336,7 @@ class TestErrorMessages:
     
     def test_error_response_has_message(self):
         """Error responses include explanatory message"""
-        response = requests.get(f"{API_URL}/projects", timeout=30)
+        response = requests.get(f"{API_URL}/projects", timeout=5)
         assert response.status_code in [401, 403]
         if response.headers.get("content-type", "").startswith("application/json"):
             data = response.json()
@@ -351,7 +351,7 @@ class TestErrorMessages:
                 "username": "test@example.com",
                 "password": "wrong"
             },
-            timeout=30
+            timeout=5
         )
         if response.status_code == 401:
             data = response.json()
@@ -365,7 +365,7 @@ class TestResponseHeaders:
     
     def test_security_headers_present(self):
         """Security headers in responses"""
-        response = requests.get(f"{API_URL}/health", timeout=30)
+        response = requests.get(f"{API_URL}/health", timeout=5)
         # Check for security headers
         headers = response.headers
         # Some servers include these
@@ -377,7 +377,7 @@ class TestResponseHeaders:
         response = requests.get(
             f"{API_URL}/projects",
             headers={"Authorization": "Bearer fake"},
-            timeout=30
+            timeout=5
         )
         # Protected endpoints should not be cached
         headers = response.headers
@@ -386,7 +386,7 @@ class TestResponseHeaders:
     
     def test_content_type_charset(self):
         """Content-Type includes charset"""
-        response = requests.get(f"{API_URL}/health", timeout=30)
+        response = requests.get(f"{API_URL}/health", timeout=5)
         content_type = response.headers.get("content-type", "")
         # May or may not include charset
         assert "application/json" in content_type or content_type != ""
@@ -411,8 +411,8 @@ class TestIdempotentRequests:
     
     def test_get_is_idempotent(self):
         """GET requests are idempotent"""
-        response1 = requests.get(f"{API_URL}/health", timeout=30)
-        response2 = requests.get(f"{API_URL}/health", timeout=30)
+        response1 = requests.get(f"{API_URL}/health", timeout=5)
+        response2 = requests.get(f"{API_URL}/health", timeout=5)
         
         # Both should have same status code
         assert response1.status_code == response2.status_code
@@ -422,7 +422,7 @@ class TestIdempotentRequests:
     
     def test_head_request(self):
         """HEAD request supported"""
-        response = requests.head(f"{API_URL}/health", timeout=30)
+        response = requests.head(f"{API_URL}/health", timeout=5)
         assert response.status_code in [200, 404, 405]
 
 
@@ -434,7 +434,7 @@ class TestContentNegotiation:
         response = requests.get(
             f"{API_URL}/health",
             headers={"Accept": "application/json"},
-            timeout=30
+            timeout=5
         )
         assert response.status_code == 200
         assert "application/json" in response.headers.get("content-type", "")
@@ -444,7 +444,7 @@ class TestContentNegotiation:
         response = requests.get(
             f"{API_URL}/health",
             headers={"Accept": "application/xml"},
-            timeout=30
+            timeout=5
         )
         # Should either return JSON or 406
         assert response.status_code in [200, 406]

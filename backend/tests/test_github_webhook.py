@@ -339,7 +339,7 @@ class TestWebhookLargePayload:
                 "Content-Type": "application/json",
                 "X-Hub-Signature-256": signature
             },
-            timeout=30
+            timeout=5
         )
         # Should handle or reject
         assert response.status_code in [200, 202, 400, 401, 403, 413]

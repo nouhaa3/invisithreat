@@ -3,9 +3,7 @@ API Integration Tests
 Tests the running FastAPI backend server
 """
 import requests
-import json
 import pytest
-from datetime import datetime
 import uuid
 
 BASE_URL = "http://localhost:8000"
@@ -20,7 +18,7 @@ class TestBasicEndpoints:
     
     def test_health_check(self):
         """GET /api/health - Health check endpoint"""
-        response = requests.get(f"{API_URL}/health")
+        response = requests.get(f"{API_URL}/health", timeout=30)
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
@@ -28,7 +26,7 @@ class TestBasicEndpoints:
     
     def test_root_endpoint(self):
         """GET / - Root endpoint"""
-        response = requests.get(f"{BASE_URL}/")
+        response = requests.get(f"{BASE_URL}/", timeout=30)
         assert response.status_code == 200
         data = response.json()
         assert "message" in data
@@ -48,7 +46,8 @@ class TestAuthenticationFlow:
                 "prenomsecond": "User",
                 "password": TEST_PASS,
                 "password_confirm": TEST_PASS,
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [201, 400]  # 201 on success, 400 if already exists
         if response.status_code == 201:
@@ -65,7 +64,8 @@ class TestAuthenticationFlow:
                 "prenomsecond": "User",
                 "password": TEST_PASS,
                 "password_confirm": TEST_PASS,
-            }
+            },
+            timeout=30
         )
         assert response.status_code == 422
     
@@ -76,7 +76,8 @@ class TestAuthenticationFlow:
             data={
                 "username": "nonexistent@test.com",
                 "password": "wrongpassword",
-            }
+            },
+            timeout=30
         )
         assert response.status_code in [401, 422]
 
@@ -85,14 +86,15 @@ class TestProjectsEndpoint:
     
     def test_projects_requires_auth(self):
         """GET /projects - Requires authentication"""
-        response = requests.get(f"{API_URL}/projects")
+        response = requests.get(f"{API_URL}/projects", timeout=30)
         assert response.status_code in [403, 401]
     
     def test_projects_with_invalid_token(self):
         """GET /projects - Invalid bearer token"""
         response = requests.get(
             f"{API_URL}/projects",
-            headers={"Authorization": "Bearer invalid_token_123"}
+            headers={"Authorization": "Bearer invalid_token_123"},
+            timeout=30
         )
         assert response.status_code in [401, 403, 422]
 
@@ -101,19 +103,19 @@ class TestDocsEndpoint:
     
     def test_swagger_docs_accessible(self):
         """GET /api/docs - Swagger UI"""
-        response = requests.get(f"{API_URL}/docs")
+        response = requests.get(f"{API_URL}/docs", timeout=30)
         assert response.status_code == 200
         assert b"swagger" in response.content.lower()
     
     def test_redoc_accessible(self):
         """GET /api/redoc - ReDoc documentation"""
-        response = requests.get(f"{API_URL}/redoc")
+        response = requests.get(f"{API_URL}/redoc", timeout=30)
         assert response.status_code == 200
         assert b"redoc" in response.content.lower()
     
     def test_openapi_schema_accessible(self):
         """GET /api/openapi.json - OpenAPI schema"""
-        response = requests.get(f"{API_URL}/openapi.json")
+        response = requests.get(f"{API_URL}/openapi.json", timeout=30)
         assert response.status_code == 200
         data = response.json()
         assert "openapi" in data
@@ -124,12 +126,12 @@ class TestErrorHandling:
     
     def test_404_not_found(self):
         """GET /api/nonexistent - 404 Not Found"""
-        response = requests.get(f"{API_URL}/nonexistent-path")
+        response = requests.get(f"{API_URL}/nonexistent-path", timeout=30)
         assert response.status_code == 404
     
     def test_method_not_allowed(self):
         """DELETE /api/health - 405 Method Not Allowed"""
-        response = requests.delete(f"{API_URL}/health")
+        response = requests.delete(f"{API_URL}/health", timeout=30)
         assert response.status_code == 405
 
 class TestCORS:
@@ -137,7 +139,7 @@ class TestCORS:
     
     def test_cors_headers_present(self):
         """Check CORS headers in response"""
-        response = requests.get(f"{API_URL}/health")
+        response = requests.get(f"{API_URL}/health", timeout=30)
         # Should have CORS headers or be accessible from localhost
         assert response.status_code == 200
 
@@ -146,7 +148,7 @@ class TestResponseFormats:
     
     def test_health_response_format(self):
         """Verify health response has expected structure"""
-        response = requests.get(f"{API_URL}/health")
+        response = requests.get(f"{API_URL}/health", timeout=30)
         data = response.json()
         assert isinstance(data, dict)
         assert "status" in data
@@ -154,7 +156,7 @@ class TestResponseFormats:
     
     def test_docs_response_type(self):
         """Verify docs response is HTML"""
-        response = requests.get(f"{API_URL}/docs")
+        response = requests.get(f"{API_URL}/docs", timeout=30)
         assert response.headers.get("content-type", "").lower().startswith("text/html")
 
 # Pytest markers for grouping tests

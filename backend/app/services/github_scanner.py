@@ -13,6 +13,8 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+
+import sqlalchemy
 from urllib.parse import urlparse, urlunparse
 
 from sqlalchemy.orm import Session
@@ -361,7 +363,7 @@ def _get_language_specific_rules(file_ext: str) -> list:
                 pass
         
         return compiled_rules
-    except (ValueError, KeyError, RuntimeError) as exc:
+    except (ValueError, KeyError, RuntimeError):
         # If anything goes wrong, return empty list to fall back to legacy rules
         return []
 
@@ -638,7 +640,7 @@ def _run_bandit_scan(base: Path) -> tuple[list[dict], dict]:
 
     try:
         payload = json.loads(result.stdout or "{}")
-    except (json.JSONDecodeError, TypeError) as exc:
+    except (json.JSONDecodeError, TypeError):
         run_info["status"] = "failed"
         run_info["error"] = "invalid bandit json output"
         run_info["duration_ms"] = round((time.perf_counter() - started) * 1000)
@@ -790,8 +792,9 @@ def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str, githu
                 scan.completed_at = datetime.now(timezone.utc)
                 db.commit()
                 _upsert_pipeline_execution(db, scan, "failed")
-        except Exception:
-            pass
+        except (OSError, sqlalchemy.exc.SQLAlchemyError, ValueError) as e:
+            # Failed to update scan status in database - log and continue cleanup
+            print(f"Failed to update scan status: {e}")
     finally:
         db.close()
         if tmpdir:

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from datetime import timedelta
 from app.db.session import get_db
@@ -538,7 +538,8 @@ async def admin_list_users(
     _admin: User = Depends(require_admin),
 ):
     """Admin only — list every user with their role."""
-    users = db.query(User).order_by(User.date_creation.desc()).all()
+    # Use joinedload to eagerly fetch roles - prevents N+1 query problem (1 query instead of 54)
+    users = db.query(User).options(joinedload(User.role)).order_by(User.date_creation.desc()).all()
     return [UserAdminResponse(**get_user_with_role(db, u)) for u in users]
 
 

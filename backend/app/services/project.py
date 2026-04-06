@@ -24,14 +24,17 @@ def create_project(db: Session, owner: User, data: ProjectCreate) -> Project:
 
 
 def get_projects_for_user(db: Session, user: User) -> list[Project]:
-    # Own projects
-    owned = db.query(Project).filter(Project.owner_id == user.id).all()
-    owned_ids = {p.id for p in owned}
-    # Projects the user is a member of
-    memberships = db.query(ProjectMember).filter(ProjectMember.user_id == user.id).all()
-    member_project_ids = [m.project_id for m in memberships if m.project_id not in owned_ids]
-    member_projects = db.query(Project).filter(Project.id.in_(member_project_ids)).all() if member_project_ids else []
-    all_projects = owned + member_projects
+    """Get all projects accessible to user (owned OR member) in ONE query."""
+    from sqlalchemy import or_
+    # Get all projects where user is owner OR member - in ONE query
+    all_projects = db.query(Project).filter(
+        or_(
+            Project.owner_id == user.id,
+            Project.id.in_(
+                db.query(ProjectMember.project_id).filter(ProjectMember.user_id == user.id)
+            )
+        )
+    ).all()
     return sorted(all_projects, key=lambda p: p.created_at, reverse=True)
 
 

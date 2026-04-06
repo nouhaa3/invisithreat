@@ -3,7 +3,7 @@ from pydantic import Field
 
 
 class Settings(BaseSettings):
-    APP_NAME: str
+    APP_NAME: str = "InvisiThreat"
     APP_VERSION: str
     ENVIRONMENT: str
 
