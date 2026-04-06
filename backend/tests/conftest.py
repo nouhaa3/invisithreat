@@ -27,3 +27,21 @@ if missing:
     print(f"[WARN] Missing environment variables: {missing}")
 else:
     print(f"[OK] All required environment variables loaded")
+
+
+def pytest_configure(config):
+    """
+    Load environment variables before pytest collection.
+    This runs before any test modules are collected.
+    """
+    # Ensure .env is loaded before pytest does collection
+    if env_path.exists():
+        load_dotenv(str(env_path), override=True)
+    
+    # Set defaults for any missing critical vars
+    if not os.environ.get("APP_NAME"):
+        os.environ["APP_NAME"] = "invisithreat"
+    if not os.environ.get("DATABASE_URL"):
+        os.environ["DATABASE_URL"] = "postgresql://localhost/invisithreat_test"
+    if not os.environ.get("SECRET_KEY"):
+        os.environ["SECRET_KEY"] = "test-secret-key-do-not-use-in-production"
