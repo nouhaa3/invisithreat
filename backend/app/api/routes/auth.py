@@ -267,30 +267,37 @@ async def update_my_profile(
         if existing:
             raise HTTPException(status_code=400, detail="Email already in use")
         current_user.email = payload.email
+    
+    # Handle profile picture update or deletion
     if payload.profile_picture is not None:
-        # Validate base64 image size (max 5MB)
-        import base64
-        try:
-            # Check if it's a valid base64 data URI
-            if payload.profile_picture.startswith('data:image/'):
-                # Data URI format: data:image/png;base64,xxxxx
-                parts = payload.profile_picture.split(',', 1)
-                if len(parts) == 2:
-                    image_data = parts[1]
+        # Allow clearing the profile picture with empty string
+        if payload.profile_picture == "":
+            current_user.profile_picture = None
+        else:
+            # Validate base64 image size (max 5MB)
+            import base64
+            try:
+                # Check if it's a valid base64 data URI
+                if payload.profile_picture.startswith('data:image/'):
+                    # Data URI format: data:image/png;base64,xxxxx
+                    parts = payload.profile_picture.split(',', 1)
+                    if len(parts) == 2:
+                        image_data = parts[1]
+                    else:
+                        image_data = payload.profile_picture
                 else:
                     image_data = payload.profile_picture
-            else:
-                image_data = payload.profile_picture
-            
-            # Estimate decoded size (base64 is ~33% larger than original)
-            decoded_size = len(base64.b64decode(image_data))
-            if decoded_size > 5 * 1024 * 1024:  # 5MB limit
-                raise HTTPException(status_code=400, detail="Profile picture must be smaller than 5MB")
-        except Exception as e:
-            if isinstance(e, HTTPException):
-                raise
-            raise HTTPException(status_code=400, detail="Invalid image format")
-        current_user.profile_picture = payload.profile_picture
+                
+                # Estimate decoded size (base64 is ~33% larger than original)
+                decoded_size = len(base64.b64decode(image_data))
+                if decoded_size > 5 * 1024 * 1024:  # 5MB limit
+                    raise HTTPException(status_code=400, detail="Profile picture must be smaller than 5MB")
+            except Exception as e:
+                if isinstance(e, HTTPException):
+                    raise
+                raise HTTPException(status_code=400, detail="Invalid image format")
+            current_user.profile_picture = payload.profile_picture
+    
     db.commit()
     db.refresh(current_user)
     create_audit_log(db, current_user.id, "profile_updated", "Profile updated")

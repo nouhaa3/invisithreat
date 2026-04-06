@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import { saveAuthData, clearAuthData, getStoredUser } from '../services/authService'
+import { saveAuthData, clearAuthData, getStoredUser, getMe } from '../services/authService'
 
 const AuthContext = createContext(null)
 
@@ -7,14 +7,30 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Restore session on app load
+  // Restore session on app load and sync with server
   useEffect(() => {
-    const storedUser = getStoredUser()
-    const token = localStorage.getItem('access_token')
-    if (storedUser && token) {
-      setUser(storedUser)
+    const initAuth = async () => {
+      const storedUser = getStoredUser()
+      const token = localStorage.getItem('access_token')
+      if (storedUser && token) {
+        // Set stored user immediately for better UX
+        setUser(storedUser)
+        
+        // Sync with server to get latest data (profile picture, etc)
+        try {
+          const freshUser = await getMe()
+          setUser(freshUser)
+          // Update localStorage with fresh data
+          localStorage.setItem('user', JSON.stringify(freshUser))
+        } catch (error) {
+          // If sync fails, keep the stored user
+          console.debug('Failed to sync user data from server:', error)
+        }
+      }
+      setIsLoading(false)
     }
-    setIsLoading(false)
+    
+    initAuth()
   }, [])
 
   const loginSuccess = (data) => {

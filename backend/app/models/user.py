@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime, Integer
+from sqlalchemy import Column, String, Text, Boolean, ForeignKey, DateTime, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime, UTC
@@ -13,7 +13,7 @@ class User(Base):
     nom = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
-    profile_picture = Column(String, nullable=True)
+    profile_picture = Column(Text, nullable=True)  # Store base64 encoded image data
     date_creation = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     is_active = Column(Boolean, default=True, index=True)    # true for VIEWER, set to true on signup
     is_pending = Column(Boolean, default=True)    # waiting for admin approval of OLD flow (deprecated)
