@@ -7,6 +7,7 @@ import SignupPage from './pages/SignupPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import Dashboard from './pages/Dashboard'
+import ProjectsPage from './pages/ProjectsPage'
 import NewScanPage from './pages/NewScanPage'
 import ProjectDetail from './pages/ProjectDetail'
 import EditProjectPage from './pages/EditProjectPage'
@@ -50,6 +51,7 @@ export default function App() {
           <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
           <Route path="/auth/github/callback" element={<GitHubOAuthCallbackPage />} />
           <Route path="/dashboard" element={<PermissionRoute permission={PERMISSIONS.VIEW_DASHBOARD}><Dashboard /></PermissionRoute>} />
+          <Route path="/projects" element={<PermissionRoute permission={PERMISSIONS.VIEW_DASHBOARD}><ProjectsPage /></PermissionRoute>} />
           <Route path="/scans/new" element={<PermissionRoute permission={PERMISSIONS.RUN_SCAN}><NewScanPage /></PermissionRoute>} />
           <Route path="/projects/:id" element={<PermissionRoute permission={PERMISSIONS.VIEW_SCAN_RESULTS}><ProjectDetail /></PermissionRoute>} />
           <Route path="/projects/:id/edit" element={<PermissionRoute permission={PERMISSIONS.MANAGE_OWN_PROJECTS}><EditProjectPage /></PermissionRoute>} />

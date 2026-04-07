@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppLayout from '../components/AppLayout'
 import RoleRequestModal from '../components/RoleRequestModal'
-import { getProjects, deleteProject, getDashboardStats } from '../services/projectService'
+import { getDashboardStats } from '../services/projectService'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -180,18 +180,6 @@ function KpiCard({ label, value, sub, accent }) {
   )
 }
 
-// ─── Status badge ─────────────────────────────────────────────────────────────
-
-function StatusBadge({ status }) {
-  const cfg = STATUS_CONFIG[status] || { label: status || 'No scans', color: '#6b7280', bg: 'rgba(107,114,128,0.08)' }
-  return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-      style={{ color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.color}30` }}>
-      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: cfg.color }} />
-      {cfg.label}
-    </span>
-  )
-}
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
@@ -199,23 +187,16 @@ export default function Dashboard() {
   const { user } = useAuth()
   const navigate  = useNavigate()
 
-  const [projects,      setProjects]      = useState([])
   const [stats,         setStats]         = useState(null)
   const [loading,       setLoading]       = useState(true)
-  const [deletingId,    setDeletingId]    = useState(null)
   const [showRoleModal, setShowRoleModal] = useState(false)
 
   const load = async () => {
     try {
-      // Load projects and stats in parallel
-      const [proj, statsData] = await Promise.all([
-        getProjects().catch(() => []),
-        getDashboardStats().catch(() => null)
-      ])
-      setProjects(proj)
+      // Load stats
+      const statsData = await getDashboardStats()
       setStats(statsData)
     } catch {
-      setProjects([])
       setStats(null)
     } finally {
       setLoading(false)
@@ -223,19 +204,6 @@ export default function Dashboard() {
   }
 
   useEffect(() => { load() }, [])
-
-  const handleDelete = async (e, id) => {
-    e.stopPropagation()
-    if (!confirm('Delete this project?')) return
-    setDeletingId(id)
-    try {
-      await deleteProject(id)
-      setProjects(prev => prev.filter(p => p.id !== id))
-      setStats(prev => prev ? { ...prev, total_projects: prev.total_projects - 1 } : prev)
-    } finally {
-      setDeletingId(null)
-    }
-  }
 
   const bySev = stats?.by_severity || {}
   const hasSev = stats && Object.values(bySev).some(v => v > 0)
@@ -267,7 +235,7 @@ export default function Dashboard() {
                 {getGreeting()}, <span style={{ color: '#FF8C5A' }}>{user?.nom?.split(' ')[0]}</span>
               </h1>
               <p className="text-sm text-white/45 mt-2">
-                {loading ? 'Loading workspace...' : `${projects.length} project${projects.length !== 1 ? 's' : ''} monitored in your workspace`}
+                {loading ? 'Loading workspace...' : 'Your security overview and metrics'}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -432,44 +400,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ── Projects list ──────────────────────────────────────────────── */}
-          <div className="animate-slide-up" style={{ animationDelay: '0.16s' }}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-white/30">Projects</h2>
-              <button
-                onClick={() => navigate('/scans/new')}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.97]"
-                style={{ background: 'linear-gradient(135deg,#FF6B2B,#C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.3)' }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-                New Scan
-              </button>
-            </div>
-
-            {loading ? (
-              <div className="flex items-center justify-center py-16">
-                <div className="w-6 h-6 rounded-full animate-spin"
-                  style={{ border: '2px solid rgba(255,107,43,0.2)', borderTop: '2px solid #FF6B2B' }} />
-              </div>
-            ) : projects.length === 0 ? (
-              <EmptyState onNew={() => navigate('/scans/new')} />
-            ) : (
-              <div className="flex flex-col gap-3">
-                {projects.map(p => (
-                  <ProjectRow
-                    key={p.id}
-                    project={p}
-                    deleting={deletingId === p.id}
-                    onClick={() => navigate(`/projects/${p.id}`)}
-                    onDelete={e => handleDelete(e, p.id)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
         </div>
       </main>
     </AppLayout>
@@ -490,96 +420,5 @@ function SevPill({ n, c, label }) {
       style={{ background: `${c}15`, color: c, border: `1px solid ${c}30` }}>
       {n} {label}
     </span>
-  )
-}
-
-function ProjectRow({ project, deleting, onClick, onDelete }) {
-  const userRoleBadge = project.user_role && project.user_role !== 'owner'
-  return (
-    <div
-      onClick={onClick}
-      className="group flex items-center justify-between px-5 py-4 rounded-2xl cursor-pointer transition-all"
-      style={{ background: 'linear-gradient(170deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))', border: '1px solid rgba(255,255,255,0.055)' }}
-      onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,107,43,0.15)'}
-      onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'}
-    >
-      <div className="flex items-center gap-4 min-w-0">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ background: 'rgba(255,107,43,0.08)', border: '1px solid rgba(255,107,43,0.12)' }}>
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FF6B2B" strokeWidth="1.8">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-          </svg>
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-white font-semibold text-sm truncate">{project.name}</p>
-            {userRoleBadge && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0"
-                style={{
-                  background: project.user_role === 'editor' ? 'rgba(255,107,43,0.1)' : 'rgba(107,114,128,0.1)',
-                  color:      project.user_role === 'editor' ? '#FF8C5A' : '#9ca3af',
-                  border:     project.user_role === 'editor' ? '1px solid rgba(255,107,43,0.2)' : '1px solid rgba(107,114,128,0.2)',
-                }}>
-                {project.user_role}
-              </span>
-            )}
-          </div>
-          <p className="text-white/30 text-xs mt-0.5 truncate">
-            {project.description || 'No description'} · {project.scan_count} scan{project.scan_count !== 1 ? 's' : ''}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-        <StatusBadge status={project.last_scan_status} />
-        <span className="text-white/20 text-xs hidden md:block">
-          {new Date(project.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-        </span>
-        {project.user_role === 'owner' || !project.user_role ? (
-          <button
-            onClick={onDelete}
-            disabled={deleting}
-            className="opacity-0 group-hover:opacity-100 transition-opacity text-white/20 hover:text-red-400 p-1 rounded disabled:opacity-30"
-          >
-            {deleting ? (
-              <div className="w-3.5 h-3.5 rounded-full animate-spin"
-                style={{ border: '1.5px solid rgba(255,255,255,0.2)', borderTop: '1.5px solid #ef4444' }} />
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                <path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-              </svg>
-            )}
-          </button>
-        ) : <div className="w-6" />}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-          className="text-white/15 group-hover:text-white/30 transition-colors">
-          <polyline points="9 18 15 12 9 6" />
-        </svg>
-      </div>
-    </div>
-  )
-}
-
-function EmptyState({ onNew }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 rounded-2xl"
-      style={{ border: '1px dashed rgba(255,255,255,0.08)' }}>
-      <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
-        style={{ background: 'rgba(255,107,43,0.06)', border: '1px solid rgba(255,107,43,0.1)' }}>
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FF6B2B" strokeWidth="1.5">
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-          <path d="M12 11v6M9 14h6" />
-        </svg>
-      </div>
-      <p className="text-white font-semibold mb-1">No projects yet</p>
-      <p className="text-white/30 text-sm mb-6">Create your first project to start scanning for vulnerabilities</p>
-      <button onClick={onNew}
-        className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.97]"
-        style={{ background: 'linear-gradient(135deg,#FF6B2B,#C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}>
-        Create first project
-      </button>
-    </div>
   )
 }
