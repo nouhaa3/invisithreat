@@ -16,6 +16,7 @@ class P:
     # User management (Admin only)
     MANAGE_USERS               = "manage_users"
     ASSIGN_ROLES               = "assign_roles"
+    VIEW_AUDIT_LOGS            = "view_audit_logs"
 
     # Project management
     MANAGE_ALL_PROJECTS        = "manage_all_projects"   # Admin sees/edits everyone's projects
@@ -46,6 +47,7 @@ ROLE_PERMISSIONS: dict = {
     "Admin": [
         P.MANAGE_USERS,
         P.ASSIGN_ROLES,
+        P.VIEW_AUDIT_LOGS,
         P.MANAGE_ALL_PROJECTS,
         P.MANAGE_OWN_PROJECTS,
         P.VIEW_DASHBOARD,

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { useNotifications } from '../context/NotificationContext'
 import { useAuth } from '../context/AuthContext'
+import { useRelativeTime } from '../hooks/useRelativeTime'
 import { adminApproveRoleRequest, adminChangeRole, adminGetUsers } from '../services/adminService'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -14,6 +15,12 @@ function timeAgo(iso) {
   if (diff < 86_400_000)  return `${Math.floor(diff / 3_600_000)}h ago`
   if (diff < 604_800_000) return `${Math.floor(diff / 86_400_000)}d ago`
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+// Real-time timestamp component
+function RelativeTime({ iso }) {
+  const relativeTime = useRelativeTime(iso)
+  return <span>{relativeTime}</span>
 }
 
 const TYPE_CFG = {
@@ -219,7 +226,7 @@ function NotifCard({
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 mt-1">
             <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.2)' }}>
-              {timeAgo(notif.created_at)}
+              <RelativeTime iso={notif.created_at} />
             </span>
           </div>
         </div>

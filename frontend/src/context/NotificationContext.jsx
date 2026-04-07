@@ -54,41 +54,41 @@ export function NotificationProvider({ children }) {
   // Initialize WebSocket for real-time notifications
   useEffect(() => {
     if (!isAuthenticated || !user) {
-      console.log('🔌 [NOTIF-CONTEXT] Not initializing - not authenticated or no user')
+      console.log('[NOTIF-CONTEXT] Not initializing - not authenticated or no user')
       return
     }
 
-    console.log('🔌 [NOTIF-CONTEXT] Initializing WebSocket for user:', user.id, user.role_name)
+    console.log('[NOTIF-CONTEXT] Initializing WebSocket for user:', user.id, user.role_name)
     initializeWebSocket(user.id, user.role_name, user.email)
 
     // Listen for real-time notifications from Socket.IO
     let cleanup = null
     if (user.role_name === 'Admin') {
-      console.log('🔌 [NOTIF-CONTEXT] User is Admin - registering notification listener')
+      console.log('[NOTIF-CONTEXT] User is Admin - registering notification listener')
       cleanup = onNotification((socketNotif) => {
         if (!socketNotif || !socketNotif.type) {
-          console.warn('⚠️ [NOTIF-CONTEXT] Received invalid notification:', socketNotif)
+          console.warn('[WARN] [NOTIF-CONTEXT] Received invalid notification:', socketNotif)
           return
         }
         
-        console.log('📢 [NOTIF-CONTEXT] Socket.IO event received:', socketNotif.type)
+        console.log('[NOTIF-CONTEXT] Socket.IO event received:', socketNotif.type)
         console.log('   Full data:', socketNotif)
         
         // Show the badge immediately (increment unreadCount)
-        console.log('📢 [NOTIF-CONTEXT] Incrementing unreadCount')
+        console.log('[NOTIF-CONTEXT] Incrementing unreadCount')
         setUnreadCount(prev => prev + 1)
         
         // Then refresh the notification list in the background
-        console.log('📢 [NOTIF-CONTEXT] Calling refresh()')
+        console.log('[NOTIF-CONTEXT] Calling refresh()')
         refresh()
       })
     } else {
-      console.log('🔌 [NOTIF-CONTEXT] User is NOT Admin - NOT registering notification listener')
+      console.log('[NOTIF-CONTEXT] User is NOT Admin - NOT registering notification listener')
     }
 
     return () => {
       if (cleanup) {
-        console.log('🔌 [NOTIF-CONTEXT] Cleaning up notification listener')
+        console.log('[NOTIF-CONTEXT] Cleaning up notification listener')
         cleanup()
       }
     }

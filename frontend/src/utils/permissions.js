@@ -7,6 +7,7 @@ export const PERMISSIONS = {
   // Admin only
   MANAGE_USERS:               'manage_users',
   ASSIGN_ROLES:               'assign_roles',
+  VIEW_AUDIT_LOGS:            'view_audit_logs',
 
   // Project management
   MANAGE_ALL_PROJECTS:        'manage_all_projects',
@@ -35,6 +36,7 @@ export const ROLE_PERMISSIONS = {
   Admin: [
     PERMISSIONS.MANAGE_USERS,
     PERMISSIONS.ASSIGN_ROLES,
+    PERMISSIONS.VIEW_AUDIT_LOGS,
     PERMISSIONS.MANAGE_ALL_PROJECTS,
     PERMISSIONS.MANAGE_OWN_PROJECTS,
     PERMISSIONS.VIEW_DASHBOARD,

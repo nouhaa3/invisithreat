@@ -3,6 +3,8 @@ InvisiThreat Backend API
 FastAPI application entry point
 """
 import logging
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,9 +16,37 @@ from socketio import ASGIApp
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.rate_limit import limiter
+from app.core.jobs import cleanup_old_audit_logs
 from app.services.socketio_service import sio
 
 logger = logging.getLogger(__name__)
+
+# ─── Scheduler Setup ──────────────────────────────────────────────────────────
+scheduler = AsyncIOScheduler()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage app startup and shutdown"""
+    # Startup
+    scheduler.start()
+    logger.info("[OK] Background job scheduler started")
+    
+    # Schedule daily cleanup
+    scheduler.add_job(
+        cleanup_old_audit_logs,
+        "cron",
+        hour=2,
+        minute=0,  # Run at 2:00 AM daily
+        id="cleanup_old_audit_logs",
+        name="Clean old audit logs (> 2 weeks)",
+    )
+    logger.info("Scheduled cleanup_old_audit_logs to run daily at 02:00")
+    
+    yield
+    
+    # Shutdown
+    scheduler.shutdown()
+    logger.info("[OK] Background job scheduler stopped")
 
 # Apply database migrations on startup
 # run_migrations()  # TODO: Fix Alembic revision conflict - database already initialized
@@ -27,7 +57,8 @@ app_fastapi = FastAPI(
     description="InvisiThreat - Intelligent DevSecOps Platform",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json"
+    openapi_url="/api/openapi.json",
+    lifespan=lifespan,
 )
 
 # CORS middleware - restricted configuration for security

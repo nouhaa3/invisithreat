@@ -75,17 +75,17 @@ async def register(
     email_sent = notify_user_verify_email(user.nom, user.email, verification_token, settings.FRONTEND_URL)
 
     # Create database notifications for all active admins
-    print(f"🔍 [REGISTER] Creating notifications for new user: {user.nom} ({user.email})")
+    print(f"[SEARCH] [REGISTER] Creating notifications for new user: {user.nom} ({user.email})")
     admin_users = (
         db.query(User)
         .join(Role, User.role_id == Role.id)
         .filter(Role.name == "Admin", User.is_active == True)
         .all()
     )
-    print(f"🔍 [REGISTER] Found {len(admin_users)} active admins")
+    print(f"[SEARCH] [REGISTER] Found {len(admin_users)} active admins")
     
     for admin_user in admin_users:
-        print(f"🔍 [REGISTER] Creating notification for admin {admin_user.id}")
+        print(f"[SEARCH] [REGISTER] Creating notification for admin {admin_user.id}")
         notif = create_notification(
             db,
             admin_user.id,
@@ -94,10 +94,10 @@ async def register(
             f"{user.nom} ({user.email}) has registered and is pending verification.",
             "/admin",
         )
-        print(f"✅ [REGISTER] Notification created: {notif.id}")
+        print(f"[OK] [REGISTER] Notification created: {notif.id}")
 
     # Emit WebSocket notification to admins that a new user registered
-    print(f"🔍 [REGISTER] Emitting Socket.IO event for new user")
+    print(f"[SEARCH] [REGISTER] Emitting Socket.IO event for new user")
     try:
         await SocketIOManager.notify_user_created({
             'id': user.id,
@@ -107,9 +107,9 @@ async def register(
             'is_pending': user.is_pending,
             'date_creation': user.date_creation,
         })
-        print(f"✅ [REGISTER] Socket.IO event sent successfully")
+        print(f"[OK] [REGISTER] Socket.IO event sent successfully")
     except Exception as e:
-        print(f"❌ [REGISTER] Error sending WebSocket notification: {e}")
+        print(f"[ERROR] [REGISTER] Error sending WebSocket notification: {e}")
         import traceback
         traceback.print_exc()
 
@@ -466,7 +466,7 @@ async def email_verify_user(token: str, db: Session = Depends(get_db)):
     user.is_verified = True
     db.commit()
     db.refresh(user)
-    return HTMLResponse(_html_page("Verified", "✅", "Email verified!",
+    return HTMLResponse(_html_page("Verified", "[OK]", "Email verified!",
         f"Your email <strong style='color:#fff'>{user.email}</strong> is now verified.<br>You can now log in and access your dashboard.",
         "#16a34a"))
 
@@ -574,7 +574,7 @@ async def email_approve_user(token: str, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     notify_user_approved(user.nom, user.email)
-    return HTMLResponse(_html_page("Approved", "✅", f"{user.nom} has been approved!",
+    return HTMLResponse(_html_page("Approved", "[OK]", f"{user.nom} has been approved!",
         f"The account for <strong style='color:#fff'>{user.email}</strong> is now active.<br>They received a confirmation email.",
         "#16a34a"))
 

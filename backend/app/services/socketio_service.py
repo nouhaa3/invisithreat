@@ -36,12 +36,12 @@ class SocketIOManager:
         }
         if role == 'Admin':
             cls.admin_connections[user_id] = sid
-            logger.info(f'✅ Admin {user_id} ({email}) connected (SID: {sid}) - Total admins: {len(cls.admin_connections)}')
+            logger.info(f'[OK] Admin {user_id} ({email}) connected (SID: {sid}) - Total admins: {len(cls.admin_connections)}')
         else:
-            logger.info(f'✅ User {user_id} ({email}) connected (SID: {sid})')
+            logger.info(f'[OK] User {user_id} ({email}) connected (SID: {sid})')
         
         if old_sid and old_sid != sid:
-            logger.info(f'⚠️ User {user_id} had old SID {old_sid}, updated to {sid}')
+            logger.info(f'[WARN] User {user_id} had old SID {old_sid}, updated to {sid}')
     
     @classmethod
     def unregister_user(cls, user_id: str):
@@ -53,11 +53,11 @@ class SocketIOManager:
             del cls.connected_users[user_id]
             if was_admin:
                 del cls.admin_connections[user_id]
-                logger.info(f'❌ Admin {user_id} ({email}) disconnected - Remaining admins: {len(cls.admin_connections)}')
+                logger.info(f'[ERROR] Admin {user_id} ({email}) disconnected - Remaining admins: {len(cls.admin_connections)}')
             else:
-                logger.info(f'❌ User {user_id} ({email}) disconnected')
+                logger.info(f'[ERROR] User {user_id} ({email}) disconnected')
         else:
-            logger.warning(f'❌ Attempting to unregister unknown user {user_id}')
+            logger.warning(f'[ERROR] Attempting to unregister unknown user {user_id}')
     
     @classmethod
     async def notify_user_created(cls, user_data: dict):
@@ -75,20 +75,20 @@ class SocketIOManager:
         }
         
         admin_count = len(cls.admin_connections)
-        logger.info(f'📢 [NOTIFY] NEW USER CREATED: {user_nom} (ID: {user_id}) - Broadcasting to {admin_count} admin(s)')
+        logger.info(f'[NOTIFY] NEW USER CREATED: {user_nom} (ID: {user_id}) - Broadcasting to {admin_count} admin(s)')
         logger.info(f'   Admin IDs: {list(cls.admin_connections.keys())}')
         
         if admin_count == 0:
-            logger.warning('   ⚠️ [NOTIFY] No admins connected!')
+            logger.warning('   [WARN] [NOTIFY] No admins connected!')
             return
         
         # Send to all connected admins
         for admin_id, sid in list(cls.admin_connections.items()):
             try:
                 await sio.emit('notification', event_data, room=sid)
-                logger.info(f'   ✅ [NOTIFY] Emitted to admin {admin_id} (SID: {sid})')
+                logger.info(f'   [OK] [NOTIFY] Emitted to admin {admin_id} (SID: {sid})')
             except Exception as e:
-                logger.error(f'   ❌ [NOTIFY] Error sending to admin {admin_id}: {e}')
+                logger.error(f'   [ERROR] [NOTIFY] Error sending to admin {admin_id}: {e}')
     
     @classmethod
     async def notify_user_deleted(cls, user_id: str):
@@ -99,14 +99,14 @@ class SocketIOManager:
         }
         
         admin_count = len(cls.admin_connections)
-        logger.info(f'📢 USER DELETED: {user_id} - Broadcasting to {admin_count} admin(s)')
+        logger.info(f'[NOTIFY] USER DELETED: {user_id} - Broadcasting to {admin_count} admin(s)')
         
         for admin_id, sid in list(cls.admin_connections.items()):
             try:
                 await sio.emit('notification', event_data, room=sid)
-                logger.info(f'   ✅ Sent to admin {admin_id}')
+                logger.info(f'   [OK] Sent to admin {admin_id}')
             except Exception as e:
-                logger.error(f'   ❌ Error sending to admin {admin_id}: {e}')
+                logger.error(f'   [ERROR] Error sending to admin {admin_id}: {e}')
     
     @classmethod
     async def notify_user_status_changed(cls, user_id: str, is_active: bool):
@@ -119,20 +119,20 @@ class SocketIOManager:
         
         action = 'ACTIVATED' if is_active else 'DEACTIVATED'
         admin_count = len(cls.admin_connections)
-        logger.info(f'📢 USER {action}: {user_id} - Broadcasting to {admin_count} admin(s)')
+        logger.info(f'[NOTIFY] USER {action}: {user_id} - Broadcasting to {admin_count} admin(s)')
         
         for admin_id, sid in list(cls.admin_connections.items()):
             try:
                 await sio.emit('notification', event_data, room=sid)
-                logger.info(f'   ✅ Sent to admin {admin_id}')
+                logger.info(f'   [OK] Sent to admin {admin_id}')
             except Exception as e:
-                logger.error(f'   ❌ Error sending to admin {admin_id}: {e}')
+                logger.error(f'   [ERROR] Error sending to admin {admin_id}: {e}')
 
 # Socket.IO event handlers
 @sio.event
 async def connect(sid, environ):
     """Handle client connection"""
-    logger.info(f'🔌 New WebSocket connection: {sid}')
+    logger.info(f'[WS] New WebSocket connection: {sid}')
 
 @sio.event
 async def identify(sid, data):
@@ -141,10 +141,10 @@ async def identify(sid, data):
     email = data.get('email')
     role = data.get('role')
     
-    logger.info(f'🔐 [IDENTIFY] SID {sid} - user_id: {user_id}, role: {role}')
+    logger.info(f'[SECURE] [IDENTIFY] SID {sid} - user_id: {user_id}, role: {role}')
     
     if user_id:
-        logger.info(f'🔐 [IDENTIFY] Registering user {user_id} as {role}')
+        logger.info(f'[SECURE] [IDENTIFY] Registering user {user_id} as {role}')
         SocketIOManager.register_user(user_id, sid, email, role)
         await sio.emit('connected', {
             'status': 'success',
@@ -152,7 +152,7 @@ async def identify(sid, data):
             'user_id': user_id,
         }, room=sid)
     else:
-        logger.warning(f'⚠️ [IDENTIFY] No user_id provided by {sid}')
+        logger.warning(f'[WARN] [IDENTIFY] No user_id provided by {sid}')
 
 @sio.event
 async def disconnect(sid):
@@ -160,11 +160,11 @@ async def disconnect(sid):
     found = False
     for user_id, data in list(SocketIOManager.connected_users.items()):
         if data['sid'] == sid:
-            logger.info(f'🔌 Client {sid} (user: {user_id}) disconnecting')
+            logger.info(f'[WS] Client {sid} (user: {user_id}) disconnecting')
             SocketIOManager.unregister_user(user_id)
             found = True
             break
     
     if not found:
-        logger.warning(f'⚠️ Disconnection event for unknown SID: {sid}')
+        logger.warning(f'[WARN] Disconnection event for unknown SID: {sid}')
 

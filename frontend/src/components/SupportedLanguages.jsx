@@ -8,7 +8,7 @@ export default function SupportedLanguages() {
       rules: 12, 
       status: "COMPLETE", 
       color: "#3776ab", 
-      icon: "🐍",
+      icon: "PY",
       vulnerabilities: ["SQL Injection", "Code Execution", "Path Traversal", "Deserialization", "LDAP Injection"]
     },
     { 
@@ -17,7 +17,7 @@ export default function SupportedLanguages() {
       rules: 13, 
       status: "COMPLETE", 
       color: "#f7df1e", 
-      icon: "⚡",
+      icon: "JS",
       vulnerabilities: ["XSS", "CSRF", "Prototype Pollution", "DOM Injection", "Command Injection"]
     },
     { 
@@ -26,7 +26,7 @@ export default function SupportedLanguages() {
       rules: 9, 
       status: "PARTIAL", 
       color: "#007396", 
-      icon: "☕",
+      icon: "JV",
       vulnerabilities: ["SQL Injection", "XXE Injection", "Deserialization", "Path Traversal", "Hardcoded Secrets"]
     },
     { 
@@ -35,7 +35,7 @@ export default function SupportedLanguages() {
       rules: 10, 
       status: "PARTIAL", 
       color: "#00add8", 
-      icon: "🐹",
+      icon: "GO",
       vulnerabilities: ["SQL Injection", "Path Traversal", "Hardcoded Secrets", "Weak Crypto", "Race Conditions"]
     },
     { 
@@ -44,7 +44,7 @@ export default function SupportedLanguages() {
       rules: 8, 
       status: "PARTIAL", 
       color: "#ce422b", 
-      icon: "🦀",
+      icon: "RS",
       vulnerabilities: ["Unsafe Code", "Buffer Overflow", "Use After Free", "Integer Overflow", "Path Traversal"]
     },
     { 
@@ -53,7 +53,7 @@ export default function SupportedLanguages() {
       rules: 8, 
       status: "PARTIAL", 
       color: "#239120", 
-      icon: "#️⃣",
+      icon: "C#",
       vulnerabilities: ["SQL Injection", "XXE Injection", "Hardcoded Secrets", "Path Traversal", "Weak Crypto"]
     },
     { 
@@ -62,7 +62,7 @@ export default function SupportedLanguages() {
       rules: 9, 
       status: "PARTIAL", 
       color: "#00599c", 
-      icon: "⚙️",
+      icon: "C++",
       vulnerabilities: ["Buffer Overflow", "SQL Injection", "Integer Overflow", "Use After Free", "Path Traversal"]
     },
     { 
@@ -71,7 +71,7 @@ export default function SupportedLanguages() {
       rules: 9, 
       status: "PARTIAL", 
       color: "#777bb4", 
-      icon: "🐘",
+      icon: "PHP",
       vulnerabilities: ["SQL Injection", "XSS", "SSRF", "Path Traversal", "Remote Code Execution"]
     },
     { 
@@ -80,7 +80,7 @@ export default function SupportedLanguages() {
       rules: 9, 
       status: "PARTIAL", 
       color: "#cc342d", 
-      icon: "💎",
+      icon: "RB",
       vulnerabilities: ["SQL Injection", "YAML Deserialization", "Hardcoded Secrets", "Path Traversal", "XSS"]
     },
     { 
@@ -89,7 +89,7 @@ export default function SupportedLanguages() {
       rules: 9, 
       status: "PARTIAL", 
       color: "#fa7343", 
-      icon: "🍎",
+      icon: "SW",
       vulnerabilities: ["Hardcoded Secrets", "Insecure Storage", "Weak Crypto", "Path Traversal", "Code Injection"]
     },
     { 
@@ -98,7 +98,7 @@ export default function SupportedLanguages() {
       rules: 8, 
       status: "PARTIAL", 
       color: "#7f52ff", 
-      icon: "🚀",
+      icon: "KT",
       vulnerabilities: ["SQL Injection", "Deserialization", "Hardcoded Secrets", "Path Traversal", "XXE Injection"]
     },
     { 
@@ -107,7 +107,7 @@ export default function SupportedLanguages() {
       rules: 7, 
       status: "PARTIAL", 
       color: "#4eaa25", 
-      icon: "💻",
+      icon: "SH",
       vulnerabilities: ["Command Injection", "Path Traversal", "Hardcoded Secrets", "Insecure Pipe", "Code Injection"]
     },
     { 
@@ -116,7 +116,7 @@ export default function SupportedLanguages() {
       rules: 9, 
       status: "PARTIAL", 
       color: "#0175c2", 
-      icon: "🎯",
+      icon: "DA",
       vulnerabilities: ["Hardcoded Secrets", "Insecure Storage", "SQL Injection", "Path Traversal", "XSS"]
     },
     { 
@@ -125,7 +125,7 @@ export default function SupportedLanguages() {
       rules: 14, 
       status: "COMPLETE", 
       color: "#888888", 
-      icon: "🔍",
+      icon: "[*]]",
       vulnerabilities: ["Hardcoded API Keys", "Secrets in Comments", "Git Leaks", "SSL Cert Issues", "License Violations"]
     },
   ]

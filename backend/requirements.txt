@@ -25,3 +25,5 @@ python-socketio
 python-engineio
 aioredis
 redis
+
+APScheduler==3.10.4

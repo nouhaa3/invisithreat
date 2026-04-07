@@ -143,7 +143,7 @@ def notify_admin_new_request(nom: str, email: str, role_name: str, approve_token
               <td style="padding-right:12px;">
                 <a href="{approve_url}"
                    style="display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-weight:700;font-size:14px;text-decoration:none;padding:13px 28px;border-radius:10px;">
-                  ✓ Approve
+                  Approve
                 </a>
               </td>
               <td>
@@ -192,7 +192,7 @@ def notify_user_approved(nom: str, email: str) -> bool:
           <span style="font-size:22px;font-weight:700;color:#4ade80;">InvisiThreat</span>
         </td></tr>
         <tr><td style="padding:40px 36px;text-align:center;">
-          <div style="width:56px;height:56px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);border-radius:50%;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:26px;">✓</div>
+          <div style="width:56px;height:56px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);border-radius:50%;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:26px;">[OK]</div>
           <h2 style="color:#fff;font-size:26px;margin:0 0 12px;">You're in, {nom}!</h2>
           <p style="color:rgba(255,255,255,0.4);font-size:14px;line-height:1.6;margin:0 0 32px;">
             Your InvisiThreat account has been approved by the administrator.<br>

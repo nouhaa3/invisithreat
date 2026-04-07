@@ -83,10 +83,10 @@ export default function AdminPage() {
         // Check if user already exists in list
         const exists = prev.some(u => u.id === newUser.id)
         if (exists) {
-          console.log('⚠️ User already exists, skipping duplicate:', newUser.nom)
+          console.log('[WARN] User already exists, skipping duplicate:', newUser.nom)
           return prev
         }
-        console.log('✨ New user added:', newUser.nom)
+        console.log('[NEW-USER] New user added:', newUser.nom)
         return [newUser, ...prev]
       })
     } 
@@ -94,7 +94,7 @@ export default function AdminPage() {
       setUsers(prev => {
         const filtered = prev.filter(u => u.id !== user_id)
         if (filtered.length < prev.length) {
-          console.log('🗑️ User deleted:', user_id)
+          console.log('[DELETE] User deleted:', user_id)
         }
         return filtered
       })
@@ -106,7 +106,7 @@ export default function AdminPage() {
         )
         // Check if anything actually changed
         if (updated.some((u, i) => u.is_active !== prev[i].is_active)) {
-          console.log('🔄 User status changed:', user_id, is_active ? 'activated' : 'deactivated')
+          console.log('[UPDATE-STATUS] User status changed:', user_id, is_active ? 'activated' : 'deactivated')
         }
         return updated
       })

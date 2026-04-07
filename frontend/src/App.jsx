@@ -15,6 +15,7 @@ import AdminPage from './pages/AdminPage'
 import ProjectMembersPage from './pages/ProjectMembersPage'
 import SettingsPage from './pages/SettingsPage'
 import NotificationsPage from './pages/NotificationsPage'
+import AuditLogsPage from './pages/AuditLogsPage'
 import GitHubOAuthCallbackPage from './pages/GitHubOAuthCallbackPage'
 
 const PrivateRoute = ({ children }) => {
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="/projects/:id/edit" element={<PermissionRoute permission={PERMISSIONS.MANAGE_OWN_PROJECTS}><EditProjectPage /></PermissionRoute>} />
           <Route path="/projects/:id/members" element={<PermissionRoute permission={PERMISSIONS.MANAGE_PROJECT_MEMBERS}><ProjectMembersPage /></PermissionRoute>} />
           <Route path="/admin" element={<PermissionRoute permission={PERMISSIONS.MANAGE_USERS}><AdminPage /></PermissionRoute>} />
+          <Route path="/audit-logs" element={<PermissionRoute permission={PERMISSIONS.VIEW_AUDIT_LOGS}><AuditLogsPage /></PermissionRoute>} />
           <Route path="/settings" element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
           <Route path="/notifications" element={<PrivateRoute><NotificationsPage /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/login" replace />} />

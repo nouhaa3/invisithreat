@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../context/AuthContext'
+import { useRelativeTime } from '../hooks/useRelativeTime'
 import { updateMyProfile, changeMyPassword } from '../services/authService'
 import { listApiKeys, createApiKey, revokeApiKey } from '../services/apiKeyService'
 import { getMyAuditLogs } from '../services/auditLogService'
@@ -1024,6 +1025,12 @@ function LogsTab({ user }) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
 
+  // Component for real-time relative time
+  function RelativeTime({ iso }) {
+    const relativeTime = useRelativeTime(iso)
+    return <span>{relativeTime}</span>
+  }
+
   const BAD_CFG = { blue: '#60a5fa', orange: ORANGE_LIGHT, green: '#4ade80', purple: '#a78bfa' }
 
   return (
@@ -1050,7 +1057,7 @@ function LogsTab({ user }) {
                   <p className="text-sm font-semibold text-white">{mapped.label}</p>
                   {log.detail && <p className="text-xs text-white/30">{log.detail}</p>}
                 </div>
-                <span className="text-xs text-white/20 flex-shrink-0">{fmt(log.created_at)}</span>
+                <span className="text-xs text-white/20 flex-shrink-0"><RelativeTime iso={log.created_at} /></span>
               </div>
             )
           })}

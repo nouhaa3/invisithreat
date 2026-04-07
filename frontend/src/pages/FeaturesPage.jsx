@@ -31,7 +31,7 @@ export default function FeaturesPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 animate-slide-up" style={{ animationDelay: "0.04s" }}>
             {[
               { label: "14 Languages", value: "Complete coverage", icon: "🌍" },
-              { label: "157 Security Rules", value: "14 rules/language avg", icon: "🔍" },
+              { label: "157 Security Rules", value: "14 rules/language avg", icon: "[*]" },
               { label: "OWASP Mapped", value: "A01-A08 covered", icon: "🛡️" },
               { label: "Real-time Scanning", value: "GitHub webhook", icon: "⚡" },
             ].map((stat) => (

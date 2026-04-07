@@ -203,7 +203,7 @@ docker exec invisithreat-db psql -U postgres -d invisithreat -c "SELECT title, m
 
 ---
 
-## 🔍 Troubleshooting
+## [SEARCH] Troubleshooting
 
 ### Problem: Badge ne s'affiche pas du tout
 **Solution**:
