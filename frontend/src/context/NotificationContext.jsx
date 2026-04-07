@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { useAuth } from './AuthContext'
 import * as svc from '../services/notificationService'
 import { adminGetUsers } from '../services/adminService'
+import { initializeWebSocket, onNotification } from '../services/websocketService'
 
 const NotificationContext = createContext(null)
 
@@ -49,6 +50,49 @@ export function NotificationProvider({ children }) {
       setUnreadCount(merged.filter(n => !n.is_read).length)
     } catch {}
   }, [isAuthenticated, user])
+
+  // Initialize WebSocket for real-time notifications
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      console.log('🔌 [NOTIF-CONTEXT] Not initializing - not authenticated or no user')
+      return
+    }
+
+    console.log('🔌 [NOTIF-CONTEXT] Initializing WebSocket for user:', user.id, user.role_name)
+    initializeWebSocket(user.id, user.role_name, user.email)
+
+    // Listen for real-time notifications from Socket.IO
+    let cleanup = null
+    if (user.role_name === 'Admin') {
+      console.log('🔌 [NOTIF-CONTEXT] User is Admin - registering notification listener')
+      cleanup = onNotification((socketNotif) => {
+        if (!socketNotif || !socketNotif.type) {
+          console.warn('⚠️ [NOTIF-CONTEXT] Received invalid notification:', socketNotif)
+          return
+        }
+        
+        console.log('📢 [NOTIF-CONTEXT] Socket.IO event received:', socketNotif.type)
+        console.log('   Full data:', socketNotif)
+        
+        // Show the badge immediately (increment unreadCount)
+        console.log('📢 [NOTIF-CONTEXT] Incrementing unreadCount')
+        setUnreadCount(prev => prev + 1)
+        
+        // Then refresh the notification list in the background
+        console.log('📢 [NOTIF-CONTEXT] Calling refresh()')
+        refresh()
+      })
+    } else {
+      console.log('🔌 [NOTIF-CONTEXT] User is NOT Admin - NOT registering notification listener')
+    }
+
+    return () => {
+      if (cleanup) {
+        console.log('🔌 [NOTIF-CONTEXT] Cleaning up notification listener')
+        cleanup()
+      }
+    }
+  }, [isAuthenticated, user, refresh])
 
   useEffect(() => {
     if (!isAuthenticated) {
