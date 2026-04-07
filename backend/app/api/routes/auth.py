@@ -29,6 +29,7 @@ from app.models.user import User
 from app.models.role import Role
 from app.services.notification import create_notification
 from app.services.audit_log import create_audit_log
+from app.services.socketio_service import SocketIOManager
 import uuid as _uuid
 import random
 import string
@@ -72,6 +73,45 @@ async def register(
 
     # Send verification email to user (not admin notification)
     email_sent = notify_user_verify_email(user.nom, user.email, verification_token, settings.FRONTEND_URL)
+
+    # Create database notifications for all active admins
+    print(f"🔍 [REGISTER] Creating notifications for new user: {user.nom} ({user.email})")
+    admin_users = (
+        db.query(User)
+        .join(Role, User.role_id == Role.id)
+        .filter(Role.name == "Admin", User.is_active == True)
+        .all()
+    )
+    print(f"🔍 [REGISTER] Found {len(admin_users)} active admins")
+    
+    for admin_user in admin_users:
+        print(f"🔍 [REGISTER] Creating notification for admin {admin_user.id}")
+        notif = create_notification(
+            db,
+            admin_user.id,
+            "system",
+            "New User Registration",
+            f"{user.nom} ({user.email}) has registered and is pending verification.",
+            "/admin",
+        )
+        print(f"✅ [REGISTER] Notification created: {notif.id}")
+
+    # Emit WebSocket notification to admins that a new user registered
+    print(f"🔍 [REGISTER] Emitting Socket.IO event for new user")
+    try:
+        await SocketIOManager.notify_user_created({
+            'id': user.id,
+            'nom': user.nom,
+            'email': user.email,
+            'role_name': user.role.name if user.role else 'Viewer',
+            'is_pending': user.is_pending,
+            'date_creation': user.date_creation,
+        })
+        print(f"✅ [REGISTER] Socket.IO event sent successfully")
+    except Exception as e:
+        print(f"❌ [REGISTER] Error sending WebSocket notification: {e}")
+        import traceback
+        traceback.print_exc()
 
     return {
         "status": "email_verification_required",
@@ -642,6 +682,13 @@ async def admin_toggle_active(
         notify_user_account_activated(user.nom, user.email, admin.nom, settings.FRONTEND_URL)
     else:
         notify_user_account_deactivated(user.nom, user.email, admin.nom, settings.FRONTEND_URL)
+    
+    # Emit WebSocket notification to admins
+    try:
+        await SocketIOManager.notify_user_status_changed(str(user.id), user.is_active)
+    except Exception as e:
+        print(f"Error sending WebSocket notification: {e}")
+    
     return UserAdminResponse(**get_user_with_role(db, user))
 
 
@@ -771,8 +818,17 @@ async def admin_delete_user(
     _ensure_not_primary_admin_target(user, "deleted")
     if str(user.id) == str(admin.id):
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    # Store user_id before deletion for notification
+    deleted_user_id = str(user.id)
     db.delete(user)
     db.commit()
+    
+    # Emit WebSocket notification to admins
+    try:
+        await SocketIOManager.notify_user_deleted(deleted_user_id)
+    except Exception as e:
+        print(f"Error sending WebSocket notification: {e}")
 
 
 # ─── Bulk user operations ─────────────────────────────────────────────────────
@@ -818,6 +874,14 @@ async def admin_bulk_delete_users(
             errors[str(user_id)] = "An unexpected error occurred"
     
     db.commit()
+    
+    # Emit WebSocket notifications to admins for each deleted user
+    try:
+        for user_id in payload.user_ids:
+            if str(user_id) not in [k for k in errors.keys()]:
+                await SocketIOManager.notify_user_deleted(str(user_id))
+    except Exception as e:
+        print(f"Error sending WebSocket notification: {e}")
     
     # Create audit log for bulk deletion
     if success_count > 0:
@@ -877,6 +941,14 @@ async def admin_bulk_activate_users(
     
     db.commit()
     
+    # Emit WebSocket notifications to admins for each activated user
+    try:
+        for user_id in payload.user_ids:
+            if str(user_id) not in [k for k in errors.keys()]:
+                await SocketIOManager.notify_user_status_changed(str(user_id), True)
+    except Exception as e:
+        print(f"Error sending WebSocket notification: {e}")
+    
     # Create audit log for bulk activation
     if success_count > 0:
         create_audit_log(db, admin.id, "bulk_activate_users", f"Activated {success_count} user(s)")
@@ -933,6 +1005,14 @@ async def admin_bulk_deactivate_users(
             errors[str(user_id)] = "An unexpected error occurred"
     
     db.commit()
+    
+    # Emit WebSocket notifications to admins for each deactivated user
+    try:
+        for user_id in payload.user_ids:
+            if str(user_id) not in [k for k in errors.keys()]:
+                await SocketIOManager.notify_user_status_changed(str(user_id), False)
+    except Exception as e:
+        print(f"Error sending WebSocket notification: {e}")
     
     # Create audit log for bulk deactivation
     if success_count > 0:

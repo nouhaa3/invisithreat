@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import Select from '../components/Select'
 import { useAuth } from '../context/AuthContext'
+import { useWebSocket } from '../hooks/useWebSocket'
 import {
   adminGetUsers,
   adminChangeRole,
@@ -59,6 +60,58 @@ export default function AdminPage() {
   useEffect(() => {
     if (me && me.role_name !== 'Admin') navigate('/dashboard', { replace: true })
   }, [me, navigate])
+
+  // Initialize WebSocket for real-time notifications
+  useWebSocket((notification) => {
+    if (!notification) return
+    
+    const { type, user, user_id, is_active } = notification
+    
+    if (type === 'user_created') {
+      // Add new user to the top of the list (avoid duplicates by checking if already exists)
+      const newUser = {
+        id: user?.id,
+        nom: user?.nom,
+        email: user?.email,
+        role_name: user?.role || 'Viewer',
+        is_pending: true,
+        is_active: false,
+        date_creation: user?.created_at || new Date().toISOString(),
+      }
+      
+      setUsers(prev => {
+        // Check if user already exists in list
+        const exists = prev.some(u => u.id === newUser.id)
+        if (exists) {
+          console.log('⚠️ User already exists, skipping duplicate:', newUser.nom)
+          return prev
+        }
+        console.log('✨ New user added:', newUser.nom)
+        return [newUser, ...prev]
+      })
+    } 
+    else if (type === 'user_deleted') {
+      setUsers(prev => {
+        const filtered = prev.filter(u => u.id !== user_id)
+        if (filtered.length < prev.length) {
+          console.log('🗑️ User deleted:', user_id)
+        }
+        return filtered
+      })
+    } 
+    else if (type === 'user_status_changed') {
+      setUsers(prev => {
+        const updated = prev.map(u => 
+          u.id === user_id ? { ...u, is_active } : u
+        )
+        // Check if anything actually changed
+        if (updated.some((u, i) => u.is_active !== prev[i].is_active)) {
+          console.log('🔄 User status changed:', user_id, is_active ? 'activated' : 'deactivated')
+        }
+        return updated
+      })
+    }
+  })
 
   const load = async () => {
     setLoading(true)
