@@ -164,15 +164,6 @@ export default function ProjectsPage() {
                 {loading ? 'Loading projects...' : `${projects.length} project${projects.length !== 1 ? 's' : ''} in your workspace`}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => navigate('/scans/new')}
-                className="px-4 py-2 rounded-xl text-sm font-semibold text-white"
-                style={{ background: 'linear-gradient(135deg,#FF6B2B,#C13A00)' }}
-              >
-                Launch New Scan
-              </button>
-            </div>
           </div>
 
           {/* ── Projects list ──────────────────────────────────────────────── */}
