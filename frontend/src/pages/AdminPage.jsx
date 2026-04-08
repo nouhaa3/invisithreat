@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
+import { ProfileAvatar } from '../components/ProfileAvatar'
 import Select from '../components/Select'
 import { useAuth } from '../context/AuthContext'
 import { useWebSocket } from '../hooks/useWebSocket'
@@ -382,11 +383,7 @@ export default function AdminPage() {
                           style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', color: '#4ade80' }}>
                           {approving[u.id] ? (
                             <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
+                          ) : null}
                           Approve
                         </button>
                         <button
@@ -396,11 +393,7 @@ export default function AdminPage() {
                           style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>
                           {rejecting[u.id] ? (
                             <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                            </svg>
-                          )}
+                          ) : null}
                           Reject
                         </button>
                         <button
@@ -411,14 +404,7 @@ export default function AdminPage() {
                           style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', color: '#f87171' }}>
                           {deleting[u.id] ? (
                             <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <polyline points="3 6 5 6 21 6" />
-                              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                              <path d="M10 11v6M14 11v6" />
-                              <path d="M9 6V4h6v2" />
-                            </svg>
-                          )}
+                          ) : null}
                         </button>
                       </div>
                     </div>
@@ -498,10 +484,6 @@ export default function AdminPage() {
               style={{ border: '1px dashed rgba(255,255,255,0.08)' }}>
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
                 style={{ background: 'rgba(255,107,43,0.06)', border: '1px solid rgba(255,107,43,0.1)' }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FF6B2B" strokeWidth="1.5">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
               </div>
               <p className="text-white font-semibold mb-1">No users found</p>
               <p className="text-white/30 text-sm">Try adjusting your search or role filters</p>
@@ -540,15 +522,7 @@ export default function AdminPage() {
 
                     {/* Avatar + Name/Email */}
                     <div className="flex items-center gap-3 mb-3">
-                      <div
-                        className="w-12 h-12 rounded-xl flex items-center justify-center text-base font-bold flex-shrink-0"
-                        style={{
-                          background: cfg.bg,
-                          border: `1.5px solid ${cfg.border}`,
-                          color: cfg.color,
-                        }}>
-                        {u.nom?.charAt(0).toUpperCase()}
-                      </div>
+                      <ProfileAvatar user={u} size={48} className="flex-shrink-0" />
 
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-white truncate">
@@ -766,12 +740,9 @@ function UserDetailsModal({ userId, users, me, ROLES, ROLE_COLOR, onClose, onUpd
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg transition-all"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}>
+            Close
           </button>
         </div>
 
@@ -875,11 +846,7 @@ function UserDetailsModal({ userId, users, me, ROLES, ROLE_COLOR, onClose, onUpd
                   onClick={() => setEditingUser({ id: user.id, nom: user.nom, email: user.email })}
                   className="w-full px-3 py-2 rounded-lg text-sm text-left transition-all"
                   style={{ background: 'rgba(255,107,43,0.08)', border: '1px solid rgba(255,107,43,0.15)', color: '#FF8C5A' }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="inline mr-2">
-                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                  Edit Name & Email
+                  Edit user's information
                 </button>
               )}
             </div>
@@ -897,11 +864,7 @@ function UserDetailsModal({ userId, users, me, ROLES, ROLE_COLOR, onClose, onUpd
                 style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', color: '#4ade80' }}>
                 {saving[user.id] ? (
                   <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin inline-block mr-2" />
-                ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="inline mr-2">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                )}
+                ) : null}
                 Save
               </button>
               <button
@@ -920,13 +883,7 @@ function UserDetailsModal({ userId, users, me, ROLES, ROLE_COLOR, onClose, onUpd
                 style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', color: '#f87171' }}>
                 {deleting[user.id] ? (
                   <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin inline-block mr-2" />
-                ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="inline mr-2">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                    <path d="M10 11v6M14 11v6" />
-                  </svg>
-                )}
+                ) : null}
                 Delete
               </button>
             </>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import usePermissions from '../hooks/usePermissions'
+import { ProfileAvatar } from './ProfileAvatar'
 import NotificationBell from './NotificationBell'
 import logo from '../assets/logo_invisithreat.png'
 
@@ -216,12 +217,7 @@ export default function AppLayout({ children }) {
             className={`flex items-center ${sidebarOpen ? 'gap-3 px-3 py-2.5' : 'justify-center px-2 py-2'} rounded-xl`}
             style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}
           >
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-semibold text-xs flex-shrink-0"
-              style={{ background: 'rgba(255,107,43,0.15)', border: '1px solid rgba(255,107,43,0.2)' }}
-            >
-              {user?.nom?.charAt(0).toUpperCase()}
-            </div>
+            <ProfileAvatar user={user} size={32} className="flex-shrink-0" />
             {sidebarOpen && (
               <div className="flex-1 min-w-0">
                 <p className="text-white text-xs font-semibold truncate">{user?.nom}</p>

@@ -98,16 +98,11 @@ function ProjectRow({ project, deleting, onClick, onDelete }) {
         <button
           onClick={onDelete}
           disabled={deleting}
-          className="opacity-0 group-hover:opacity-100 p-1.5 rounded transition-all active:scale-95 disabled:opacity-50"
-          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.12)' }}
+          className="opacity-0 group-hover:opacity-100 px-3 py-1.5 rounded text-xs font-semibold transition-all active:scale-95 disabled:opacity-50"
+          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.12)', color: '#ef4444' }}
           title="Delete project"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            <line x1="10" y1="11" x2="10" y2="17" />
-            <line x1="14" y1="11" x2="14" y2="17" />
-          </svg>
+          Delete
         </button>
       </div>
     </div>

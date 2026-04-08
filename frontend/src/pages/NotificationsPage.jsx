@@ -237,12 +237,10 @@ function NotifCard({
         <button
           type="button"
           onClick={e => { e.stopPropagation(); onDelete(notif.id) }}
-          className="absolute bottom-3.5 right-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-white/20 hover:text-white/60"
+          className="absolute bottom-3.5 right-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-white/20 hover:text-white/60 text-xs font-semibold px-2 py-1 rounded"
           title="Dismiss"
         >
-          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-            <path d="M18 6 6 18M6 6l12 12" />
-          </svg>
+          Dismiss
         </button>
       )}
     </div>

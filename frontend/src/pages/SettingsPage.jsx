@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../context/AuthContext'
 import { useRelativeTime } from '../hooks/useRelativeTime'
+import { ProfileAvatar } from '../components/ProfileAvatar'
 import { updateMyProfile, changeMyPassword } from '../services/authService'
 import { listApiKeys, createApiKey, revokeApiKey } from '../services/apiKeyService'
 import { getMyAuditLogs } from '../services/auditLogService'
@@ -353,18 +354,7 @@ function ProfileTab({ user, updateUser }) {
       {/* Identity card */}
       <div className="flex items-center gap-5 p-5 rounded-2xl mb-7"
         style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-        <div 
-          className="relative w-16 h-16 rounded-2xl flex-shrink-0 overflow-hidden flex items-center justify-center text-xl font-bold"
-          style={{ 
-            backgroundImage: previewImage ? `url('${previewImage}')` : 'none',
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundColor: 'rgba(255,107,43,0.1)',
-            border: '1px solid rgba(255,107,43,0.2)',
-            color: ORANGE_LIGHT
-          }}>
-          {!previewImage && initials}
-        </div>
+        <ProfileAvatar user={user} size={64} className="flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-lg font-bold text-white truncate">{user?.nom}</p>
           <p className="text-sm text-white/40 truncate">{user?.email}</p>
