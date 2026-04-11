@@ -9,6 +9,7 @@ import uuid
 class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = None
+    project_type: Optional[str] = "Other"
     language: Optional[str] = "Other"
     analysis_type: Optional[str] = "SAST"
     visibility: Optional[str] = "private"
@@ -26,6 +27,7 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    project_type: Optional[str] = None
     language: Optional[str] = None
     analysis_type: Optional[str] = None
     visibility: Optional[str] = None
@@ -37,6 +39,7 @@ class ProjectResponse(BaseModel):
     id: uuid.UUID
     name: str
     description: Optional[str] = None
+    project_type: Optional[str] = "Other"
     language: Optional[str] = None
     analysis_type: Optional[str] = None
     visibility: Optional[str] = "private"

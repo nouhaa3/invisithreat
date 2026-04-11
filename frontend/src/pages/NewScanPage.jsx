@@ -356,6 +356,7 @@ export default function NewScanPage() {
         project = await createProject({
             name: newProjectName.trim(),
             description: newProjectDesc.trim(),
+            project_type: newProjectType || 'Other',
             language: null,
             analysis_type: newProjectAnalysis,
             visibility: newProjectVisibility,

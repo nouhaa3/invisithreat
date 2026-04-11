@@ -39,13 +39,13 @@ export const getProject = async (id) => {
   return res.data
 }
 
-export const createProject = async ({ name, description, language, analysis_type, visibility }) => {
-  const res = await api.post('/api/projects', { name, description, language, analysis_type, visibility })
+export const createProject = async ({ name, description, project_type, language, analysis_type, visibility }) => {
+  const res = await api.post('/api/projects', { name, description, project_type, language, analysis_type, visibility })
   return res.data
 }
 
-export const updateProject = async (id, { name, description, language, analysis_type, visibility }) => {
-  const res = await api.patch(`/api/projects/${id}`, { name, description, language, analysis_type, visibility })
+export const updateProject = async (id, { name, description, project_type, language, analysis_type, visibility }) => {
+  const res = await api.patch(`/api/projects/${id}`, { name, description, project_type, language, analysis_type, visibility })
   return res.data
 }
 

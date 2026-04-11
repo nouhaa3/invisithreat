@@ -51,6 +51,7 @@ class Project(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
+    project_type = Column(String, nullable=True, default="Other")
     language = Column(String, nullable=True, default="Other")
     analysis_type = Column(String, nullable=True, default="SAST")
     visibility = Column(String, nullable=True, default="private")

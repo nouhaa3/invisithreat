@@ -18,6 +18,7 @@ def create_project(db: Session, owner: User, data: ProjectCreate) -> Project:
         id=uuid.uuid4(),
         name=data.name,
         description=data.description,
+        project_type=data.project_type or "Other",
         language=data.language or "Other",
         analysis_type=data.analysis_type or "SAST",
         visibility=data.visibility or "private",
@@ -86,6 +87,8 @@ def update_project(db: Session, project_id: uuid.UUID, user: User, data: Project
         project.name = data.name
     if data.description is not None:
         project.description = data.description
+    if data.project_type is not None:
+        project.project_type = data.project_type
     if data.language is not None:
         project.language = data.language
     if data.analysis_type is not None:
@@ -111,6 +114,7 @@ def enrich_project(db: Session, project: Project, user_role: str = None) -> dict
         "id": project.id,
         "name": project.name,
         "description": project.description,
+        "project_type": project.project_type,
         "language": project.language,
         "analysis_type": project.analysis_type,
         "visibility": project.visibility,
