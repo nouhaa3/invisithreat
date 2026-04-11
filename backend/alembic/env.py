@@ -14,7 +14,8 @@ from dotenv import load_dotenv
 backend_dir = Path(__file__).resolve().parent.parent
 env_path = backend_dir / ".env"
 if env_path.exists():
-    load_dotenv(str(env_path), override=True)
+    # Keep explicit environment variables (e.g., Docker env_file) as source of truth.
+    load_dotenv(str(env_path), override=False)
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool

@@ -56,6 +56,30 @@ const SCAN_STATUS_STYLE = {
   failed: { label: 'Failed', color: '#ef4444', bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.25)' },
 }
 
+const DEV_PROJECT_FILTERS = ['All', 'Web Application', 'Mobile Application', 'Desktop Application', 'API / Backend', 'Other']
+
+const normalizeProjectText = (v) => String(v || '').toLowerCase()
+
+function inferProjectCategory(project) {
+  const explicitType = project?.project_type || project?.type
+  if (explicitType && DEV_PROJECT_FILTERS.includes(explicitType)) return explicitType
+
+  const haystack = [project?.name, project?.description, project?.language, project?.project_type]
+    .map(normalizeProjectText)
+    .join(' ')
+
+  if (/(mobile|android|ios|flutter|react\s*native)/.test(haystack)) return 'Mobile Application'
+  if (/(desktop|electron|winforms|wpf|qt)/.test(haystack)) return 'Desktop Application'
+  if (/(api|backend|microservice|server|graphql|rest)/.test(haystack)) return 'API / Backend'
+  if (/(web|frontend|spa|website|react|next|vue|angular)/.test(haystack)) return 'Web Application'
+
+  const lang = normalizeProjectText(project?.language)
+  if (['javascript', 'typescript', 'html', 'css'].some((item) => lang.includes(item))) return 'Web Application'
+  if (['python', 'java', 'go', 'c#', 'php', 'ruby'].some((item) => lang.includes(item))) return 'API / Backend'
+
+  return 'Other'
+}
+
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
 function EmptyState({ title, description, actionLabel, onAction }) {
@@ -89,35 +113,33 @@ function EmptyState({ title, description, actionLabel, onAction }) {
 
 // ─── Developer row ────────────────────────────────────────────────────────────
 
-function SevPill({ n, c, label }) {
-  return (
-    <span
-      className="flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded"
-      style={{ background: `${c}15`, color: c, border: `1px solid ${c}30` }}
-    >
-      {n} {label}
-    </span>
-  )
-}
-
-function ProjectRow({ project, deleting, onClick, onDelete }) {
+function ProjectRow({ project, onClick }) {
   const userRoleBadge = project.user_role && project.user_role !== 'owner'
+  const projectCategory = inferProjectCategory(project)
+
   return (
     <div
       onClick={onClick}
-      className="group flex items-center justify-between px-5 py-4 rounded-2xl cursor-pointer transition-all"
+      className="group rounded-2xl p-4 sm:p-5 cursor-pointer transition-all relative overflow-hidden"
       style={{
-        background: 'linear-gradient(170deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))',
-        border: '1px solid rgba(255,255,255,0.055)',
+        background: 'linear-gradient(180deg, rgba(21,21,21,0.96), rgba(12,12,12,0.95))',
+        border: '1px solid rgba(255,255,255,0.065)',
+        boxShadow: '0 8px 28px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.03)',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'rgba(255,107,43,0.15)'
+        e.currentTarget.style.borderColor = 'rgba(255,107,43,0.28)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'
+        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.065)'
       }}
     >
-      <div className="flex items-center gap-4 min-w-0">
+      <div
+        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+        style={{ background: 'radial-gradient(circle at 80% 0%, rgba(255,107,43,0.08), transparent 55%)' }}
+      />
+
+      <div className="relative flex flex-col min-h-[145px]">
+        <div className="flex items-start justify-between gap-2 mb-3">
         <div
           className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
           style={{ background: 'rgba(255,107,43,0.08)', border: '1px solid rgba(255,107,43,0.12)' }}
@@ -126,9 +148,22 @@ function ProjectRow({ project, deleting, onClick, onDelete }) {
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
           </svg>
         </div>
-        <div className="min-w-0">
+
+          <span
+            className="text-[10px] px-2 py-0.5 rounded font-semibold"
+            style={{
+              background: 'rgba(255,107,43,0.14)',
+              color: '#FFB085',
+              border: '1px solid rgba(255,107,43,0.25)',
+            }}
+          >
+            {(project.analysis_type || 'SAST').toUpperCase()}
+          </span>
+        </div>
+
+        <div className="mb-2 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="text-white font-semibold text-sm truncate">{project.name}</p>
+            <p className="text-white font-semibold text-base truncate">{project.name}</p>
             {userRoleBadge && (
               <span
                 className="text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0"
@@ -141,27 +176,32 @@ function ProjectRow({ project, deleting, onClick, onDelete }) {
               </span>
             )}
           </div>
-          <p className="text-[11px] text-white/40">{project.description || 'No description'}</p>
+          <p className="text-[12px] text-white/45 mt-1 truncate">{project.description || 'No description'}</p>
         </div>
-      </div>
-      <div className="flex items-center gap-3 flex-shrink-0">
-        <div className="flex items-center gap-1.5">
-          {project.critical > 0 && <SevPill n={project.critical} c="#f87171" label="crit" />}
-          {project.high > 0 && <SevPill n={project.high} c="#fb923c" label="high" />}
-          {project.medium > 0 && <SevPill n={project.medium} c="#eab308" label="med" />}
-          {project.low > 0 && <SevPill n={project.low} c="#60a5fa" label="low" />}
+
+        <div className="mt-auto pt-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              className="text-[10px] px-2 py-0.5 rounded font-medium"
+              style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              {projectCategory}
+            </span>
+            {project.last_scan_status && (
+              <span
+                className="text-[10px] px-2 py-0.5 rounded font-medium"
+                style={{ background: 'rgba(96,165,250,0.12)', color: '#93c5fd', border: '1px solid rgba(96,165,250,0.25)' }}
+              >
+                {project.last_scan_status}
+              </span>
+            )}
+          </div>
+
+          <span className="text-xs font-semibold text-[#9AD8FF] group-hover:text-[#C8EBFF] transition-colors">
+            Click for details
+          </span>
         </div>
-        {onDelete && (
-          <button
-            onClick={onDelete}
-            disabled={deleting}
-            className="opacity-0 group-hover:opacity-100 px-3 py-1.5 rounded text-xs font-semibold transition-all active:scale-95 disabled:opacity-50"
-            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.12)', color: '#ef4444' }}
-            title="Delete project"
-          >
-            Delete
-          </button>
-        )}
+
       </div>
     </div>
   )
@@ -425,6 +465,36 @@ export default function ProjectsPage() {
     critical_projects: 0,
     avg_risk_score: 0,
   })
+  const [searchQuery, setSearchQuery] = useState('')
+  const [activeDevFilter, setActiveDevFilter] = useState('All')
+
+  const isDeveloperView = !isAdmin && !isSecurityManager
+  const hasDevFilters = searchQuery.trim().length > 0 || activeDevFilter !== 'All'
+
+  const developerProjects = isDeveloperView
+    ? projects.filter((project) => {
+        const projectCategory = inferProjectCategory(project)
+        const searchValue = searchQuery.trim().toLowerCase()
+
+        const searchable = [
+          project.name,
+          project.description,
+          project.language,
+          project.project_type,
+          project.analysis_type,
+          project.last_scan_status,
+          project.user_role,
+          projectCategory,
+        ].map(normalizeProjectText).join(' ')
+
+        const matchesSearch = !searchValue || searchable.includes(searchValue)
+        const matchesFilter = activeDevFilter === 'All' || projectCategory === activeDevFilter
+
+        return matchesSearch && matchesFilter
+      })
+    : projects
+
+  const visibleProjects = isDeveloperView ? developerProjects : projects
 
   const load = async () => {
     setLoading(true)
@@ -518,7 +588,7 @@ export default function ProjectsPage() {
             <div className="mb-6 animate-slide-up flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight">
-                  {getGreeting()}, <span style={{ color: '#FF8C5A' }}>{user?.nom?.split(' ')[0]}</span>
+                  {isDeveloperView ? 'Your Projects' : <>{getGreeting()}, <span style={{ color: '#FF8C5A' }}>{user?.nom?.split(' ')[0]}</span></>}
                 </h1>
                 <p className="text-sm text-white/45 mt-2">
                   {loading
@@ -527,10 +597,85 @@ export default function ProjectsPage() {
                       ? `${summary.total_projects} project${summary.total_projects !== 1 ? 's' : ''} under governance`
                       : isSecurityManager
                         ? `${securitySummary.total_projects} project${securitySummary.total_projects !== 1 ? 's' : ''} in security oversight`
-                      : `${projects.length} project${projects.length !== 1 ? 's' : ''} in your workspace`}
+                      : hasDevFilters
+                        ? `${visibleProjects.length} of ${projects.length} project${projects.length !== 1 ? 's' : ''}`
+                        : `${projects.length} project${projects.length !== 1 ? 's' : ''}`}
                 </p>
               </div>
+
+              {isDeveloperView && canRunScan && (
+                <button
+                  onClick={() => navigate('/scans/new')}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.97]"
+                  style={{ background: 'linear-gradient(135deg,#FF6B2B,#C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.3)' }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  Launch New Scan
+                </button>
+              )}
             </div>
+
+            {isDeveloperView && (
+              <div className="mb-5 animate-slide-up" style={{ animationDelay: '0.04s' }}>
+                <div className="flex flex-col xl:flex-row gap-3 xl:items-center">
+                  <div className="relative flex-1">
+                    <svg
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.45)"
+                      strokeWidth="2"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                    >
+                      <circle cx="11" cy="11" r="8" />
+                      <path d="m21 21-4.35-4.35" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search projects..."
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm text-white placeholder:text-white/35 transition-all focus:outline-none"
+                      style={{
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        boxShadow: 'none',
+                      }}
+                      onFocus={(e) => {
+                        e.currentTarget.style.border = '1px solid rgba(255,107,43,0.25)'
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.border = '1px solid rgba(255,255,255,0.06)'
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    {DEV_PROJECT_FILTERS.map((filter) => {
+                      const active = activeDevFilter === filter
+                      return (
+                        <button
+                          key={filter}
+                          type="button"
+                          onClick={() => setActiveDevFilter(filter)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all"
+                          style={{
+                            background: active ? 'rgba(255,107,43,0.1)' : 'rgba(255,255,255,0.03)',
+                            border: active ? '1px solid rgba(255,107,43,0.25)' : '1px solid rgba(255,255,255,0.06)',
+                            color: active ? '#FF8C5A' : 'rgba(255,255,255,0.35)',
+                          }}
+                        >
+                          {filter}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {isAdmin && !loading && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 animate-slide-up" style={{ animationDelay: '0.04s' }}>
@@ -551,24 +696,13 @@ export default function ProjectsPage() {
             )}
 
             <div className="animate-slide-up" style={{ animationDelay: isAdmin ? '0.08s' : '0.04s' }}>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-white/30">
-                  {isAdmin ? 'Projects Governance' : isSecurityManager ? 'Security Portfolio' : 'All Projects'}
-                </h2>
-
-                {!isAdmin && canRunScan && (
-                  <button
-                    onClick={() => navigate('/scans/new')}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.97]"
-                    style={{ background: 'linear-gradient(135deg,#FF6B2B,#C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.3)' }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M12 5v14M5 12h14" />
-                    </svg>
-                    New Scan
-                  </button>
-                )}
-              </div>
+              {!isDeveloperView && (
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xs font-semibold uppercase tracking-widest text-white/30">
+                    {isAdmin ? 'Projects Governance' : 'Security Portfolio'}
+                  </h2>
+                </div>
+              )}
 
               {loading ? (
                 <div className="flex items-center justify-center py-16">
@@ -577,22 +711,41 @@ export default function ProjectsPage() {
                     style={{ border: '2px solid rgba(255,107,43,0.2)', borderTop: '2px solid #FF6B2B' }}
                   />
                 </div>
-              ) : projects.length === 0 ? (
+              ) : visibleProjects.length === 0 ? (
                 <EmptyState
-                  title={isAdmin ? 'No projects in the platform' : isSecurityManager ? 'No monitored projects yet' : 'No projects yet'}
+                  title={
+                    isAdmin
+                      ? 'No projects in the platform'
+                      : isSecurityManager
+                        ? 'No monitored projects yet'
+                        : hasDevFilters
+                          ? 'No matching projects'
+                          : 'No projects yet'
+                  }
                   description={
                     isAdmin
                       ? 'Projects will appear here as users create them. You can then manage members, status, and lifecycle.'
                       : isSecurityManager
                         ? 'Projects with security access will appear here. Use this view to prioritize risk and findings.'
-                      : 'Launch your first scan to create a project. Projects help you organize and track your security findings.'
+                        : hasDevFilters
+                          ? 'Try another keyword or switch category filter to find your project faster.'
+                          : 'Launch your first scan to create a project. Projects help you organize and track your security findings.'
                   }
-                  actionLabel="Launch New Scan"
-                  onAction={!isAdmin && !isSecurityManager && canRunScan ? () => navigate('/scans/new') : null}
+                  actionLabel={hasDevFilters ? 'Reset Filters' : 'Launch New Scan'}
+                  onAction={
+                    hasDevFilters
+                      ? () => {
+                          setSearchQuery('')
+                          setActiveDevFilter('All')
+                        }
+                      : !isAdmin && !isSecurityManager && canRunScan
+                        ? () => navigate('/scans/new')
+                        : null
+                  }
                 />
               ) : isAdmin ? (
                 <div className="flex flex-col gap-3">
-                  {projects.map((p) => (
+                  {visibleProjects.map((p) => (
                     <AdminProjectRow
                       key={p.id}
                       project={p}
@@ -607,7 +760,7 @@ export default function ProjectsPage() {
                 </div>
               ) : isSecurityManager ? (
                 <div className="flex flex-col gap-3">
-                  {projects.map((p) => (
+                  {visibleProjects.map((p) => (
                     <SecurityProjectRow
                       key={p.id}
                       project={p}
@@ -616,14 +769,12 @@ export default function ProjectsPage() {
                   ))}
                 </div>
               ) : (
-                <div className="flex flex-col gap-3">
-                  {projects.map((p) => (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {visibleProjects.map((p) => (
                     <ProjectRow
                       key={p.id}
                       project={p}
-                      deleting={deletingId === p.id}
                       onClick={() => navigate(`/projects/${p.id}`)}
-                      onDelete={canDeleteProjects ? (e) => handleDelete(e, p.id) : null}
                     />
                   ))}
                 </div>
