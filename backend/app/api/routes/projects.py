@@ -9,12 +9,16 @@ from app.core.config import settings
 from app.models.user import User
 from app.schemas.scan import (
     ProjectCreate, ProjectUpdate, ProjectResponse,
-    ScanCreate, ScanResponse, CLITokenResponse, CLIScanUpload
+    ScanCreate, ScanResponse, CLITokenResponse, CLIScanUpload,
+    AdminProjectsResponse, ProjectAdminStatusUpdate, ProjectAdminStatusResponse,
+    SecurityProjectsResponse
 )
 from app.services.project import (
     create_project, get_projects_for_user, get_project, get_project_accessible,
     update_project, delete_project, enrich_project, get_scans_for_projects_batch,
-    create_scan, get_scans_for_project
+    create_scan, get_scans_for_project,
+    get_admin_projects_management, update_project_status_admin, delete_project_admin,
+    get_security_projects_overview
 )
 from app.services.github_scanner import run_github_scan
 import uuid, secrets
@@ -67,6 +71,43 @@ async def admin_list_all_projects(
             "user_role": "admin",
         })
     return result
+
+
+@router.get("/admin/management", response_model=AdminProjectsResponse, tags=["Admin"])
+async def admin_management_projects(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_permission(P.MANAGE_ALL_PROJECTS)),
+):
+    """Admin-only management view with high-level project data and summary."""
+    return get_admin_projects_management(db)
+
+
+@router.patch("/admin/{project_id}/status", response_model=ProjectAdminStatusResponse, tags=["Admin"])
+async def admin_update_project_status(
+    project_id: uuid.UUID,
+    data: ProjectAdminStatusUpdate,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_permission(P.MANAGE_ALL_PROJECTS)),
+):
+    return update_project_status_admin(db, project_id, data.status)
+
+
+@router.delete("/admin/{project_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Admin"])
+async def admin_delete_project(
+    project_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_permission(P.MANAGE_ALL_PROJECTS)),
+):
+    delete_project_admin(db, project_id)
+
+
+@router.get("/security/overview", response_model=SecurityProjectsResponse, tags=["Security"])
+async def security_projects_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(P.VIEW_SECURITY_METRICS)),
+):
+    """Security-manager view with security-focused project summaries."""
+    return get_security_projects_overview(db, current_user)
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_new_project(

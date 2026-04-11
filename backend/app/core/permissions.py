@@ -25,7 +25,7 @@ class P:
     # Dashboard
     VIEW_DASHBOARD             = "view_dashboard"
 
-    # Scan & development actions (Developer + Admin)
+    # Scan & development actions (Developer only)
     MANAGE_PROJECT_MEMBERS     = "manage_project_members"
     RUN_SCAN                   = "run_scan"
     MANAGE_GITHUB_REPOS        = "manage_github_repos"
@@ -52,9 +52,6 @@ ROLE_PERMISSIONS: dict = {
         P.MANAGE_OWN_PROJECTS,
         P.VIEW_DASHBOARD,
         P.MANAGE_PROJECT_MEMBERS,
-        P.RUN_SCAN,
-        P.MANAGE_GITHUB_REPOS,
-        P.MARK_FALSE_POSITIVE,
         P.VIEW_SCAN_RESULTS,
         P.VIEW_VULNERABILITIES,
         P.GENERATE_REPORTS,

@@ -32,8 +32,13 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
-      - ./scripts:/scripts:ro
+      - type: bind
+        source: ./backend
+        target: /app
+      - type: bind
+        source: ./scripts
+        target: /scripts
+        read_only: true
     depends_on:
       db:
         condition: service_healthy

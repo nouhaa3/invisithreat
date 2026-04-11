@@ -1,10 +1,16 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
 from app.models.scan import Project, Scan, ScanStatus
 from app.models.user import User
 from app.models.member import ProjectMember
 from app.schemas.scan import ProjectCreate, ProjectUpdate
 import uuid
+import json
+
+
+def _has_global_security_scope(user: User) -> bool:
+    role_name = user.role.name if getattr(user, "role", None) else None
+    return role_name in {"Security Manager", "Admin"}
 
 
 def create_project(db: Session, owner: User, data: ProjectCreate) -> Project:
@@ -38,6 +44,12 @@ def get_projects_for_user(db: Session, user: User) -> list[Project]:
     return sorted(all_projects, key=lambda p: p.created_at, reverse=True)
 
 
+def get_projects_for_security_scope(db: Session, user: User) -> list[Project]:
+    if _has_global_security_scope(user):
+        return db.query(Project).order_by(Project.created_at.desc()).all()
+    return get_projects_for_user(db, user)
+
+
 def get_project(db: Session, project_id: uuid.UUID, user: User) -> Project:
     """Owner-only access — used for edit/delete routes."""
     project = db.query(Project).filter(Project.id == project_id, Project.owner_id == user.id).first()
@@ -53,6 +65,12 @@ def get_project_accessible(db: Session, project_id: uuid.UUID, user: User) -> tu
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     if project.owner_id == user.id:
         return project, "owner"
+
+    # Security leadership roles can read project security data platform-wide.
+    if _has_global_security_scope(user):
+        role_name = user.role.name if user.role else "security_manager"
+        return project, "admin" if role_name == "Admin" else "security_manager"
+
     membership = db.query(ProjectMember).filter(
         ProjectMember.project_id == project_id,
         ProjectMember.user_id == user.id
@@ -137,3 +155,244 @@ def create_scan(db: Session, project: Project, method: str, repo_url: str = None
 
 def get_scans_for_project(db: Session, project_id: uuid.UUID) -> list[Scan]:
     return db.query(Scan).filter(Scan.project_id == project_id).order_by(Scan.started_at.desc()).all()
+
+
+def _parse_findings(results_json: str | None) -> list[dict]:
+    if not results_json or results_json.startswith("__pending_token:"):
+        return []
+    try:
+        data = json.loads(results_json)
+        findings = data.get("findings", [])
+        return findings if isinstance(findings, list) else []
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return []
+
+
+def _risk_level_from_score(score: float | None) -> str:
+    if score is None:
+        return "Low"
+    if score >= 7:
+        return "High"
+    if score >= 4:
+        return "Medium"
+    return "Low"
+
+
+def _normalize_project_status(status_value: str | None) -> str:
+    status_lower = (status_value or "active").strip().lower()
+    return "archived" if status_lower in ("archived", "inactive", "disabled") else "active"
+
+
+def get_admin_projects_management(db: Session) -> dict:
+    projects = (
+        db.query(Project)
+        .options(
+            joinedload(Project.owner),
+            joinedload(Project.members),
+            joinedload(Project.scans).joinedload(Scan.risk_score),
+        )
+        .order_by(Project.created_at.desc())
+        .all()
+    )
+
+    summary = {
+        "total_projects": len(projects),
+        "active_projects": 0,
+        "archived_projects": 0,
+        "total_users_involved": 0,
+    }
+
+    involved_user_ids: set[uuid.UUID] = set()
+    result_projects = []
+
+    for project in projects:
+        normalized_status = _normalize_project_status(project.status)
+        if normalized_status == "active":
+            summary["active_projects"] += 1
+        else:
+            summary["archived_projects"] += 1
+
+        owner_name = project.owner.nom if project.owner else "Unknown"
+        owner_id = project.owner_id
+
+        member_user_ids = {m.user_id for m in project.members}
+        # Count owner + distinct members as project users involved.
+        users_assigned_count = 1 + len(member_user_ids - {owner_id})
+
+        involved_user_ids.add(owner_id)
+        involved_user_ids.update(member_user_ids)
+
+        total_scans = len(project.scans)
+
+        latest_scan_ts = None
+        latest_completed_scan = None
+        latest_completed_sort_key = None
+
+        for scan in project.scans:
+            candidates = [scan.completed_at, scan.started_at]
+            scan_latest_ts = max((c for c in candidates if c is not None), default=None)
+            if scan_latest_ts and (latest_scan_ts is None or scan_latest_ts > latest_scan_ts):
+                latest_scan_ts = scan_latest_ts
+
+            if scan.status == ScanStatus.completed:
+                sort_key = scan.started_at or scan.completed_at
+                if sort_key and (latest_completed_sort_key is None or sort_key > latest_completed_sort_key):
+                    latest_completed_sort_key = sort_key
+                    latest_completed_scan = scan
+
+        last_member_activity = max((m.joined_at for m in project.members if m.joined_at), default=None)
+        last_activity_at = max(
+            [d for d in [project.created_at, latest_scan_ts, last_member_activity] if d is not None],
+            default=project.created_at,
+        )
+
+        risk_score = None
+        if latest_completed_scan and latest_completed_scan.risk_score:
+            risk_score = float(latest_completed_scan.risk_score.score)
+
+        result_projects.append({
+            "id": project.id,
+            "name": project.name,
+            "owner_id": owner_id,
+            "owner_name": owner_name,
+            "users_assigned_count": users_assigned_count,
+            "total_scans": total_scans,
+            "global_risk_level": _risk_level_from_score(risk_score),
+            "created_at": project.created_at,
+            "last_activity_at": last_activity_at,
+            "status": normalized_status,
+        })
+
+    summary["total_users_involved"] = len(involved_user_ids)
+
+    return {
+        "summary": summary,
+        "projects": result_projects,
+    }
+
+
+def get_security_projects_overview(db: Session, user: User) -> dict:
+    accessible_projects = get_projects_for_security_scope(db, user)
+    project_ids = [p.id for p in accessible_projects]
+
+    if not project_ids:
+        return {
+            "summary": {
+                "total_projects": 0,
+                "projects_with_findings": 0,
+                "critical_projects": 0,
+                "avg_risk_score": 0.0,
+            },
+            "projects": [],
+        }
+
+    projects = (
+        db.query(Project)
+        .options(
+            joinedload(Project.owner),
+            joinedload(Project.scans).joinedload(Scan.risk_score),
+        )
+        .filter(Project.id.in_(project_ids))
+        .order_by(Project.created_at.desc())
+        .all()
+    )
+
+    summary = {
+        "total_projects": len(projects),
+        "projects_with_findings": 0,
+        "critical_projects": 0,
+        "avg_risk_score": 0.0,
+    }
+
+    risk_scores: list[float] = []
+    result_projects = []
+
+    for project in projects:
+        scans_sorted = sorted(
+            project.scans,
+            key=lambda s: (s.completed_at or s.started_at or project.created_at),
+            reverse=True,
+        )
+
+        total_scans = len(scans_sorted)
+        last_scan = scans_sorted[0] if scans_sorted else None
+        last_scan_status = last_scan.status.value if last_scan else None
+
+        latest_completed_scan = next(
+            (s for s in scans_sorted if s.status == ScanStatus.completed),
+            None,
+        )
+
+        risk_score = 0.0
+        if latest_completed_scan and latest_completed_scan.risk_score:
+            risk_score = round(float(latest_completed_scan.risk_score.score), 2)
+            risk_scores.append(risk_score)
+
+        findings = _parse_findings(latest_completed_scan.results_json) if latest_completed_scan else []
+        critical = high = medium = low = 0
+
+        for finding in findings:
+            sev = (finding.get("severity") or "info").lower()
+            if sev == "critical":
+                critical += 1
+            elif sev == "high":
+                high += 1
+            elif sev == "medium":
+                medium += 1
+            elif sev == "low":
+                low += 1
+
+        if (critical + high + medium + low) > 0:
+            summary["projects_with_findings"] += 1
+        if critical > 0:
+            summary["critical_projects"] += 1
+
+        scan_activity_dates = [(s.completed_at or s.started_at) for s in scans_sorted]
+        last_activity_at = max(
+            [d for d in [project.created_at, *scan_activity_dates] if d is not None],
+            default=project.created_at,
+        )
+
+        result_projects.append({
+            "id": project.id,
+            "name": project.name,
+            "owner_name": project.owner.nom if project.owner else "Unknown",
+            "total_scans": total_scans,
+            "last_scan_status": last_scan_status,
+            "global_risk_level": _risk_level_from_score(risk_score),
+            "risk_score": risk_score,
+            "critical": critical,
+            "high": high,
+            "medium": medium,
+            "low": low,
+            "created_at": project.created_at,
+            "last_activity_at": last_activity_at,
+        })
+
+    summary["avg_risk_score"] = round(sum(risk_scores) / len(risk_scores), 2) if risk_scores else 0.0
+
+    return {
+        "summary": summary,
+        "projects": result_projects,
+    }
+
+
+def update_project_status_admin(db: Session, project_id: uuid.UUID, status_value: str) -> dict:
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    normalized_status = _normalize_project_status(status_value)
+    project.status = normalized_status
+    db.commit()
+    db.refresh(project)
+
+    return {"id": project.id, "status": normalized_status}
+
+
+def delete_project_admin(db: Session, project_id: uuid.UUID) -> None:
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    db.delete(project)
+    db.commit()

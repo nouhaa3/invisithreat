@@ -11,7 +11,9 @@ import json
 from app.db.session import get_db
 from app.core.permissions import require_permission, P
 from app.models.user import User
+from app.models.role import Role
 from app.models.scan import Project, Scan, ScanStatus
+from app.models.security_report import SecurityReport
 from app.models.member import ProjectMember
 from app.services.risk_score import get_or_create_scan_risk_score
 
@@ -34,18 +36,24 @@ async def get_dashboard_stats(
     current_user: User = Depends(require_permission(P.VIEW_DASHBOARD)),
 ):
     from sqlalchemy import and_
-    
-    # 1. Get all accessible projects in ONE query (owned + member)
-    owned = db.query(Project.id).filter(Project.owner_id == current_user.id).subquery()
-    member_projects = db.query(Project.id).join(
-        ProjectMember, and_(Project.id == ProjectMember.project_id, ProjectMember.user_id == current_user.id)
-    ).subquery()
-    
-    # Get all project IDs accessible to user
-    all_project_ids = db.query(Project.id).filter(
-        (Project.id.in_(db.query(owned))) | (Project.id.in_(db.query(member_projects)))
-    ).all()
-    all_project_ids = [p.id for p in all_project_ids]
+
+    role_name = current_user.role.name if current_user.role else None
+
+    # Security-focused roles need a platform-wide risk perspective.
+    if role_name in ("Security Manager", "Admin"):
+        all_project_ids = [project_id for (project_id,) in db.query(Project.id).all()]
+    else:
+        # Get all accessible projects in ONE query (owned + member)
+        owned = db.query(Project.id).filter(Project.owner_id == current_user.id).subquery()
+        member_projects = db.query(Project.id).join(
+            ProjectMember, and_(Project.id == ProjectMember.project_id, ProjectMember.user_id == current_user.id)
+        ).subquery()
+
+        # Get all project IDs accessible to user
+        scoped_project_rows = db.query(Project.id).filter(
+            (Project.id.in_(db.query(owned))) | (Project.id.in_(db.query(member_projects)))
+        ).all()
+        all_project_ids = [p.id for p in scoped_project_rows]
     
     if not all_project_ids:
         return {
@@ -197,3 +205,139 @@ async def get_dashboard_risk_overview(
         "avg_business_impact": 0.0,
         "max_score": 0.0,
     })
+
+
+@router.get("/admin-stats")
+async def get_admin_dashboard_stats(
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(require_permission(P.MANAGE_USERS)),
+):
+    """Admin-only global dashboard metrics (non-technical, system-wide)."""
+    now = datetime.now(UTC)
+    last_30_days = now - timedelta(days=30)
+
+    total_users = db.query(func.count(User.id)).scalar() or 0
+    active_users = (
+        db.query(func.count(User.id))
+        .filter(User.is_active.is_(True))
+        .scalar()
+        or 0
+    )
+
+    total_projects = db.query(func.count(Project.id)).scalar() or 0
+    active_projects = (
+        db.query(func.count(Project.id))
+        .filter(func.coalesce(Project.status, "active") == "active")
+        .scalar()
+        or 0
+    )
+    projects_created_last_30_days = (
+        db.query(func.count(Project.id))
+        .filter(Project.created_at >= last_30_days)
+        .scalar()
+        or 0
+    )
+
+    total_scans = db.query(func.count(Scan.id)).scalar() or 0
+    scans_last_30_days = (
+        db.query(func.count(Scan.id))
+        .filter(Scan.started_at >= last_30_days)
+        .scalar()
+        or 0
+    )
+    completed_scans = (
+        db.query(func.count(Scan.id))
+        .filter(Scan.status == ScanStatus.completed)
+        .scalar()
+        or 0
+    )
+
+    reports_generated = db.query(func.count(SecurityReport.id)).scalar() or 0
+    reports_last_30_days = (
+        db.query(func.count(SecurityReport.id))
+        .filter(SecurityReport.generated_at >= last_30_days)
+        .scalar()
+        or 0
+    )
+
+    by_role = {
+        "Admin": 0,
+        "Developer": 0,
+        "Security Manager": 0,
+        "Viewer": 0,
+    }
+    role_counts = (
+        db.query(Role.name, func.count(User.id))
+        .outerjoin(User, User.role_id == Role.id)
+        .group_by(Role.name)
+        .all()
+    )
+    for role_name, count in role_counts:
+        by_role[role_name] = int(count)
+
+    # Usage trend: number of scans/day over the last 14 days.
+    trend_map = defaultdict(int)
+    recent_scans = (
+        db.query(Scan.started_at)
+        .filter(Scan.started_at >= (now - timedelta(days=13)))
+        .all()
+    )
+    for (started_at,) in recent_scans:
+        if not started_at:
+            continue
+        ts = started_at if started_at.tzinfo else started_at.replace(tzinfo=UTC)
+        trend_map[ts.strftime("%b %d")] += 1
+
+    usage_trend = []
+    for i in range(13, -1, -1):
+        day = now - timedelta(days=i)
+        label = day.strftime("%b %d")
+        usage_trend.append({"date": label, "count": trend_map.get(label, 0)})
+
+    scan_success_rate = round((completed_scans / total_scans) * 100, 1) if total_scans else 100.0
+    active_user_rate = round((active_users / total_users) * 100, 1) if total_users else 0.0
+    reports_activity_rate = (
+        round(min((reports_last_30_days / max(total_projects, 1)) * 100, 100), 1)
+        if total_projects
+        else 0.0
+    )
+
+    health_score = round(
+        min(
+            100.0,
+            max(
+                0.0,
+                (scan_success_rate * 0.45)
+                + (active_user_rate * 0.35)
+                + (reports_activity_rate * 0.20),
+            ),
+        ),
+        1,
+    )
+    health_status = "Healthy" if health_score >= 80 else "Moderate" if health_score >= 60 else "Needs Attention"
+
+    return {
+        "summary": {
+            "total_users": total_users,
+            "active_users": active_users,
+            "total_projects": total_projects,
+            "active_projects": active_projects,
+            "reports_generated": reports_generated,
+        },
+        "user_distribution": {
+            "by_role": by_role,
+        },
+        "system_usage": {
+            "scans_last_30_days": scans_last_30_days,
+            "projects_created_last_30_days": projects_created_last_30_days,
+            "reports_last_30_days": reports_last_30_days,
+            "avg_projects_per_user": round((total_projects / total_users), 2) if total_users else 0.0,
+        },
+        "system_health": {
+            "score": health_score,
+            "status": health_status,
+            "scan_success_rate": scan_success_rate,
+            "active_user_rate": active_user_rate,
+        },
+        "usage_trend": usage_trend,
+    }

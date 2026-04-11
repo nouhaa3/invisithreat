@@ -19,6 +19,21 @@ export const getProjects = async () => {
   return res.data
 }
 
+export const getDevProjects = async () => {
+  const res = await api.get('/api/projects')
+  return res.data
+}
+
+export const getAdminProjects = async () => {
+  const res = await api.get('/api/projects/admin/management')
+  return res.data
+}
+
+export const getSecurityManagerProjects = async () => {
+  const res = await api.get('/api/projects/security/overview')
+  return res.data
+}
+
 export const getProject = async (id) => {
   const res = await api.get(`/api/projects/${id}`)
   return res.data
@@ -36,6 +51,15 @@ export const updateProject = async (id, { name, description, language, analysis_
 
 export const deleteProject = async (id) => {
   await api.delete(`/api/projects/${id}`)
+}
+
+export const deleteAdminProject = async (id) => {
+  await api.delete(`/api/projects/admin/${id}`)
+}
+
+export const setAdminProjectStatus = async (id, status) => {
+  const res = await api.patch(`/api/projects/admin/${id}/status`, { status })
+  return res.data
 }
 
 // ─── Scans ───────────────────────────────────────────────────────────────────

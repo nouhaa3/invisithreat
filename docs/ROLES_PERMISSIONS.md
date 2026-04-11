@@ -149,7 +149,8 @@ Note: Security Manager et Developer ont des permissions **différentes** mais é
 ## Implémentation technique
 
 ### Base de données
-Rôles stockés dans la table oles:
+Rôles stockés dans la table 
+oles:
 `sql
 SELECT * FROM roles;
 `

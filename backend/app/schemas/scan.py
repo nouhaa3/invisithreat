@@ -54,6 +54,74 @@ class ProjectListResponse(BaseModel):
     total: int
 
 
+class AdminProjectsSummary(BaseModel):
+    total_projects: int
+    active_projects: int
+    archived_projects: int
+    total_users_involved: int
+
+
+class AdminProjectResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    owner_id: uuid.UUID
+    owner_name: str
+    users_assigned_count: int
+    total_scans: int
+    global_risk_level: Literal["Low", "Medium", "High"]
+    created_at: datetime
+    last_activity_at: Optional[datetime] = None
+    status: Literal["active", "archived"] = "active"
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdminProjectsResponse(BaseModel):
+    summary: AdminProjectsSummary
+    projects: List[AdminProjectResponse]
+
+
+class ProjectAdminStatusUpdate(BaseModel):
+    status: Literal["active", "archived"]
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ProjectAdminStatusResponse(BaseModel):
+    id: uuid.UUID
+    status: Literal["active", "archived"]
+
+
+class SecurityProjectsSummary(BaseModel):
+    total_projects: int
+    projects_with_findings: int
+    critical_projects: int
+    avg_risk_score: float
+
+
+class SecurityProjectResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    owner_name: str
+    total_scans: int
+    last_scan_status: Optional[str] = None
+    global_risk_level: Literal["Low", "Medium", "High"]
+    risk_score: float = 0.0
+    critical: int = 0
+    high: int = 0
+    medium: int = 0
+    low: int = 0
+    created_at: datetime
+    last_activity_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SecurityProjectsResponse(BaseModel):
+    summary: SecurityProjectsSummary
+    projects: List[SecurityProjectResponse]
+
+
 # ─── Scan Schemas ────────────────────────────────────────────────────────────
 
 class ScanCreate(BaseModel):
