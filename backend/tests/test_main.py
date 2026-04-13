@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 import pytest
 import uuid
 
-from app.main import app
+from app.main import app, app_fastapi
 from app.db.base import import_models
 from app.db.session import get_db, engine as db_engine, SessionLocal
 from app.models.user import User
@@ -30,7 +30,7 @@ def override_get_db():
         db.close()
 
 
-app.dependency_overrides[get_db] = override_get_db
+app_fastapi.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 
