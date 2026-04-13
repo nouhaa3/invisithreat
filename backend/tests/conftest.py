@@ -29,7 +29,7 @@ else:
     print("[OK] All required environment variables loaded")
 
 
-def pytest_configure(_config):
+def pytest_configure(config):
     """
     Load environment variables before pytest collection.
     This runs before any test modules are collected.
