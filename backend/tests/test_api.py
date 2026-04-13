@@ -15,6 +15,13 @@ TEST_PASS = "TestPass123!"
 # Create test client
 client = TestClient(app)
 
+
+@pytest.fixture(autouse=True)
+def setup_database(setup_db):
+    """Auto-use setup_db fixture for all tests in this module"""
+    pass
+
+
 class TestBasicEndpoints:
     """Test basic API endpoints"""
     

@@ -28,6 +28,10 @@ if missing:
 else:
     print("[OK] All required environment variables loaded")
 
+import pytest
+from app.db.base import Base, import_models
+from app.db.session import engine, SessionLocal
+
 
 def pytest_configure(config):
     """
@@ -45,3 +49,23 @@ def pytest_configure(config):
         os.environ["DATABASE_URL"] = "postgresql://localhost/invisithreat_test"
     if not os.environ.get("SECRET_KEY"):
         os.environ["SECRET_KEY"] = "test-secret-key-do-not-use-in-production"
+    
+    # Import all models and create tables before tests run
+    import_models()
+    Base.metadata.create_all(bind=engine)
+    print("[OK] Test database tables created")
+
+
+@pytest.fixture(scope="function")
+def setup_db():
+    """Create and clean up database tables for each test"""
+    # Ensure all models are imported
+    import_models()
+    
+    # Create all tables
+    Base.metadata.create_all(bind=engine)
+    
+    yield
+    
+    # Drop all tables after test
+    Base.metadata.drop_all(bind=engine)
