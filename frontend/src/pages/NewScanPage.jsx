@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
+import api from '../services/api'
 import { getProjects, createProject, createScan, getCLIToken } from '../services/projectService'
 import { listApiKeys, createApiKey } from '../services/apiKeyService'
 import { getGitHubAppInstallUrl, getGitHubOAuthStart, exchangeGitHubOAuthCode } from '../services/integrationService'
@@ -112,8 +113,14 @@ export default function NewScanPage() {
   const [projectError, setProjectError] = useState('')
   const [projectTypeError, setProjectTypeError] = useState('')
 
-  // Step 1 - Method
+  // Step 1 - Method (skip for DAST)
   const [method, setMethod] = useState(null) // 'cli' | 'github' | 'exe'
+
+  // DAST Configuration
+  const isDast = newProjectAnalysis === 'DAST'
+  const [dastTargetUrl, setDastTargetUrl] = useState('')
+  const [dastScanRunning, setDastScanRunning] = useState(false)
+  const [dastProgress, setDastProgress] = useState(null)
 
   // Step 2 - EXE: API key generation
   const [exeKeys, setExeKeys] = useState([])
@@ -140,10 +147,14 @@ export default function NewScanPage() {
   const [loading, setLoading] = useState(false)
 
   const isNewProject = projectMode === 'new'
-  const configLabel = method === 'exe' ? 'Setup' : 'Configure'
+  const configLabel = isDast ? 'Target URL' : method === 'exe' ? 'Setup' : 'Configure'
   const steps = isNewProject
-    ? ['Project', 'Project Type', 'Analysis', 'Method', configLabel]
-    : ['Project', 'Method', configLabel]
+    ? isDast
+      ? ['Project', 'Project Type', 'Analysis', 'Target URL']
+      : ['Project', 'Project Type', 'Analysis', 'Method', configLabel]
+    : isDast
+      ? ['Project', 'Target URL']
+      : ['Project', 'Method', configLabel]
 
   useEffect(() => {
     getProjects().then(setProjects).catch(() => setProjects([]))
@@ -333,13 +344,83 @@ export default function NewScanPage() {
   }
 
   // ─── Step 2 (new): Analysis type ───────────────────────────────────────────
-  const handleStepAnalysis = () => setStep(3)
+  const handleStepAnalysis = () => {
+    // DAST skips method selection and goes straight to DAST configuration
+    if (isDast) {
+      setStep(3) // Go to DAST configuration
+    } else {
+      setStep(3) // Go to method selection
+    }
+  }
 
   // ─── Method step (index depends on mode) ───────────────────────────────────
   const handleMethodStep = () => {
     if (!method) return
     const nextStep = projectMode === 'new' ? 4 : 2
     setStep(nextStep)
+  }
+
+  // ─── DAST Scan Handler ─────────────────────────────────────────────────────
+  const handleDastScan = async (project) => {
+    if (!dastTargetUrl.trim()) {
+      setConfigError('Target URL is required')
+      return
+    }
+
+    setDastScanRunning(true)
+    setConfigError('')
+    setDastProgress(null)
+
+    try {
+      const { data: started } = await api.post(
+        `/api/dast/scan/start?target_url=${encodeURIComponent(dastTargetUrl.trim())}&project_id=${project.id}`
+      )
+      setCreatedScan(started)
+
+      const pollInterval = setInterval(async () => {
+        try {
+          const { data: status } = await api.get(`/api/dast/scan/${started.scan_id}/status`)
+          setDastProgress(status)
+
+          const openResultsPage = async () => {
+            try {
+              await api.get(`/api/dast/scan/${started.scan_id}/results`)
+              setDastScanRunning(false)
+              navigate(`/projects/${project.id}`)
+              return true
+            } catch {
+              return false
+            }
+          }
+
+          if (status.status === 'failed') {
+            clearInterval(pollInterval)
+            const hasResults = await openResultsPage()
+            if (!hasResults) {
+              setDastScanRunning(false)
+              setConfigError(status.error || 'DAST scan failed')
+            }
+            return
+          }
+
+          if (status.status === 'completed') {
+            clearInterval(pollInterval)
+            const hasResults = await openResultsPage()
+            if (!hasResults) {
+              setDastScanRunning(false)
+              navigate(`/projects/${project.id}`)
+            }
+          }
+        } catch (err) {
+          clearInterval(pollInterval)
+          setDastScanRunning(false)
+          setConfigError(err.response?.data?.detail || 'Failed while polling DAST status')
+        }
+      }, 2000)
+    } catch (err) {
+      setConfigError(err.response?.data?.detail || err.message || 'Failed to start DAST scan')
+      setDastScanRunning(false)
+    }
   }
 
   // ─── Configure / Setup step ────────────────────────────────────────────────
@@ -365,6 +446,12 @@ export default function NewScanPage() {
         project = selectedProject
       }
       setCreatedProject(project)
+
+      // Handle DAST separately
+      if (isDast) {
+        await handleDastScan(project)
+        return
+      }
 
       if (method !== 'exe') {
         const scan = await createScan(project.id, {
@@ -576,8 +663,8 @@ export default function NewScanPage() {
             </div>
           )}
 
-          {/* ─── METHOD STEP ──────────────────────────────────────────────── */}
-          {((isNewProject && step === 3) || (!isNewProject && step === 1)) && (
+          {/* ─── METHOD STEP (skip for DAST) ──────────────────────────────────────────────── */}
+          {!isDast && !isDast && ((isNewProject && step === 3) || (!isNewProject && step === 1)) && (
             <div className="animate-slide-up">
               <div className="mb-8">
                 <h2 className="text-base font-semibold text-white mb-6 flex items-center gap-2">
@@ -643,7 +730,7 @@ export default function NewScanPage() {
           )}
 
           {/* ─── CONFIGURE / SETUP (EXE) ───────────────────────────────────── */}
-          {((isNewProject && step === 4) || (!isNewProject && step === 2)) && method === 'exe' && (
+          {!isDast && ((isNewProject && step === 4) || (!isNewProject && step === 2)) && method === 'exe' && (
             <div className="animate-slide-up">
               {/* Step 1: Download */}
               <SectionCard className="mb-4">
@@ -840,8 +927,93 @@ export default function NewScanPage() {
             </div>
           )}
 
+          {/* ─── DAST CONFIGURATION ──────────────────────────────────────── */}
+          {isDast && ((isNewProject && step === 3) || (!isNewProject && step === 1)) && (
+            <div className="animate-slide-up">
+              <SectionCard>
+                <h2 className="text-base font-semibold text-white mb-6 flex items-center gap-2">
+                  <div className="w-1 h-5 rounded" style={{ background: '#FF8C5A' }} />
+                  Enter Target URL
+                </h2>
+
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-gray-200 mb-3">
+                    Target Application URL
+                  </label>
+                  <input
+                    type="url"
+                    value={dastTargetUrl}
+                    onChange={(e) => setDastTargetUrl(e.target.value)}
+                    placeholder="https://example.com or http://host.docker.internal:3000"
+                    disabled={dastScanRunning}
+                    className="w-full px-4 py-3 bg-gray-900 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-orange-500 transition"
+                  />
+                  <p className="text-xs text-gray-400 mt-2">
+                    Enter the URL of the web application you want to scan. If backend/scanner runs in Docker, use host.docker.internal instead of localhost.
+                  </p>
+                </div>
+
+                {configError && (
+                  <div className="bg-red-900/20 border border-red-700/50 rounded-lg p-3 mb-4 text-red-200 text-sm">
+                    {configError}
+                  </div>
+                )}
+
+                {dastProgress && (
+                  <div className="bg-gray-800/50 rounded-lg p-4 mb-4 border border-gray-700/50">
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-300">Spider Crawling</span>
+                          <span className="font-semibold text-orange-400">{dastProgress.spider_progress}%</span>
+                        </div>
+                        <div className="w-full bg-gray-900 rounded-full h-2">
+                          <div 
+                            className="bg-gradient-to-r from-orange-500 to-orange-400 h-full rounded-full transition-all"
+                            style={{ width: `${dastProgress.spider_progress}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-300">Active Scanning</span>
+                          <span className="font-semibold text-blue-400">{dastProgress.active_scan_progress}%</span>
+                        </div>
+                        <div className="w-full bg-gray-900 rounded-full h-2">
+                          <div 
+                            className="bg-gradient-to-r from-blue-500 to-blue-400 h-full rounded-full transition-all"
+                            style={{ width: `${dastProgress.active_scan_progress}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-400 text-center">
+                        Alerts Found: <span className="font-semibold text-orange-400">{dastProgress.alerts_found}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleConfigure}
+                  disabled={!dastTargetUrl.trim() || dastScanRunning}
+                  className="w-full py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}
+                >
+                  {dastScanRunning ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block mr-2" />
+                      Scanning...
+                    </>
+                  ) : (
+                    'Start DAST Scan'
+                  )}
+                </button>
+              </SectionCard>
+            </div>
+          )}
+
           {/* ─── CONFIGURE (CLI/GitHub) ───────────────────────────────────── */}
-          {((isNewProject && step === 4) || (!isNewProject && step === 2)) && method !== 'exe' && (
+          {!isDast && ((isNewProject && step === 4) || (!isNewProject && step === 2)) && method !== 'exe' && (
             <div className="animate-slide-up">
               {method === 'cli' ? (
                 <>

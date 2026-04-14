@@ -1,4 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from typing import List
 from app.db.session import get_db
@@ -11,7 +12,7 @@ from app.schemas.scan import (
     ProjectCreate, ProjectUpdate, ProjectResponse,
     ScanCreate, ScanResponse, CLITokenResponse, CLIScanUpload,
     AdminProjectsResponse, ProjectAdminStatusUpdate, ProjectAdminStatusResponse,
-    SecurityProjectsResponse
+    SecurityProjectsResponse, BulkProjectActionRequest, BulkProjectActionResponse
 )
 from app.services.project import (
     create_project, get_projects_for_user, get_project, get_project_accessible,
@@ -91,6 +92,39 @@ async def admin_update_project_status(
     _admin: User = Depends(require_permission(P.MANAGE_ALL_PROJECTS)),
 ):
     return update_project_status_admin(db, project_id, data.status)
+
+
+@router.post("/admin/bulk/delete", response_model=BulkProjectActionResponse, tags=["Admin"])
+async def admin_bulk_delete_projects(
+    payload: BulkProjectActionRequest,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_permission(P.MANAGE_ALL_PROJECTS)),
+):
+    """Admin-only bulk deletion of projects with per-project error reporting."""
+    success_count = 0
+    failed_count = 0
+    errors: dict[str, str] = {}
+
+    for project_id in payload.project_ids:
+        project_exists = db.query(ProjectModel.id).filter(ProjectModel.id == project_id).first()
+        if not project_exists:
+            failed_count += 1
+            errors[str(project_id)] = "Project not found"
+            continue
+
+        try:
+            delete_project_admin(db, project_id)
+            success_count += 1
+        except SQLAlchemyError:
+            db.rollback()
+            failed_count += 1
+            errors[str(project_id)] = "An unexpected error occurred"
+
+    return BulkProjectActionResponse(
+        success_count=success_count,
+        failed_count=failed_count,
+        errors=errors,
+    )
 
 
 @router.delete("/admin/{project_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Admin"])
@@ -264,7 +298,7 @@ async def list_project_scans(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(P.VIEW_SCAN_RESULTS)),
 ):
-    get_project_accessible(db, project_id, current_user)  # verify access (owner or member)
+    get_project_accessible(db, project_id, current_user)
     return get_scans_for_project(db, project_id)
 
 

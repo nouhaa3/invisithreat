@@ -61,7 +61,12 @@ app_fastapi = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware - restricted configuration for security
+# Rate limiting middleware (add first)
+app_fastapi.state.limiter = limiter
+app_fastapi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app_fastapi.add_middleware(SlowAPIMiddleware)
+
+# CORS middleware - restricted configuration for security (add last to apply first)
 app_fastapi.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -74,11 +79,6 @@ app_fastapi.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
 )
-
-# Rate limiting middleware
-app_fastapi.state.limiter = limiter
-app_fastapi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app_fastapi.add_middleware(SlowAPIMiddleware)
 
 # Include API router
 app_fastapi.include_router(api_router, prefix="/api")
@@ -93,7 +93,21 @@ async def root():
     }
 
 # Wrap FastAPI with Socket.IO ASGI app
-app = ASGIApp(sio, app_fastapi)
+_asgi_app = ASGIApp(sio, app_fastapi)
+
+# Apply CORS middleware to the ASGIApp wrapper
+app = CORSMiddleware(
+    _asgi_app,
+    allow_origins=[
+        settings.FRONTEND_URL,
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
+)
 
 if __name__ == "__main__":
     import uvicorn

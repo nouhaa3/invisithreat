@@ -1,22 +1,29 @@
 ﻿import io from 'socket.io-client'
 
 let socket = null
+let currentIdentity = null
 const notificationListeners = new Map() // Track listeners to clean them up properly
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export const initializeWebSocket = (userId, userRole, userEmail) => {
   console.log(`[WS-INIT] Initializing WebSocket for user: ${userId} (${userRole})`)
+
+  currentIdentity = {
+    user_id: userId,
+    email: userEmail,
+    role: userRole,
+  }
   
-  // If already initialized, just re-identify (in case user changed)
-  if (socket !== null && socket.connected) {
-    console.log('[WS-INIT] WebSocket already connected, re-identifying...')
-    socket.emit('identify', {
-      user_id: userId,
-      email: userEmail,
-      role: userRole,
-    })
-    console.log('[WS-INIT] Identify event emitted')
+  // Reuse existing socket if it's already created (connected or still connecting)
+  if (socket !== null) {
+    if (socket.connected) {
+      console.log('[WS-INIT] WebSocket already connected, re-identifying...')
+      socket.emit('identify', currentIdentity)
+      console.log('[WS-INIT] Identify event emitted')
+    } else {
+      console.log('[WS-INIT] WebSocket exists and is connecting, waiting for connect event...')
+    }
     return socket
   }
 
@@ -32,12 +39,10 @@ export const initializeWebSocket = (userId, userRole, userEmail) => {
 
   socket.on('connect', () => {
     console.log('[WS-CONNECT] Connected to WebSocket')
-    console.log(`[WS-CONNECT] Sending identify event for user: ${userId} (${userRole})`)
-    socket.emit('identify', {
-      user_id: userId,
-      email: userEmail,
-      role: userRole,
-    })
+    console.log(`[WS-CONNECT] Sending identify event for user: ${currentIdentity?.user_id} (${currentIdentity?.role})`)
+    if (currentIdentity) {
+      socket.emit('identify', currentIdentity)
+    }
     console.log('[WS-CONNECT] Identify event emitted')
   })
 
@@ -62,6 +67,10 @@ export const initializeWebSocket = (userId, userRole, userEmail) => {
     console.error('[WS-ERROR] WebSocket error:', error)
   })
 
+  socket.on('connect_error', (error) => {
+    console.error('[WS-CONNECT-ERROR] WebSocket connection error:', error?.message || error)
+  })
+
   return socket
 }
 
@@ -69,6 +78,7 @@ export const closeWebSocket = () => {
   if (socket) {
     socket.disconnect()
     socket = null
+    currentIdentity = null
     // Clear all listeners when closing
     notificationListeners.clear()
   }

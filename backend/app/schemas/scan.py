@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Optional, List, Literal
 from datetime import datetime
 import uuid
@@ -93,6 +93,18 @@ class ProjectAdminStatusUpdate(BaseModel):
 class ProjectAdminStatusResponse(BaseModel):
     id: uuid.UUID
     status: Literal["active", "archived"]
+
+
+class BulkProjectActionRequest(BaseModel):
+    """Payload for bulk project operations (admin)."""
+    project_ids: list[uuid.UUID] = Field(..., min_length=1, max_length=1000)
+
+
+class BulkProjectActionResponse(BaseModel):
+    """Response for bulk project operations (admin)."""
+    success_count: int
+    failed_count: int
+    errors: dict[str, str] = {}
 
 
 class SecurityProjectsSummary(BaseModel):

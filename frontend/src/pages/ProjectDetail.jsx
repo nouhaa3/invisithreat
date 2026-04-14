@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
-import { getProject, getScans, deleteProject, createScan, getCLIToken } from '../services/projectService'
+import { getProject, getScans, deleteProject, createScan, startDastScan, getDastScanStatus, getCLIToken } from '../services/projectService'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -44,6 +44,7 @@ const RECOMMENDATIONS = {
 const METHOD_CONFIG = {
   cli:    { label: 'CLI',    bg: 'rgba(168,85,247,0.1)',  border: 'rgba(168,85,247,0.2)',  color: '#a78bfa' },
   github: { label: 'GitHub', bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' },
+  dast:   { label: 'DAST',   bg: 'rgba(255,107,43,0.1)',  border: 'rgba(255,107,43,0.2)',  color: '#ff6b2b' },
 }
 const SEVERITY_CONFIG = {
   critical: { label: 'Critical', color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.2)' },
@@ -295,6 +296,7 @@ function ScanRow({ scan, onRescan, rescanning }) {
 
   const findingCount = results?.findings?.length ?? null
   const summary = results?.summary
+  const canExpandResults = Boolean(results && (Array.isArray(results.findings) || typeof results.summary === 'object'))
 
   const formatDate = (iso) => {
     if (!iso) return '—'
@@ -312,13 +314,13 @@ function ScanRow({ scan, onRescan, rescanning }) {
     <div style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
       {/* Row header */}
       <div
-        role={scan.status === 'completed' ? 'button' : undefined}
-        tabIndex={scan.status === 'completed' ? 0 : undefined}
-        onClick={() => scan.status === 'completed' && setExpanded(v => !v)}
-        onKeyDown={e => e.key === 'Enter' && scan.status === 'completed' && setExpanded(v => !v)}
+        role={canExpandResults ? 'button' : undefined}
+        tabIndex={canExpandResults ? 0 : undefined}
+        onClick={() => canExpandResults && setExpanded(v => !v)}
+        onKeyDown={e => e.key === 'Enter' && canExpandResults && setExpanded(v => !v)}
         className="w-full flex items-center justify-between px-5 py-4 text-left transition-colors"
-        style={{ cursor: scan.status === 'completed' ? 'pointer' : 'default' }}
-        onMouseEnter={e => { if (scan.status === 'completed') e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+        style={{ cursor: canExpandResults ? 'pointer' : 'default' }}
+        onMouseEnter={e => { if (canExpandResults) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
       >
         <div className="flex items-center gap-4 min-w-0">
@@ -353,7 +355,9 @@ function ScanRow({ scan, onRescan, rescanning }) {
                 </>
               )}
               {isActive && (
-                <span className="text-xs text-white/25 italic">waiting for CLI upload...</span>
+                <span className="text-xs text-white/25 italic">
+                  {scan.method === 'cli' ? 'waiting for CLI upload...' : 'scan in progress...'}
+                </span>
               )}
             </div>
             <p className="text-xs text-white/25">{formatDate(scan.created_at)}</p>
@@ -389,7 +393,7 @@ function ScanRow({ scan, onRescan, rescanning }) {
               Re-scan
             </button>
           )}
-          {scan.status === 'completed' && (
+          {canExpandResults && (
             <svg
               width="14" height="14" viewBox="0 0 24 24" fill="none"
               stroke="rgba(255,255,255,0.2)" strokeWidth="2"
@@ -460,6 +464,16 @@ export default function ProjectDetail() {
   const [rescanPanel, setRescanPanel] = useState(null) // { method, cliToken? }
   const pollRef = useRef(null)
 
+  const syncActiveDastStatuses = useCallback(async (scanList) => {
+    const activeDast = (scanList || []).filter(
+      (s) => s.method === 'dast' && (s.status === 'pending' || s.status === 'running')
+    )
+    if (activeDast.length === 0) return false
+
+    await Promise.allSettled(activeDast.map((s) => getDastScanStatus(s.id)))
+    return true
+  }, [])
+
   const loadScans = useCallback(async () => {
     try {
       const list = await getScans(id)
@@ -483,13 +497,27 @@ export default function ProjectDetail() {
       }
     }
     init()
+    
+    // If redirected from a newly completed scan, refresh after a short delay
+    // Increased to 3500ms to allow DAST scans to be persisted to database
+    const refreshTimer = setTimeout(() => {
+      loadScans()
+    }, 3500)
+    
+    return () => clearTimeout(refreshTimer)
   }, [id])
 
   // Polling: refresh scans every 5s while any scan is pending/running
   useEffect(() => {
     const hasActive = scans.some(s => s.status === 'pending' || s.status === 'running')
     if (hasActive && !pollRef.current) {
-      pollRef.current = setInterval(loadScans, 5000)
+      pollRef.current = setInterval(async () => {
+        const list = await loadScans()
+        const syncedDast = await syncActiveDastStatuses(list)
+        if (syncedDast) {
+          await loadScans()
+        }
+      }, 5000)
     }
     if (!hasActive && pollRef.current) {
       clearInterval(pollRef.current)
@@ -498,7 +526,7 @@ export default function ProjectDetail() {
     return () => {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     }
-  }, [scans, loadScans])
+  }, [scans, loadScans, syncActiveDastStatuses])
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -515,6 +543,18 @@ export default function ProjectDetail() {
     setRescanning(true)
     setRescanPanel(null)
     try {
+      if (prevScan.method === 'dast') {
+        const targetUrl = (prevScan.repo_url || '').trim()
+        if (!targetUrl) {
+          throw new Error('Missing DAST target URL on previous scan. Start a new DAST scan with a target URL.')
+        }
+
+        await startDastScan(id, targetUrl)
+        await loadScans()
+        setRescanPanel({ method: 'dast' })
+        return
+      }
+
       const scan = await createScan(id, {
         method: prevScan.method,
         repo_url: prevScan.repo_url || null,
@@ -529,6 +569,7 @@ export default function ProjectDetail() {
       }
     } catch (e) {
       console.error('Rescan error:', e)
+      alert(e.response?.data?.detail || e.message || 'Failed to start rescan')
     } finally {
       setRescanning(false)
     }
@@ -542,6 +583,8 @@ export default function ProjectDetail() {
   ]
 
   const hasActive = scans.some(s => s.status === 'pending' || s.status === 'running')
+  const hasActiveCli = scans.some(s => (s.status === 'pending' || s.status === 'running') && s.method === 'cli')
+  const hasActiveNonCli = scans.some(s => (s.status === 'pending' || s.status === 'running') && s.method !== 'cli')
 
   const isOwner = project?.user_role === 'owner'
   const canEdit = isOwner || project?.user_role === 'editor'
@@ -669,7 +712,11 @@ export default function ProjectDetail() {
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
                   <span className="text-xs font-semibold" style={{ color: 'rgba(255,107,43,0.8)' }}>
-                    {rescanPanel.method === 'github' ? 'GitHub scan started — results will appear below' : 'New scan created — run these commands to upload results'}
+                    {rescanPanel.method === 'cli'
+                      ? 'New scan created — run these commands to upload results'
+                      : rescanPanel.method === 'dast'
+                        ? 'DAST scan started — dynamic results will appear below'
+                        : 'GitHub scan started — results will appear below'}
                   </span>
                 </div>
                 <button onClick={() => setRescanPanel(null)} className="text-white/20 hover:text-white/50 transition-colors">
@@ -701,7 +748,11 @@ export default function ProjectDetail() {
               <div className="w-4 h-4 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-yellow-400/80">
-                  A scan is waiting for results. Run the CLI in your project directory to upload them. Status refreshes automatically every 5s.
+                  {hasActiveCli && !hasActiveNonCli
+                    ? 'A scan is waiting for results. Run the CLI in your project directory to upload them. Status refreshes automatically every 5s.'
+                    : hasActiveNonCli && !hasActiveCli
+                      ? 'A scan is currently running in the background. Status refreshes automatically every 5s.'
+                      : 'Some scans are running and/or waiting for CLI upload. Status refreshes automatically every 5s.'}
                 </p>
               </div>
             </div>

@@ -57,6 +57,11 @@ export const deleteAdminProject = async (id) => {
   await api.delete(`/api/projects/admin/${id}`)
 }
 
+export const deleteAdminProjectsBulk = async (projectIds) => {
+  const res = await api.post('/api/projects/admin/bulk/delete', { project_ids: projectIds })
+  return res.data
+}
+
 export const setAdminProjectStatus = async (id, status) => {
   const res = await api.patch(`/api/projects/admin/${id}/status`, { status })
   return res.data
@@ -76,6 +81,21 @@ export const createScan = async (projectId, { method, repo_url, repo_branch, rep
     repo_branch,
     repo_token,
   })
+  return res.data
+}
+
+export const startDastScan = async (projectId, targetUrl) => {
+  const res = await api.post('/api/dast/scan/start', null, {
+    params: {
+      target_url: targetUrl,
+      project_id: projectId,
+    },
+  })
+  return res.data
+}
+
+export const getDastScanStatus = async (scanId) => {
+  const res = await api.get(`/api/dast/scan/${scanId}/status`)
   return res.data
 }
 

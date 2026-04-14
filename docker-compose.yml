@@ -20,6 +20,25 @@ services:
     networks:
       - invisithreat-network
 
+  # OWASP ZAP for DAST scanning
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:latest
+    container_name: invisithreat-zap
+    restart: unless-stopped
+    ports:
+      - "8090:8080"
+    environment:
+      - ZAP_PORT=8080
+    command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.disablekey=true -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true
+    networks:
+      - invisithreat-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+
   # FastAPI Backend
   backend:
     build:
@@ -42,6 +61,18 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      zap:
+        condition: service_healthy
+    environment:
+      - ZAP_ENABLED=true
+      - ZAP_URL=http://zap:8080
+      - DAST_SPIDER_TIMEOUT=1200
+      - DAST_ASCAN_TIMEOUT=3600
+      - DAST_NO_PROGRESS_TIMEOUT=900
+      - DB_POOL_SIZE=2
+      - DB_MAX_OVERFLOW=1
+      - DB_POOL_TIMEOUT=30
+      - DB_POOL_RECYCLE=1800
     networks:
       - invisithreat-network
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
