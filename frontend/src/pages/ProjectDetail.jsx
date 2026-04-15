@@ -1,7 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
-import { getProject, getScans, deleteProject, createScan, getCLIToken } from '../services/projectService'
+import {
+  getProject,
+  getScans,
+  deleteProject,
+  createScan,
+  getCLIToken,
+  triggerSecurityWorkflowAction,
+  getVulnerabilityWorkflow,
+  updateVulnerabilityTask,
+  addVulnerabilityTaskComment,
+} from '../services/projectService'
+import { useAuth } from '../context/AuthContext'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -9,6 +20,71 @@ const getApiBase = () => {
   const env = import.meta.env.VITE_API_URL
   if (env && !env.includes('localhost')) return env
   return `${window.location.protocol}//${window.location.hostname}:8000`
+}
+
+const toInt = (value) => {
+  const n = Number(value)
+  return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0
+}
+
+const normalizeFindingText = (value) => String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+const normalizeFindingLine = (value) => {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return 0
+  return parsed > 0 ? Math.trunc(parsed) : 0
+}
+
+const buildFindingFingerprint = (finding) => {
+  const key = `${normalizeFindingText(finding?.rule_id || 'rule')}|${normalizeFindingText(finding?.title || 'untitled')}|${normalizeFindingText(finding?.file || finding?.path || '')}|${normalizeFindingLine(finding?.line)}`
+  return key.length <= 190 ? key : key.slice(0, 190)
+}
+
+const parseScanResults = (resultsJson) => {
+  if (!resultsJson || resultsJson.startsWith('__pending_token:')) return null
+  try {
+    return JSON.parse(resultsJson)
+  } catch {
+    return null
+  }
+}
+
+const summarizeScan = (scan) => {
+  if (!scan || scan.status !== 'completed') {
+    return {
+      total: 0,
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+      scannedAt: null,
+    }
+  }
+
+  const parsed = parseScanResults(scan.results_json)
+  const findings = Array.isArray(parsed?.findings) ? parsed.findings : []
+  const summary = parsed?.summary && typeof parsed.summary === 'object' ? parsed.summary : {}
+
+  const fallbackCounts = findings.reduce(
+    (acc, finding) => {
+      const sev = String(finding?.severity || 'info').toLowerCase()
+      if (sev === 'critical') acc.critical += 1
+      else if (sev === 'high') acc.high += 1
+      else if (sev === 'medium') acc.medium += 1
+      else if (sev === 'low') acc.low += 1
+      return acc
+    },
+    { critical: 0, high: 0, medium: 0, low: 0 }
+  )
+
+  return {
+    total: toInt(summary.total_findings ?? summary.total ?? findings.length),
+    critical: toInt(summary.critical ?? fallbackCounts.critical),
+    high: toInt(summary.high ?? fallbackCounts.high),
+    medium: toInt(summary.medium ?? fallbackCounts.medium),
+    low: toInt(summary.low ?? fallbackCounts.low),
+    scannedAt: scan.completed_at || scan.started_at || null,
+  }
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -51,6 +127,44 @@ const SEVERITY_CONFIG = {
   medium:   { label: 'Medium',   color: '#eab308', bg: 'rgba(234,179,8,0.08)',   border: 'rgba(234,179,8,0.2)'   },
   low:      { label: 'Low',      color: '#60a5fa', bg: 'rgba(96,165,250,0.08)',  border: 'rgba(96,165,250,0.2)'  },
   info:     { label: 'Info',     color: '#9ca3af', bg: 'rgba(156,163,175,0.06)', border: 'rgba(156,163,175,0.15)' },
+}
+
+const TASK_STATUS_CONFIG = {
+  open: {
+    label: 'Open',
+    color: '#f87171',
+    bg: 'rgba(248,113,113,0.12)',
+    border: 'rgba(248,113,113,0.3)',
+  },
+  in_progress: {
+    label: 'In Progress',
+    color: '#f59e0b',
+    bg: 'rgba(245,158,11,0.12)',
+    border: 'rgba(245,158,11,0.3)',
+  },
+  fixed: {
+    label: 'Fixed',
+    color: '#60a5fa',
+    bg: 'rgba(96,165,250,0.12)',
+    border: 'rgba(96,165,250,0.3)',
+  },
+  verified: {
+    label: 'Verified',
+    color: '#22c55e',
+    bg: 'rgba(34,197,94,0.12)',
+    border: 'rgba(34,197,94,0.3)',
+  },
+}
+
+const DARK_SELECT_STYLE = {
+  background: 'rgba(255,255,255,0.03)',
+  border: '1px solid rgba(255,255,255,0.08)',
+  colorScheme: 'dark',
+}
+
+const DARK_OPTION_STYLE = {
+  background: '#141414',
+  color: 'rgba(255,255,255,0.9)',
 }
 
 // ─── Small Components ────────────────────────────────────────────────────────
@@ -213,8 +327,106 @@ function FindingRow({ finding, cfg }) {
 
 // ─── Current Finding Row (persistent, with recurring badge) ─────────────────
 
-function CurrentFindingRow({ finding, cfg, isRecurring, recommendation }) {
+function CurrentFindingRow({
+  finding,
+  cfg,
+  isRecurring,
+  recommendation,
+  workflowTask,
+  assignees,
+  canManageTask,
+  canAdjustStatus,
+  canComment,
+  onSaveTask,
+  onSendComment,
+  currentUserId,
+}) {
   const [expanded, setExpanded] = useState(false)
+  const [localStatus, setLocalStatus] = useState(workflowTask?.status || 'open')
+  const [localAssigneeId, setLocalAssigneeId] = useState(workflowTask?.assignee_id || '')
+  const [localDueDate, setLocalDueDate] = useState(workflowTask?.due_date || '')
+  const [commentDraft, setCommentDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [commenting, setCommenting] = useState(false)
+  const [rowFeedback, setRowFeedback] = useState('')
+  const [rowError, setRowError] = useState('')
+
+  useEffect(() => {
+    setLocalStatus(workflowTask?.status || 'open')
+    setLocalAssigneeId(workflowTask?.assignee_id || '')
+    setLocalDueDate(workflowTask?.due_date || '')
+  }, [workflowTask?.id, workflowTask?.status, workflowTask?.assignee_id, workflowTask?.due_date])
+
+  const taskStatus = workflowTask?.status || 'open'
+  const taskStatusCfg = TASK_STATUS_CONFIG[taskStatus] || TASK_STATUS_CONFIG.open
+  const comments = Array.isArray(workflowTask?.comments) ? workflowTask.comments : []
+  const hasWorkflowTask = Boolean(workflowTask?.id)
+  const statusLabel = hasWorkflowTask ? taskStatusCfg.label : 'Syncing'
+  const statusStyle = hasWorkflowTask
+    ? { background: taskStatusCfg.bg, border: `1px solid ${taskStatusCfg.border}`, color: taskStatusCfg.color }
+    : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.55)' }
+  const statusOptions = canManageTask
+    ? Object.entries(TASK_STATUS_CONFIG)
+    : Object.entries(TASK_STATUS_CONFIG).filter(([value]) => value !== 'verified')
+
+  const submitTaskChanges = async () => {
+    if (!hasWorkflowTask) return
+
+    const payload = {}
+    const previousStatus = workflowTask?.status || 'open'
+    const previousAssignee = workflowTask?.assignee_id || ''
+    const previousDueDate = workflowTask?.due_date || ''
+
+    if (canAdjustStatus && localStatus !== previousStatus) {
+      payload.status = localStatus
+    }
+
+    if (canManageTask) {
+      if (localAssigneeId !== previousAssignee) {
+        if (localAssigneeId) payload.assignee_id = localAssigneeId
+        else payload.clear_assignee = true
+      }
+      if (localDueDate !== previousDueDate) {
+        if (localDueDate) payload.due_date = localDueDate
+        else payload.clear_due_date = true
+      }
+    }
+
+    if (Object.keys(payload).length === 0) {
+      setRowFeedback('No changes to save.')
+      setRowError('')
+      return
+    }
+
+    setSaving(true)
+    setRowFeedback('')
+    setRowError('')
+    try {
+      await onSaveTask(workflowTask.id, payload)
+      setRowFeedback('Task updated successfully.')
+    } catch (err) {
+      setRowError(err.response?.data?.detail || 'Failed to update vulnerability task.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const submitComment = async () => {
+    if (!hasWorkflowTask || !canComment || !commentDraft.trim()) return
+    setCommenting(true)
+    setRowFeedback('')
+    setRowError('')
+    try {
+      await onSendComment(workflowTask.id, commentDraft.trim())
+      setCommentDraft('')
+      setRowFeedback('Comment added.')
+    } catch (err) {
+      setRowError(err.response?.data?.detail || 'Failed to post comment.')
+    } finally {
+      setCommenting(false)
+    }
+  }
+
   return (
     <div className="rounded-xl overflow-hidden transition-all"
       style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
@@ -227,21 +439,30 @@ function CurrentFindingRow({ finding, cfg, isRecurring, recommendation }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-0.5">
             <p className="text-sm text-white/80 font-medium">{finding.title}</p>
-            {isRecurring ? (
+            <span
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase"
+              style={statusStyle}
+            >
+              {statusLabel}
+            </span>
+            {isRecurring && !hasWorkflowTask && (
               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase"
                 style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>
                 Not Fixed
-              </span>
-            ) : (
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase"
-                style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
-                New
               </span>
             )}
           </div>
           <p className="text-xs text-white/25 truncate">
             {finding.file}{finding.line ? `:${finding.line}` : ''}
           </p>
+          {workflowTask?.assignee_name && (
+            <p className="text-[11px] text-white/35 mt-0.5">Assigned to {workflowTask.assignee_name}</p>
+          )}
+          {workflowTask?.due_date && (
+            <p className="text-[11px] mt-0.5" style={{ color: workflowTask.is_overdue ? '#f87171' : workflowTask.is_due_soon ? '#f59e0b' : 'rgba(255,255,255,0.35)' }}>
+              Due {workflowTask.due_date}{workflowTask.is_overdue ? ' (overdue)' : workflowTask.is_due_soon ? ' (due soon)' : ''}
+            </p>
+          )}
         </div>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
           stroke="rgba(255,255,255,0.2)" strokeWidth="2"
@@ -273,6 +494,126 @@ function CurrentFindingRow({ finding, cfg, isRecurring, recommendation }) {
               </p>
             </div>
           )}
+
+          <div className="mt-3 rounded-lg px-3 py-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-white/30 mb-2">Action Tracking</p>
+            {hasWorkflowTask ? (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] text-white/35 mb-1">Status</label>
+                    <select
+                      value={localStatus}
+                      onChange={(e) => setLocalStatus(e.target.value)}
+                      disabled={!canAdjustStatus || saving}
+                      className="w-full px-2.5 py-2 rounded-lg text-xs text-white focus:outline-none disabled:opacity-60"
+                      style={DARK_SELECT_STYLE}
+                    >
+                      {statusOptions.map(([value, item]) => (
+                        <option key={value} value={value} style={DARK_OPTION_STYLE}>{item.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-white/35 mb-1">Assign to</label>
+                    <select
+                      value={localAssigneeId}
+                      onChange={(e) => setLocalAssigneeId(e.target.value)}
+                      disabled={!canManageTask || saving}
+                      className="w-full px-2.5 py-2 rounded-lg text-xs text-white focus:outline-none disabled:opacity-60"
+                      style={DARK_SELECT_STYLE}
+                    >
+                      <option value="" style={DARK_OPTION_STYLE}>Unassigned</option>
+                      {(assignees || []).map((person) => (
+                        <option key={person.user_id} value={person.user_id} style={DARK_OPTION_STYLE}>{person.nom}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-white/35 mb-1">Deadline</label>
+                    <input
+                      type="date"
+                      value={localDueDate || ''}
+                      onChange={(e) => setLocalDueDate(e.target.value)}
+                      disabled={!canManageTask || saving}
+                      className="w-full px-2.5 py-2 rounded-lg text-xs text-white focus:outline-none disabled:opacity-60"
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
+                    />
+                  </div>
+                </div>
+
+                {(canManageTask || canAdjustStatus) && (
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={submitTaskChanges}
+                      disabled={saving}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-55"
+                      style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)' }}
+                    >
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-white/35">Workflow task is still syncing from the latest scan.</p>
+            )}
+
+            {rowError && <p className="text-xs mt-2" style={{ color: '#f87171' }}>{rowError}</p>}
+            {!rowError && rowFeedback && <p className="text-xs text-white/45 mt-2">{rowFeedback}</p>}
+          </div>
+
+          <div className="mt-3 rounded-lg px-3 py-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-white/30 mb-2">Discussion</p>
+            <div className="max-h-44 overflow-auto pr-1 flex flex-col gap-2">
+              {comments.length === 0 ? (
+                <p className="text-xs text-white/35">No discussion yet.</p>
+              ) : (
+                comments.map((comment) => {
+                  const isOwnComment = comment.author_id === currentUserId
+                  return (
+                    <div
+                      key={comment.id}
+                      className="px-2.5 py-2 rounded-lg"
+                      style={{
+                        background: isOwnComment ? 'rgba(255,107,43,0.08)' : 'rgba(255,255,255,0.03)',
+                        border: isOwnComment ? '1px solid rgba(255,107,43,0.18)' : '1px solid rgba(255,255,255,0.06)',
+                      }}
+                    >
+                      <p className="text-[11px] text-white/55 mb-1">{comment.author_name}</p>
+                      <p className="text-xs text-white/75 leading-relaxed">{comment.message}</p>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {canComment && hasWorkflowTask && (
+              <div className="mt-2.5 flex gap-2">
+                <input
+                  type="text"
+                  value={commentDraft}
+                  onChange={(e) => setCommentDraft(e.target.value)}
+                  placeholder="Write a message"
+                  className="flex-1 px-2.5 py-2 rounded-lg text-xs text-white placeholder:text-white/30 focus:outline-none"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
+                />
+                <button
+                  type="button"
+                  onClick={submitComment}
+                  disabled={commenting || !commentDraft.trim()}
+                  className="px-3 py-2 rounded-lg text-xs font-semibold text-white disabled:opacity-55"
+                  style={{ background: 'rgba(96,165,250,0.2)', border: '1px solid rgba(96,165,250,0.35)' }}
+                >
+                  {commenting ? 'Sending...' : 'Send'}
+                </button>
+              </div>
+            )}
+          </div>
+
           <p className="text-[10px] text-white/15 mt-3 uppercase tracking-widest">Category: {finding.category}</p>
         </div>
       )}
@@ -450,6 +791,7 @@ function RescanCmd({ label, children }) {
 export default function ProjectDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [project, setProject] = useState(null)
   const [scans, setScans] = useState([])
   const [loading, setLoading] = useState(true)
@@ -458,7 +800,16 @@ export default function ProjectDetail() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [rescanning, setRescanning] = useState(false)
   const [rescanPanel, setRescanPanel] = useState(null) // { method, cliToken? }
+  const [workflowNote, setWorkflowNote] = useState('')
+  const [workflowSubmitting, setWorkflowSubmitting] = useState(null)
+  const [workflowFeedback, setWorkflowFeedback] = useState(null)
+  const [vulnerabilityWorkflow, setVulnerabilityWorkflow] = useState({
+    scan_id: null,
+    tasks: [],
+    assignees: [],
+  })
   const pollRef = useRef(null)
+  const vulnerabilityPollRef = useRef(null)
 
   const loadScans = useCallback(async () => {
     try {
@@ -468,14 +819,40 @@ export default function ProjectDetail() {
     } catch { return [] }
   }, [id])
 
+  const loadVulnerabilityWorkflow = useCallback(async () => {
+    try {
+      const snapshot = await getVulnerabilityWorkflow(id)
+      setVulnerabilityWorkflow({
+        scan_id: snapshot?.scan_id || null,
+        tasks: Array.isArray(snapshot?.tasks) ? snapshot.tasks : [],
+        assignees: Array.isArray(snapshot?.assignees) ? snapshot.assignees : [],
+      })
+      return snapshot
+    } catch (err) {
+      console.debug('Workflow snapshot error:', err)
+      return null
+    }
+  }, [id])
+
   // Initial load
   useEffect(() => {
     const init = async () => {
       setLoading(true)
       try {
-        const [proj, scanList] = await Promise.all([getProject(id), getScans(id)])
+        const [proj, scanList, workflowSnapshot] = await Promise.all([
+          getProject(id),
+          getScans(id),
+          getVulnerabilityWorkflow(id).catch(() => null),
+        ])
         setProject(proj)
         setScans(scanList)
+        if (workflowSnapshot) {
+          setVulnerabilityWorkflow({
+            scan_id: workflowSnapshot?.scan_id || null,
+            tasks: Array.isArray(workflowSnapshot?.tasks) ? workflowSnapshot.tasks : [],
+            assignees: Array.isArray(workflowSnapshot?.assignees) ? workflowSnapshot.assignees : [],
+          })
+        }
       } catch (err) {
         setError(err.response?.data?.detail || 'Failed to load project')
       } finally {
@@ -499,6 +876,18 @@ export default function ProjectDetail() {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     }
   }, [scans, loadScans])
+
+  useEffect(() => {
+    if (!vulnerabilityPollRef.current) {
+      vulnerabilityPollRef.current = setInterval(loadVulnerabilityWorkflow, 8000)
+    }
+    return () => {
+      if (vulnerabilityPollRef.current) {
+        clearInterval(vulnerabilityPollRef.current)
+        vulnerabilityPollRef.current = null
+      }
+    }
+  }, [loadVulnerabilityWorkflow])
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -542,9 +931,136 @@ export default function ProjectDetail() {
   ]
 
   const hasActive = scans.some(s => s.status === 'pending' || s.status === 'running')
+  const isSecurityManagerView = user?.role_name === 'Security Manager'
 
   const isOwner = project?.user_role === 'owner'
   const canEdit = isOwner || project?.user_role === 'editor'
+
+  const completedScans = scans.filter(s => s.status === 'completed')
+  const latestCompletedScan = completedScans[0] || null
+  const previousCompletedScan = completedScans[1] || null
+  const latestSummary = summarizeScan(latestCompletedScan)
+  const previousSummary = summarizeScan(previousCompletedScan)
+
+  const hasTrendBaseline = Boolean(latestCompletedScan && previousCompletedScan)
+  const findingsDelta = hasTrendBaseline ? latestSummary.total - previousSummary.total : 0
+  const criticalDelta = hasTrendBaseline ? latestSummary.critical - previousSummary.critical : 0
+
+  const trendState = (() => {
+    if (!latestCompletedScan) return { label: 'No baseline', color: '#9ca3af', hint: 'No completed scan yet.' }
+    if (!hasTrendBaseline) return { label: 'Baseline', color: '#60a5fa', hint: 'Need one more completed scan for trend.' }
+    if (findingsDelta < 0 || criticalDelta < 0) {
+      return {
+        label: 'Improving',
+        color: '#22c55e',
+        hint: `${Math.abs(findingsDelta)} fewer findings, ${Math.abs(criticalDelta)} fewer critical.`,
+      }
+    }
+    if (findingsDelta > 0 || criticalDelta > 0) {
+      return {
+        label: 'Worsening',
+        color: '#ef4444',
+        hint: `${findingsDelta > 0 ? `+${findingsDelta}` : '+0'} findings, ${criticalDelta > 0 ? `+${criticalDelta}` : '+0'} critical.`,
+      }
+    }
+    return { label: 'Stable', color: '#eab308', hint: 'No measurable change since previous scan.' }
+  })()
+
+  const priorityState = (() => {
+    if (!latestCompletedScan) {
+      return {
+        label: 'Awaiting Scan',
+        color: '#9ca3af',
+        hint: 'Request an initial scan from the project team.',
+      }
+    }
+    if (latestSummary.critical > 0) {
+      return {
+        label: 'Immediate',
+        color: '#ef4444',
+        hint: `${latestSummary.critical} critical issue${latestSummary.critical !== 1 ? 's' : ''} to triage first.`,
+      }
+    }
+    if (latestSummary.high > 0) {
+      return {
+        label: 'High',
+        color: '#fb923c',
+        hint: `${latestSummary.high} high issue${latestSummary.high !== 1 ? 's' : ''} pending mitigation.`,
+      }
+    }
+    if (latestSummary.total > 0) {
+      return {
+        label: 'Medium',
+        color: '#eab308',
+        hint: `${latestSummary.total} finding${latestSummary.total !== 1 ? 's' : ''} remain to be tracked.`,
+      }
+    }
+    return {
+      label: 'Low',
+      color: '#22c55e',
+      hint: 'No open findings in latest completed scan.',
+    }
+  })()
+
+  const canConfirmValidation = Boolean(
+    latestCompletedScan && (
+      latestSummary.total === 0 ||
+      (hasTrendBaseline && findingsDelta < 0 && latestSummary.critical === 0)
+    )
+  )
+
+  const workflowTaskByFingerprint = (vulnerabilityWorkflow.tasks || []).reduce((acc, task) => {
+    if (task?.fingerprint) acc[task.fingerprint] = task
+    return acc
+  }, {})
+
+  const canManageWorkflowTask = user?.role_name === 'Security Manager' || user?.role_name === 'Admin'
+
+  const handleSecurityWorkflowAction = async (action) => {
+    if (!project?.id) return
+    setWorkflowSubmitting(action)
+    setWorkflowFeedback(null)
+
+    try {
+      const payload = {
+        action,
+        note: workflowNote.trim() || undefined,
+      }
+      const result = await triggerSecurityWorkflowAction(project.id, payload)
+      const notifiedCount = Number(result?.notified_count || 0)
+      const baseMessage = result?.message || 'Security workflow action sent.'
+      setWorkflowFeedback(`${baseMessage} ${notifiedCount > 0 ? `${notifiedCount} recipient${notifiedCount > 1 ? 's were' : ' was'} notified.` : ''}`.trim())
+      if (action !== 'confirm_validation') setWorkflowNote('')
+    } catch (err) {
+      setWorkflowFeedback(err.response?.data?.detail || 'Failed to send security workflow action.')
+    } finally {
+      setWorkflowSubmitting(null)
+    }
+  }
+
+  const saveVulnerabilityTask = async (taskId, payload) => {
+    const updated = await updateVulnerabilityTask(id, taskId, payload)
+    setVulnerabilityWorkflow((prev) => ({
+      ...prev,
+      tasks: (prev.tasks || []).map((task) => (task.id === updated.id ? updated : task)),
+    }))
+    return updated
+  }
+
+  const sendVulnerabilityComment = async (taskId, message) => {
+    const comment = await addVulnerabilityTaskComment(id, taskId, message)
+    setVulnerabilityWorkflow((prev) => ({
+      ...prev,
+      tasks: (prev.tasks || []).map((task) => {
+        if (task.id !== taskId) return task
+        return {
+          ...task,
+          comments: [...(task.comments || []), comment],
+        }
+      }),
+    }))
+    return comment
+  }
 
   if (loading) {
     return (
@@ -718,6 +1234,107 @@ export default function ProjectDetail() {
             ))}
           </div>
 
+          {/* Security manager workflow */}
+          {isSecurityManagerView && (
+            <div className="rounded-2xl px-5 py-5 mb-6 animate-slide-up"
+              style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)', animationDelay: '0.06s' }}>
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <p className="text-xs font-semibold text-white/35 uppercase tracking-widest">Security Workflow</p>
+                  <p className="text-xs text-white/28 mt-1">Review latest scan, prioritize, trigger team actions, and validate risk reduction.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/notifications')}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                  style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa' }}
+                >
+                  Open Notifications
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <div className="rounded-xl px-3 py-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Latest Scan</p>
+                  <p className="text-sm font-semibold text-white">
+                    {latestSummary.scannedAt
+                      ? new Date(latestSummary.scannedAt).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                      : 'No completed scan'}
+                  </p>
+                  <p className="text-xs text-white/35 mt-1">Status: {latestCompletedScan?.status || 'n/a'}</p>
+                </div>
+
+                <div className="rounded-xl px-3 py-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Findings Volume</p>
+                  <p className="text-sm font-semibold text-white">{latestSummary.total} total findings</p>
+                  <p className="text-xs text-white/35 mt-1">
+                    C:{latestSummary.critical} · H:{latestSummary.high} · M:{latestSummary.medium} · L:{latestSummary.low}
+                  </p>
+                </div>
+
+                <div className="rounded-xl px-3 py-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Trend</p>
+                  <p className="text-sm font-semibold" style={{ color: trendState.color }}>{trendState.label}</p>
+                  <p className="text-xs text-white/35 mt-1">{trendState.hint}</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl px-3 py-3 mb-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Priority</p>
+                <p className="text-sm font-semibold" style={{ color: priorityState.color }}>{priorityState.label}</p>
+                <p className="text-xs text-white/35 mt-1">{priorityState.hint}</p>
+              </div>
+
+              <div className="flex flex-col gap-2 mb-3">
+                <label htmlFor="workflow-note" className="text-xs text-white/35">Action note (optional)</label>
+                <textarea
+                  id="workflow-note"
+                  value={workflowNote}
+                  onChange={(e) => setWorkflowNote(e.target.value)}
+                  placeholder="Ex: Focus critical auth findings first, then rerun scan before tomorrow 17:00."
+                  className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder:text-white/25 resize-none focus:outline-none"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+                  rows={2}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSecurityWorkflowAction('request_rescan')}
+                  disabled={workflowSubmitting !== null}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                  style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa' }}
+                >
+                  {workflowSubmitting === 'request_rescan' ? 'Sending...' : 'Trigger Re-scan'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSecurityWorkflowAction('confirm_validation')}
+                  disabled={workflowSubmitting !== null || !canConfirmValidation}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
+                  style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', color: '#4ade80' }}
+                  title={canConfirmValidation ? 'Confirm validation closeout' : 'Requires reduced findings and no critical issues'}
+                >
+                  {workflowSubmitting === 'confirm_validation' ? 'Sending...' : 'Validate Project'}
+                </button>
+              </div>
+
+              {!canConfirmValidation && latestCompletedScan && (
+                <p className="text-xs text-white/30 mt-3">
+                  Validation closure unlocks when risk decreases versus previous scan and critical findings are cleared.
+                </p>
+              )}
+
+              {workflowFeedback && (
+                <p className="text-xs mt-3" style={{ color: 'rgba(255,255,255,0.62)' }}>
+                  {workflowFeedback}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Scan History — Top */}
           <div className="rounded-2xl overflow-hidden animate-slide-up mb-6"
             style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)', animationDelay: '0.07s' }}>
@@ -826,6 +1443,14 @@ export default function ProjectDetail() {
                       const isRecurring = prev && prevKeys.has(`${f.rule_id}:${f.file}:${f.line}`)
                       const cfg = SEVERITY_CONFIG[f.severity] || SEVERITY_CONFIG.info
                       const rec = f.recommendation || RECOMMENDATIONS[f.rule_id]
+                      const fingerprint = buildFindingFingerprint(f)
+                      const workflowTask = workflowTaskByFingerprint[fingerprint] || null
+                      const canAdjustStatus =
+                        canManageWorkflowTask ||
+                        project?.user_role === 'owner' ||
+                        project?.user_role === 'editor' ||
+                        workflowTask?.assignee_id === user?.id
+                      const canComment = canAdjustStatus || workflowTask?.assignee_id === user?.id
                       return (
                         <CurrentFindingRow
                           key={f.id || i}
@@ -833,6 +1458,14 @@ export default function ProjectDetail() {
                           cfg={cfg}
                           isRecurring={isRecurring && prev !== null}
                           recommendation={rec}
+                          workflowTask={workflowTask}
+                          assignees={vulnerabilityWorkflow.assignees || []}
+                          canManageTask={canManageWorkflowTask}
+                          canAdjustStatus={canAdjustStatus}
+                          canComment={canComment}
+                          onSaveTask={saveVulnerabilityTask}
+                          onSendComment={sendVulnerabilityComment}
+                          currentUserId={user?.id}
                         />
                       )
                     })}

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Optional, List, Literal
 from datetime import datetime
 import uuid
@@ -64,12 +64,24 @@ class AdminProjectsSummary(BaseModel):
     total_users_involved: int
 
 
+class AdminAssignedUser(BaseModel):
+    user_id: uuid.UUID
+    nom: str
+    email: Optional[str] = None
+    role_projet: str
+    profile_picture: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class AdminProjectResponse(BaseModel):
     id: uuid.UUID
     name: str
     owner_id: uuid.UUID
     owner_name: str
+    owner_profile_picture: Optional[str] = None
     users_assigned_count: int
+    users_assigned: List[AdminAssignedUser] = Field(default_factory=list)
     total_scans: int
     global_risk_level: Literal["Low", "Medium", "High"]
     created_at: datetime
@@ -106,6 +118,7 @@ class SecurityProjectResponse(BaseModel):
     id: uuid.UUID
     name: str
     owner_name: str
+    owner_profile_picture: Optional[str] = None
     total_scans: int
     last_scan_status: Optional[str] = None
     global_risk_level: Literal["Low", "Medium", "High"]
@@ -123,6 +136,34 @@ class SecurityProjectResponse(BaseModel):
 class SecurityProjectsResponse(BaseModel):
     summary: SecurityProjectsSummary
     projects: List[SecurityProjectResponse]
+
+
+class SecurityWorkflowActionRequest(BaseModel):
+    action: Literal["request_fixes", "request_rescan", "confirm_validation"]
+    note: Optional[str] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("note")
+    @classmethod
+    def _normalize_note(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class SecurityWorkflowRecipient(BaseModel):
+    user_id: uuid.UUID
+    nom: str
+    role_projet: str
+
+
+class SecurityWorkflowActionResponse(BaseModel):
+    action: Literal["request_fixes", "request_rescan", "confirm_validation"]
+    notified_count: int
+    recipients: List[SecurityWorkflowRecipient] = Field(default_factory=list)
+    message: str
 
 
 # ─── Scan Schemas ────────────────────────────────────────────────────────────

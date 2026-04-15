@@ -192,7 +192,7 @@ def get_admin_projects_management(db: Session) -> dict:
         db.query(Project)
         .options(
             joinedload(Project.owner),
-            joinedload(Project.members),
+            joinedload(Project.members).joinedload(ProjectMember.user),
             joinedload(Project.scans).joinedload(Scan.risk_score),
         )
         .order_by(Project.created_at.desc())
@@ -218,10 +218,34 @@ def get_admin_projects_management(db: Session) -> dict:
 
         owner_name = project.owner.nom if project.owner else "Unknown"
         owner_id = project.owner_id
+        owner_email = project.owner.email if project.owner else None
+        owner_profile_picture = project.owner.profile_picture if project.owner else None
 
         member_user_ids = {m.user_id for m in project.members}
-        # Count owner + distinct members as project users involved.
-        users_assigned_count = 1 + len(member_user_ids - {owner_id})
+        assigned_users = [
+            {
+                "user_id": owner_id,
+                "nom": owner_name,
+                "email": owner_email,
+                "role_projet": "Owner",
+                "profile_picture": owner_profile_picture,
+            }
+        ]
+        for member in project.members:
+            if member.user_id == owner_id:
+                continue
+            member_user = member.user
+            assigned_users.append(
+                {
+                    "user_id": member.user_id,
+                    "nom": member_user.nom if member_user else "Unknown",
+                    "email": member_user.email if member_user else None,
+                    "role_projet": member.role_projet or "Viewer",
+                    "profile_picture": member_user.profile_picture if member_user else None,
+                }
+            )
+
+        users_assigned_count = len(assigned_users)
 
         involved_user_ids.add(owner_id)
         involved_user_ids.update(member_user_ids)
@@ -259,7 +283,9 @@ def get_admin_projects_management(db: Session) -> dict:
             "name": project.name,
             "owner_id": owner_id,
             "owner_name": owner_name,
+            "owner_profile_picture": owner_profile_picture,
             "users_assigned_count": users_assigned_count,
+            "users_assigned": assigned_users,
             "total_scans": total_scans,
             "global_risk_level": _risk_level_from_score(risk_score),
             "created_at": project.created_at,
@@ -361,6 +387,7 @@ def get_security_projects_overview(db: Session, user: User) -> dict:
             "id": project.id,
             "name": project.name,
             "owner_name": project.owner.nom if project.owner else "Unknown",
+            "owner_profile_picture": project.owner.profile_picture if project.owner else None,
             "total_scans": total_scans,
             "last_scan_status": last_scan_status,
             "global_risk_level": _risk_level_from_score(risk_score),

@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { useAuth } from './AuthContext'
 import * as svc from '../services/notificationService'
 import { adminGetUsers } from '../services/adminService'
-import { initializeWebSocket, onNotification } from '../services/websocketService'
+import { initializeWebSocket, closeWebSocket, onNotification } from '../services/websocketService'
 
 const NotificationContext = createContext(null)
 
@@ -55,42 +55,31 @@ export function NotificationProvider({ children }) {
   useEffect(() => {
     if (!isAuthenticated || !user) {
       console.log('[NOTIF-CONTEXT] Not initializing - not authenticated or no user')
+      closeWebSocket()
       return
     }
 
     console.log('[NOTIF-CONTEXT] Initializing WebSocket for user:', user.id, user.role_name)
     initializeWebSocket(user.id, user.role_name, user.email)
 
-    // Listen for real-time notifications from Socket.IO
-    let cleanup = null
-    if (user.role_name === 'Admin') {
-      console.log('[NOTIF-CONTEXT] User is Admin - registering notification listener')
-      cleanup = onNotification((socketNotif) => {
-        if (!socketNotif || !socketNotif.type) {
-          console.warn('[WARN] [NOTIF-CONTEXT] Received invalid notification:', socketNotif)
-          return
-        }
-        
-        console.log('[NOTIF-CONTEXT] Socket.IO event received:', socketNotif.type)
-        console.log('   Full data:', socketNotif)
-        
-        // Show the badge immediately (increment unreadCount)
-        console.log('[NOTIF-CONTEXT] Incrementing unreadCount')
-        setUnreadCount(prev => prev + 1)
-        
-        // Then refresh the notification list in the background
-        console.log('[NOTIF-CONTEXT] Calling refresh()')
-        refresh()
-      })
-    } else {
-      console.log('[NOTIF-CONTEXT] User is NOT Admin - NOT registering notification listener')
-    }
+    // Listen for real-time notifications from Socket.IO for all roles.
+    const cleanup = onNotification((socketNotif) => {
+      if (!socketNotif || !socketNotif.type) {
+        console.warn('[WARN] [NOTIF-CONTEXT] Received invalid notification:', socketNotif)
+        return
+      }
+
+      console.log('[NOTIF-CONTEXT] Socket.IO event received:', socketNotif.type)
+      console.log('   Full data:', socketNotif)
+
+      // Show badge quickly, then reconcile with backend source of truth.
+      setUnreadCount(prev => prev + 1)
+      refresh()
+    })
 
     return () => {
-      if (cleanup) {
-        console.log('[NOTIF-CONTEXT] Cleaning up notification listener')
-        cleanup()
-      }
+      console.log('[NOTIF-CONTEXT] Cleaning up notification listener')
+      cleanup()
     }
   }, [isAuthenticated, user, refresh])
 

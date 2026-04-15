@@ -3,6 +3,7 @@ Socket.IO service for real-time notifications
 Manages WebSocket connections and emits events for real-time updates
 """
 import logging
+from datetime import datetime
 from typing import Dict
 import socketio
 
@@ -127,6 +128,58 @@ class SocketIOManager:
                 logger.info(f'   [OK] Sent to admin {admin_id}')
             except Exception as e:
                 logger.error(f'   [ERROR] Error sending to admin {admin_id}: {e}')
+
+    @classmethod
+    async def notify_user_notification_created(cls, user_id: str, notification_data: dict):
+        """Emit a persisted notification event to the targeted user if connected."""
+        user_key = str(user_id)
+        connected = cls.connected_users.get(user_key)
+        if not connected:
+            logger.info(f'[NOTIFY] User {user_key} not connected - persisted notification only')
+            return
+
+        sid = connected.get('sid')
+        if not sid:
+            logger.warning(f'[WARN] Connected user {user_key} has no SID')
+            return
+
+        try:
+            await sio.emit('notification', {
+                'type': 'notification_created',
+                'notification': notification_data,
+            }, room=sid)
+            logger.info(f'[NOTIFY] Real-time notification delivered to user {user_key}')
+        except Exception as e:
+            logger.error(f'[ERROR] Failed to emit notification to user {user_key}: {e}')
+
+    @classmethod
+    def emit_notification_created(cls, notification_obj):
+        """Schedule async emission for create_notification call sites (sync-safe)."""
+        created_at = notification_obj.created_at
+        if isinstance(created_at, datetime):
+            created_at_value = created_at.isoformat()
+        else:
+            created_at_value = str(created_at)
+
+        payload = {
+            'id': str(notification_obj.id),
+            'user_id': str(notification_obj.user_id),
+            'type': notification_obj.type,
+            'title': notification_obj.title,
+            'message': notification_obj.message,
+            'link': notification_obj.link,
+            'is_read': bool(notification_obj.is_read),
+            'created_at': created_at_value,
+        }
+
+        try:
+            sio.start_background_task(
+                cls.notify_user_notification_created,
+                str(notification_obj.user_id),
+                payload,
+            )
+        except Exception as e:
+            logger.error(f'[ERROR] Failed to schedule notification emission: {e}')
 
 # Socket.IO event handlers
 @sio.event

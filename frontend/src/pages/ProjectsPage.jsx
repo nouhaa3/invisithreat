@@ -57,6 +57,9 @@ const SCAN_STATUS_STYLE = {
 }
 
 const DEV_PROJECT_FILTERS = ['All', 'Web Application', 'Mobile Application', 'Desktop Application', 'API / Backend', 'Other']
+const ADMIN_STATUS_FILTERS = ['All Status', 'Active', 'Archived']
+const ADMIN_RISK_FILTERS = ['All Risk', 'Low', 'Medium', 'High']
+const SECURITY_SCAN_FILTERS = ['All Scan Status', 'Completed', 'Running', 'Pending', 'Failed', 'No Scan']
 
 const normalizeProjectText = (v) => String(v || '').toLowerCase()
 
@@ -78,6 +81,24 @@ function inferProjectCategory(project) {
   if (['python', 'java', 'go', 'c#', 'php', 'ruby'].some((item) => lang.includes(item))) return 'API / Backend'
 
   return 'Other'
+}
+
+function getInitials(name) {
+  const parts = String(name || 'User')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+  if (parts.length === 0) return 'U'
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase()
+  return `${parts[0].slice(0, 1)}${parts[1].slice(0, 1)}`.toUpperCase()
+}
+
+function resolveProfilePictureSrc(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  if (raw.startsWith('data:image/')) return raw
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
+  return `data:image/png;base64,${raw}`
 }
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
@@ -326,6 +347,121 @@ function MetaPill({ label, value }) {
   )
 }
 
+function AdminToolbarSelect({ value, onChange, options }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="px-3 py-2 rounded-lg text-xs sm:text-sm font-medium min-w-[120px] focus:outline-none"
+      style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        color: 'rgba(255,255,255,0.68)',
+      }}
+    >
+      {options.map((opt) => (
+        <option key={opt} value={opt} style={{ background: '#111', color: '#ddd' }}>
+          {opt}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function AdminProjectCard({ project, onView }) {
+  const status = project.status || 'archived'
+  const ownerAvatarSrc = resolveProfilePictureSrc(project.owner_profile_picture)
+  const ownerInitials = getInitials(project.owner_name)
+
+  const governanceScore =
+    project.global_risk_level === 'Low'
+      ? 100
+      : project.global_risk_level === 'Medium'
+        ? 75
+        : 50
+
+  const scoreColor =
+    governanceScore >= 90
+      ? '#22c55e'
+      : governanceScore >= 70
+        ? '#f59e0b'
+        : '#ff4d5e'
+
+  return (
+    <div
+      className="rounded-2xl p-4 sm:p-5 flex flex-col gap-4 min-h-[245px]"
+      style={{
+        background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))',
+        border: '1px solid rgba(255,255,255,0.06)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 25px rgba(0,0,0,0.22)',
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="min-w-0">
+            <p className="text-white font-semibold text-sm sm:text-base truncate">{project.name}</p>
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <StatusBadge status={status} />
+              <RiskBadge risk={project.global_risk_level} />
+            </div>
+          </div>
+        </div>
+
+        <div
+          className="w-11 h-11 rounded-none flex items-center justify-center flex-shrink-0 overflow-hidden"
+          style={{
+            background: 'linear-gradient(145deg, rgba(255,107,43,0.2), rgba(255,140,90,0.08))',
+            border: '1px solid rgba(255,107,43,0.35)',
+            color: '#FFD6C4',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15)',
+          }}
+          title={project.owner_name || 'Project owner'}
+        >
+          {ownerAvatarSrc ? (
+            <img
+              src={ownerAvatarSrc}
+              alt={project.owner_name || 'Project owner'}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <span className="text-xs font-semibold">{ownerInitials}</span>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-auto">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm text-white/45">Governance Score</p>
+          <p className="text-sm font-semibold" style={{ color: scoreColor }}>{governanceScore}%</p>
+        </div>
+
+        <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${governanceScore}%`, background: scoreColor }}
+          />
+        </div>
+
+        <div className="flex justify-end mt-3">
+          <button
+            onClick={onView}
+            className="px-2 py-0.5 text-xs font-normal transition-all"
+            style={{ color: 'rgba(255,255,255,0.6)' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'rgba(255,255,255,0.8)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'rgba(255,255,255,0.6)'
+            }}
+          >
+            View Details
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ScanStatusBadge({ status }) {
   const cfg = SCAN_STATUS_STYLE[status] || {
     label: (status || 'No Scan').replace('_', ' '),
@@ -385,8 +521,194 @@ function SecurityProjectRow({ project, onView }) {
   )
 }
 
-function AdminProjectOverviewModal({ project, onClose }) {
+function SecurityProjectCard({ project, onView }) {
+  const ownerAvatarSrc = resolveProfilePictureSrc(project.owner_profile_picture)
+  const ownerInitials = getInitials(project.owner_name)
+
+  const rawRiskScore = Number(project.risk_score || 0)
+  const riskScore = Number.isFinite(rawRiskScore) ? Math.max(0, Math.min(10, rawRiskScore)) : 0
+  const securityScore = Math.max(0, Math.min(100, Math.round((10 - riskScore) * 10)))
+  const findingsTotal =
+    Number(project.critical || 0) +
+    Number(project.high || 0) +
+    Number(project.medium || 0) +
+    Number(project.low || 0)
+
+  const scoreColor =
+    project.global_risk_level === 'Low'
+      ? '#22c55e'
+      : project.global_risk_level === 'Medium'
+        ? '#f59e0b'
+        : '#ef4444'
+
+  return (
+    <div
+      className="rounded-2xl p-4 sm:p-5 flex flex-col gap-4 min-h-[245px]"
+      style={{
+        background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))',
+        border: '1px solid rgba(255,255,255,0.06)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 25px rgba(0,0,0,0.22)',
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-white font-semibold text-sm sm:text-base truncate">{project.name}</p>
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            <RiskBadge risk={project.global_risk_level} />
+            <ScanStatusBadge status={project.last_scan_status} />
+          </div>
+        </div>
+
+        <div
+          className="w-11 h-11 rounded-none flex items-center justify-center flex-shrink-0 overflow-hidden"
+          style={{
+            background: 'linear-gradient(145deg, rgba(255,107,43,0.2), rgba(255,140,90,0.08))',
+            border: '1px solid rgba(255,107,43,0.35)',
+            color: '#FFD6C4',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15)',
+          }}
+          title={project.owner_name || 'Project owner'}
+        >
+          {ownerAvatarSrc ? (
+            <img
+              src={ownerAvatarSrc}
+              alt={project.owner_name || 'Project owner'}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <span className="text-xs font-semibold">{ownerInitials}</span>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <p className="text-white/45 text-[11px] uppercase tracking-wide">Scans</p>
+          <p className="text-white font-semibold mt-1">{Number(project.total_scans || 0)}</p>
+        </div>
+        <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <p className="text-white/45 text-[11px] uppercase tracking-wide">Findings</p>
+          <p className="text-white font-semibold mt-1">{findingsTotal}</p>
+        </div>
+      </div>
+
+      <div className="mt-auto">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm text-white/45">Security Score</p>
+          <p className="text-sm font-semibold" style={{ color: scoreColor }}>
+            {securityScore}%
+          </p>
+        </div>
+
+        <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${securityScore}%`, background: scoreColor }}
+          />
+        </div>
+
+        <div className="flex justify-end mt-3">
+          <button
+            onClick={onView}
+            className="px-2 py-0.5 text-xs font-normal transition-all"
+            style={{ color: 'rgba(255,255,255,0.6)' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'rgba(255,255,255,0.8)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'rgba(255,255,255,0.6)'
+            }}
+          >
+            Security View
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AssignedUsersDropdown({ usersAssigned }) {
+  const [open, setOpen] = useState(false)
+  const users = Array.isArray(usersAssigned) ? usersAssigned : []
+
+  return (
+    <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-3"
+      >
+        <span className="text-white/50 text-sm">Users Assigned</span>
+        <span className="flex items-center">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="rgba(255,255,255,0.65)"
+            strokeWidth="2"
+            style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </span>
+      </button>
+
+      {open && (
+        <div className="mt-2 pt-2 flex flex-col gap-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          {users.length === 0 ? (
+            <p className="text-xs text-white/45">No assigned users available.</p>
+          ) : (
+            users.map((member, index) => {
+              const avatarSrc = resolveProfilePictureSrc(member?.profile_picture)
+              const initials = getInitials(member?.nom)
+              const roleLabel = member?.role_projet || 'Member'
+
+              return (
+                <div
+                  key={`${member?.user_id || member?.nom || 'member'}-${index}`}
+                  className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md"
+                  style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div
+                      className="w-6 h-6 rounded-none overflow-hidden flex items-center justify-center flex-shrink-0"
+                      style={{
+                        background: 'linear-gradient(145deg, rgba(255,107,43,0.2), rgba(255,140,90,0.08))',
+                        border: '1px solid rgba(255,107,43,0.25)',
+                        color: '#FFD6C4',
+                      }}
+                    >
+                      {avatarSrc ? (
+                        <img src={avatarSrc} alt={member?.nom || 'User'} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-[10px] font-semibold">{initials}</span>
+                      )}
+                    </div>
+                    <span className="text-xs text-white/85 truncate">{member?.nom || 'Unknown user'}</span>
+                  </div>
+
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+                    style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.65)', border: '1px solid rgba(255,255,255,0.08)' }}
+                  >
+                    {roleLabel}
+                  </span>
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AdminProjectOverviewModal({ project, onClose, onToggleStatus, onDelete, deleting, toggling }) {
   if (!project) return null
+
+  const status = project.status || 'archived'
+  const nextAction = status === 'active' ? 'Disable' : 'Enable'
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
@@ -415,13 +737,31 @@ function AdminProjectOverviewModal({ project, onClose }) {
 
         <div className="p-6 flex flex-col gap-3 text-sm">
           <InfoLine label="Name" value={project.name} />
-          <InfoLine label="Owner" value={project.owner_name} />
-          <InfoLine label="Users Assigned" value={project.users_assigned_count} />
+          <AssignedUsersDropdown usersAssigned={project.users_assigned} />
           <InfoLine label="Total Scans" value={project.total_scans} />
           <InfoLine label="Global Risk" value={project.global_risk_level} />
           <InfoLine label="Status" value={project.status} />
           <InfoLine label="Created At" value={formatDate(project.created_at)} />
           <InfoLine label="Last Activity" value={formatDate(project.last_activity_at)} />
+        </div>
+
+        <div className="px-6 pb-6 flex items-center gap-2 flex-wrap">
+          <button
+            onClick={onToggleStatus}
+            disabled={toggling}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+            style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}
+          >
+            {nextAction}
+          </button>
+          <button
+            onClick={onDelete}
+            disabled={deleting}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444' }}
+          >
+            Delete
+          </button>
         </div>
       </div>
     </div>
@@ -465,11 +805,32 @@ export default function ProjectsPage() {
     critical_projects: 0,
     avg_risk_score: 0,
   })
+
   const [searchQuery, setSearchQuery] = useState('')
   const [activeDevFilter, setActiveDevFilter] = useState('All')
 
+  const [adminSearchQuery, setAdminSearchQuery] = useState('')
+  const [adminStatusFilter, setAdminStatusFilter] = useState('All Status')
+  const [adminRiskFilter, setAdminRiskFilter] = useState('All Risk')
+  const [adminOwnerFilter, setAdminOwnerFilter] = useState('All PIC')
+  const [adminViewMode, setAdminViewMode] = useState('card')
+
+  const [securitySearchQuery, setSecuritySearchQuery] = useState('')
+  const [securityRiskFilter, setSecurityRiskFilter] = useState('All Risk')
+  const [securityScanFilter, setSecurityScanFilter] = useState('All Scan Status')
+  const [securityViewMode, setSecurityViewMode] = useState('card')
+
   const isDeveloperView = !isAdmin && !isSecurityManager
   const hasDevFilters = searchQuery.trim().length > 0 || activeDevFilter !== 'All'
+  const hasAdminFilters =
+    adminSearchQuery.trim().length > 0 ||
+    adminStatusFilter !== 'All Status' ||
+    adminRiskFilter !== 'All Risk' ||
+    adminOwnerFilter !== 'All PIC'
+  const hasSecurityFilters =
+    securitySearchQuery.trim().length > 0 ||
+    securityRiskFilter !== 'All Risk' ||
+    securityScanFilter !== 'All Scan Status'
 
   const developerProjects = isDeveloperView
     ? projects.filter((project) => {
@@ -494,7 +855,83 @@ export default function ProjectsPage() {
       })
     : projects
 
-  const visibleProjects = isDeveloperView ? developerProjects : projects
+  const adminOwnerOptions = isAdmin
+    ? ['All PIC', ...Array.from(new Set(projects.map((p) => p.owner_name).filter(Boolean))).sort((a, b) => a.localeCompare(b))]
+    : ['All PIC']
+
+  const adminProjects = isAdmin
+    ? projects.filter((project) => {
+        const searchValue = adminSearchQuery.trim().toLowerCase()
+        const searchable = [
+          project.name,
+          project.owner_name,
+          project.global_risk_level,
+          project.status,
+          project.users_assigned_count,
+          project.total_scans,
+        ].map(normalizeProjectText).join(' ')
+
+        const matchesSearch = !searchValue || searchable.includes(searchValue)
+        const matchesStatus =
+          adminStatusFilter === 'All Status' ||
+          normalizeProjectText(project.status) === normalizeProjectText(adminStatusFilter)
+        const matchesRisk =
+          adminRiskFilter === 'All Risk' ||
+          normalizeProjectText(project.global_risk_level) === normalizeProjectText(adminRiskFilter)
+        const matchesOwner = adminOwnerFilter === 'All PIC' || project.owner_name === adminOwnerFilter
+
+        return matchesSearch && matchesStatus && matchesRisk && matchesOwner
+      })
+    : projects
+
+  const securityProjects = isSecurityManager
+    ? projects.filter((project) => {
+        const searchValue = securitySearchQuery.trim().toLowerCase()
+        const searchable = [
+          project.name,
+          project.owner_name,
+          project.global_risk_level,
+          project.last_scan_status,
+          project.risk_score,
+          project.critical,
+          project.high,
+          project.medium,
+          project.low,
+          project.total_scans,
+        ].map(normalizeProjectText).join(' ')
+
+        const matchesSearch = !searchValue || searchable.includes(searchValue)
+        const matchesRisk =
+          securityRiskFilter === 'All Risk' ||
+          normalizeProjectText(project.global_risk_level) === normalizeProjectText(securityRiskFilter)
+
+        const matchesScan =
+          securityScanFilter === 'All Scan Status' ||
+          (securityScanFilter === 'No Scan'
+            ? !project.last_scan_status
+            : normalizeProjectText(project.last_scan_status) === normalizeProjectText(securityScanFilter))
+
+        return matchesSearch && matchesRisk && matchesScan
+      })
+    : projects
+
+  const visibleProjects = isDeveloperView
+    ? developerProjects
+    : isAdmin
+      ? adminProjects
+      : isSecurityManager
+        ? securityProjects
+        : projects
+
+  const adminHighRiskCount = isAdmin
+    ? projects.filter((project) => normalizeProjectText(project.global_risk_level) === 'high').length
+    : 0
+  const adminLowRiskCount = isAdmin
+    ? projects.filter((project) => normalizeProjectText(project.global_risk_level) === 'low').length
+    : 0
+  const adminUnscannedCount = isAdmin
+    ? projects.filter((project) => Number(project.total_scans || 0) === 0).length
+    : 0
 
   const load = async () => {
     setLoading(true)
@@ -548,8 +985,7 @@ export default function ProjectsPage() {
     load()
   }, [isAdmin, isSecurityManager])
 
-  const handleDelete = async (e, id) => {
-    e.stopPropagation()
+  const handleDeleteById = async (id) => {
     if (!isAdmin && !canDeleteProjects) return
     if (!confirm('Delete this project?')) return
 
@@ -567,8 +1003,12 @@ export default function ProjectsPage() {
     }
   }
 
-  const handleToggleStatus = async (e, project) => {
+  const handleDelete = async (e, id) => {
     e.stopPropagation()
+    await handleDeleteById(id)
+  }
+
+  const handleToggleStatusByProject = async (project) => {
     const nextStatus = project.status === 'active' ? 'archived' : 'active'
 
     setTogglingId(project.id)
@@ -578,6 +1018,11 @@ export default function ProjectsPage() {
     } finally {
       setTogglingId(null)
     }
+  }
+
+  const handleToggleStatus = async (e, project) => {
+    e.stopPropagation()
+    await handleToggleStatusByProject(project)
   }
 
   return (
@@ -594,9 +1039,13 @@ export default function ProjectsPage() {
                   {loading
                     ? 'Loading projects...'
                     : isAdmin
-                      ? `${summary.total_projects} project${summary.total_projects !== 1 ? 's' : ''} under governance`
+                      ? hasAdminFilters
+                        ? `${visibleProjects.length} of ${summary.total_projects} project${summary.total_projects !== 1 ? 's' : ''} under governance`
+                        : `${summary.total_projects} project${summary.total_projects !== 1 ? 's' : ''} under governance`
                       : isSecurityManager
-                        ? `${securitySummary.total_projects} project${securitySummary.total_projects !== 1 ? 's' : ''} in security oversight`
+                        ? hasSecurityFilters
+                          ? `${visibleProjects.length} of ${securitySummary.total_projects} project${securitySummary.total_projects !== 1 ? 's' : ''} in security oversight`
+                          : `${securitySummary.total_projects} project${securitySummary.total_projects !== 1 ? 's' : ''} in security oversight`
                       : hasDevFilters
                         ? `${visibleProjects.length} of ${projects.length} project${projects.length !== 1 ? 's' : ''}`
                         : `${projects.length} project${projects.length !== 1 ? 's' : ''}`}
@@ -678,11 +1127,79 @@ export default function ProjectsPage() {
             )}
 
             {isAdmin && !loading && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 animate-slide-up" style={{ animationDelay: '0.04s' }}>
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6 animate-slide-up" style={{ animationDelay: '0.04s' }}>
                 <SummaryCard label="Total Projects" value={summary.total_projects} sub="all projects" />
-                <SummaryCard label="Active" value={summary.active_projects} sub="enabled projects" accent="#22c55e" />
-                <SummaryCard label="Archived" value={summary.archived_projects} sub="disabled projects" accent="#9ca3af" />
-                <SummaryCard label="Users Involved" value={summary.total_users_involved} sub="owners + members" accent="#60a5fa" />
+                <SummaryCard label="Completed Projects" value={adminLowRiskCount} sub="low-risk portfolio" accent="#22c55e" />
+                <SummaryCard label="In Progress" value={summary.active_projects} sub="active governance" accent="#60a5fa" />
+                <SummaryCard label="Pending Projects" value={adminUnscannedCount} sub="no scans yet" accent="#f59e0b" />
+                <SummaryCard label="Overdue" value={adminHighRiskCount} sub="high risk projects" accent="#ef4444" />
+              </div>
+            )}
+
+            {isAdmin && (
+              <div className="mb-5 animate-slide-up" style={{ animationDelay: '0.06s' }}>
+                <div className="rounded-2xl p-3 sm:p-4" style={{ background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="flex flex-col 2xl:flex-row gap-3 2xl:items-center">
+                    <div className="relative flex-1">
+                      <svg
+                        width="15"
+                        height="15"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.45)"
+                        strokeWidth="2"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                      >
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.35-4.35" />
+                      </svg>
+                      <input
+                        type="text"
+                        value={adminSearchQuery}
+                        onChange={(e) => setAdminSearchQuery(e.target.value)}
+                        placeholder="Search project..."
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm text-white placeholder:text-white/35 focus:outline-none"
+                        style={{
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.06)',
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <AdminToolbarSelect value={adminStatusFilter} onChange={setAdminStatusFilter} options={ADMIN_STATUS_FILTERS} />
+                      <AdminToolbarSelect value={adminRiskFilter} onChange={setAdminRiskFilter} options={ADMIN_RISK_FILTERS} />
+                      <AdminToolbarSelect value={adminOwnerFilter} onChange={setAdminOwnerFilter} options={adminOwnerOptions} />
+                    </div>
+
+                    <div className="flex items-center gap-2 2xl:ml-auto">
+                      <button
+                        type="button"
+                        onClick={() => setAdminViewMode('list')}
+                        className="px-3 py-2 rounded-lg text-xs font-medium transition-all"
+                        style={{
+                          background: adminViewMode === 'list' ? 'rgba(255,107,43,0.1)' : 'rgba(255,255,255,0.03)',
+                          border: adminViewMode === 'list' ? '1px solid rgba(255,107,43,0.25)' : '1px solid rgba(255,255,255,0.06)',
+                          color: adminViewMode === 'list' ? '#FF8C5A' : 'rgba(255,255,255,0.45)',
+                        }}
+                      >
+                        List
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdminViewMode('card')}
+                        className="px-3 py-2 rounded-lg text-xs font-medium transition-all"
+                        style={{
+                          background: adminViewMode === 'card' ? 'rgba(255,107,43,0.1)' : 'rgba(255,255,255,0.03)',
+                          border: adminViewMode === 'card' ? '1px solid rgba(255,107,43,0.25)' : '1px solid rgba(255,255,255,0.06)',
+                          color: adminViewMode === 'card' ? '#FF8C5A' : 'rgba(255,255,255,0.45)',
+                        }}
+                      >
+                        Card
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -692,6 +1209,72 @@ export default function ProjectsPage() {
                 <SummaryCard label="With Findings" value={securitySummary.projects_with_findings} sub="latest completed scans" accent="#f59e0b" />
                 <SummaryCard label="Critical Projects" value={securitySummary.critical_projects} sub="require immediate attention" accent="#ef4444" />
                 <SummaryCard label="Avg Risk" value={`${Number(securitySummary.avg_risk_score || 0).toFixed(1)}/10`} sub="portfolio risk score" accent="#60a5fa" />
+              </div>
+            )}
+
+            {isSecurityManager && (
+              <div className="mb-5 animate-slide-up" style={{ animationDelay: '0.06s' }}>
+                <div className="rounded-2xl p-3 sm:p-4" style={{ background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="flex flex-col 2xl:flex-row gap-3 2xl:items-center">
+                    <div className="relative flex-1">
+                      <svg
+                        width="15"
+                        height="15"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.45)"
+                        strokeWidth="2"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                      >
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.35-4.35" />
+                      </svg>
+                      <input
+                        type="text"
+                        value={securitySearchQuery}
+                        onChange={(e) => setSecuritySearchQuery(e.target.value)}
+                        placeholder="Search portfolio..."
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm text-white placeholder:text-white/35 focus:outline-none"
+                        style={{
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.06)',
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <AdminToolbarSelect value={securityRiskFilter} onChange={setSecurityRiskFilter} options={ADMIN_RISK_FILTERS} />
+                      <AdminToolbarSelect value={securityScanFilter} onChange={setSecurityScanFilter} options={SECURITY_SCAN_FILTERS} />
+                    </div>
+
+                    <div className="flex items-center gap-2 2xl:ml-auto">
+                      <button
+                        type="button"
+                        onClick={() => setSecurityViewMode('list')}
+                        className="px-3 py-2 rounded-lg text-xs font-medium transition-all"
+                        style={{
+                          background: securityViewMode === 'list' ? 'rgba(255,107,43,0.1)' : 'rgba(255,255,255,0.03)',
+                          border: securityViewMode === 'list' ? '1px solid rgba(255,107,43,0.25)' : '1px solid rgba(255,255,255,0.06)',
+                          color: securityViewMode === 'list' ? '#FF8C5A' : 'rgba(255,255,255,0.45)',
+                        }}
+                      >
+                        List
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSecurityViewMode('card')}
+                        className="px-3 py-2 rounded-lg text-xs font-medium transition-all"
+                        style={{
+                          background: securityViewMode === 'card' ? 'rgba(255,107,43,0.1)' : 'rgba(255,255,255,0.03)',
+                          border: securityViewMode === 'card' ? '1px solid rgba(255,107,43,0.25)' : '1px solid rgba(255,255,255,0.06)',
+                          color: securityViewMode === 'card' ? '#FF8C5A' : 'rgba(255,255,255,0.45)',
+                        }}
+                      >
+                        Card
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -715,59 +1298,116 @@ export default function ProjectsPage() {
                 <EmptyState
                   title={
                     isAdmin
-                      ? 'No projects in the platform'
+                      ? hasAdminFilters
+                        ? 'No matching governance projects'
+                        : 'No projects in the platform'
                       : isSecurityManager
-                        ? 'No monitored projects yet'
+                        ? hasSecurityFilters
+                          ? 'No matching security projects'
+                          : 'No monitored projects yet'
                         : hasDevFilters
                           ? 'No matching projects'
                           : 'No projects yet'
                   }
                   description={
                     isAdmin
-                      ? 'Projects will appear here as users create them. You can then manage members, status, and lifecycle.'
+                      ? hasAdminFilters
+                        ? 'Try another combination of status, risk, or PIC to find projects faster.'
+                        : 'Projects will appear here as users create them. You can then manage members, status, and lifecycle.'
                       : isSecurityManager
-                        ? 'Projects with security access will appear here. Use this view to prioritize risk and findings.'
+                        ? hasSecurityFilters
+                          ? 'Try another combination of risk level or scan status to find projects faster.'
+                          : 'Projects with security access will appear here. Use this view to prioritize risk and findings.'
                         : hasDevFilters
                           ? 'Try another keyword or switch category filter to find your project faster.'
                           : 'Launch your first scan to create a project. Projects help you organize and track your security findings.'
                   }
-                  actionLabel={hasDevFilters ? 'Reset Filters' : 'Launch New Scan'}
+                  actionLabel={
+                    isAdmin
+                      ? hasAdminFilters ? 'Reset Filters' : null
+                      : isSecurityManager
+                        ? hasSecurityFilters ? 'Reset Filters' : null
+                      : hasDevFilters
+                        ? 'Reset Filters'
+                        : 'Launch New Scan'
+                  }
                   onAction={
-                    hasDevFilters
-                      ? () => {
-                          setSearchQuery('')
-                          setActiveDevFilter('All')
-                        }
-                      : !isAdmin && !isSecurityManager && canRunScan
-                        ? () => navigate('/scans/new')
+                    isAdmin
+                      ? hasAdminFilters
+                        ? () => {
+                            setAdminSearchQuery('')
+                            setAdminStatusFilter('All Status')
+                            setAdminRiskFilter('All Risk')
+                            setAdminOwnerFilter('All PIC')
+                          }
                         : null
+                      : isSecurityManager
+                        ? hasSecurityFilters
+                          ? () => {
+                              setSecuritySearchQuery('')
+                              setSecurityRiskFilter('All Risk')
+                              setSecurityScanFilter('All Scan Status')
+                            }
+                          : null
+                      : hasDevFilters
+                        ? () => {
+                            setSearchQuery('')
+                            setActiveDevFilter('All')
+                          }
+                        : !isAdmin && !isSecurityManager && canRunScan
+                          ? () => navigate('/scans/new')
+                          : null
                   }
                 />
               ) : isAdmin ? (
-                <div className="flex flex-col gap-3">
-                  {visibleProjects.map((p) => (
-                    <AdminProjectRow
-                      key={p.id}
-                      project={p}
-                      deleting={deletingId === p.id}
-                      toggling={togglingId === p.id}
-                      onView={() => setViewingProject(p)}
-                      onManageMembers={() => navigate(`/projects/${p.id}/members`)}
-                      onToggleStatus={(e) => handleToggleStatus(e, p)}
-                      onDelete={(e) => handleDelete(e, p.id)}
-                    />
-                  ))}
-                </div>
+                adminViewMode === 'card' ? (
+                  <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4">
+                    {visibleProjects.map((p) => (
+                      <AdminProjectCard
+                        key={p.id}
+                        project={p}
+                        onView={() => setViewingProject(p)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {visibleProjects.map((p) => (
+                      <AdminProjectRow
+                        key={p.id}
+                        project={p}
+                        deleting={deletingId === p.id}
+                        toggling={togglingId === p.id}
+                        onView={() => setViewingProject(p)}
+                        onManageMembers={() => navigate(`/projects/${p.id}/members`)}
+                        onToggleStatus={(e) => handleToggleStatus(e, p)}
+                        onDelete={(e) => handleDelete(e, p.id)}
+                      />
+                    ))}
+                  </div>
+                )
               ) : isSecurityManager ? (
-                <div className="flex flex-col gap-3">
-                  {visibleProjects.map((p) => (
-                    <SecurityProjectRow
-                      key={p.id}
-                      project={p}
-                      onView={() => navigate(`/projects/${p.id}`)}
-                    />
-                  ))}
-                </div>
+                securityViewMode === 'card' ? (
+                  <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4">
+                    {visibleProjects.map((p) => (
+                      <SecurityProjectCard
+                        key={p.id}
+                        project={p}
+                        onView={() => navigate(`/projects/${p.id}`)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {visibleProjects.map((p) => (
+                      <SecurityProjectRow
+                        key={p.id}
+                        project={p}
+                        onView={() => navigate(`/projects/${p.id}`)}
+                      />
+                    ))}
+                  </div>
+                )
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {visibleProjects.map((p) => (
@@ -785,7 +1425,14 @@ export default function ProjectsPage() {
       </AppLayout>
 
       {isAdmin && viewingProject && (
-        <AdminProjectOverviewModal project={viewingProject} onClose={() => setViewingProject(null)} />
+        <AdminProjectOverviewModal
+          project={viewingProject}
+          onClose={() => setViewingProject(null)}
+          onToggleStatus={() => handleToggleStatusByProject(viewingProject)}
+          onDelete={() => handleDeleteById(viewingProject.id)}
+          deleting={deletingId === viewingProject.id}
+          toggling={togglingId === viewingProject.id}
+        />
       )}
     </>
   )

@@ -84,6 +84,26 @@ export const getCLIToken = async (projectId, scanId) => {
   return res.data
 }
 
+export const triggerSecurityWorkflowAction = async (projectId, { action, note }) => {
+  const res = await api.post(`/api/projects/${projectId}/security/workflow-action`, { action, note })
+  return res.data
+}
+
+export const getVulnerabilityWorkflow = async (projectId) => {
+  const res = await api.get(`/api/projects/${projectId}/security/vulnerability-tasks`)
+  return res.data
+}
+
+export const updateVulnerabilityTask = async (projectId, taskId, payload) => {
+  const res = await api.patch(`/api/projects/${projectId}/security/vulnerability-tasks/${taskId}`, payload)
+  return res.data
+}
+
+export const addVulnerabilityTaskComment = async (projectId, taskId, message) => {
+  const res = await api.post(`/api/projects/${projectId}/security/vulnerability-tasks/${taskId}/comments`, { message })
+  return res.data
+}
+
 // ─── Members ─────────────────────────────────────────────────────────────────
 
 export const getMembers = async (projectId) => {

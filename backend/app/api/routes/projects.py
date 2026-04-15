@@ -1,5 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from app.db.session import get_db
 from app.core.jwt import require_admin
@@ -11,7 +11,8 @@ from app.schemas.scan import (
     ProjectCreate, ProjectUpdate, ProjectResponse,
     ScanCreate, ScanResponse, CLITokenResponse, CLIScanUpload,
     AdminProjectsResponse, ProjectAdminStatusUpdate, ProjectAdminStatusResponse,
-    SecurityProjectsResponse
+    SecurityProjectsResponse, SecurityWorkflowActionRequest,
+    SecurityWorkflowActionResponse
 )
 from app.services.project import (
     create_project, get_projects_for_user, get_project, get_project_accessible,
@@ -22,12 +23,27 @@ from app.services.project import (
 )
 from app.services.github_scanner import run_github_scan
 import uuid, secrets
-from datetime import datetime, UTC
+import json
+from datetime import date, datetime, UTC
 from app.models.scan import Project as ProjectModel
 from app.models.member import ProjectMember as MemberModel
 from app.models.scan import Scan as ScanModel, ScanStatus
+from app.models.role import Role
 from app.models.github_repository import GitHubRepository
+from app.models.vulnerability_workflow import (
+    VulnerabilityTask,
+    VulnerabilityTaskComment,
+    VulnerabilityTaskStatus,
+)
 from app.services.risk_score import get_or_create_scan_risk_score
+from app.services.notification import create_notification
+from app.schemas.vulnerability_workflow import (
+    VulnerabilityWorkflowSnapshotResponse,
+    VulnerabilityTaskResponse,
+    VulnerabilityTaskUpdateRequest,
+    VulnerabilityTaskCommentCreate,
+    VulnerabilityTaskCommentResponse,
+)
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -36,6 +52,388 @@ def _guess_repo_name(repo_url: str) -> str:
     cleaned = (repo_url or "").strip().rstrip("/")
     tail = cleaned.split("/")[-1] if cleaned else "repository"
     return tail[:-4] if tail.lower().endswith(".git") else tail
+
+
+def _security_workflow_template(action: str, project_name: str, actor_name: str, note: str | None) -> tuple[str, str]:
+    if action == "request_fixes":
+        title = f'Security action required - Fix vulnerabilities in "{project_name}"'
+        message = f"{actor_name} requested corrective actions for this project."
+    elif action == "request_rescan":
+        title = f'Security action required - Re-run scan for "{project_name}"'
+        message = f"{actor_name} requested a new scan after remediation."
+    else:
+        title = f'Security validation closed - "{project_name}"'
+        message = f"{actor_name} confirmed risk reduction and closed this validation cycle."
+
+    if note:
+        message = f"{message} Note: {note}"
+    return title, message
+
+
+def _to_non_negative_int(value) -> int:
+    try:
+        parsed = int(value)
+        return parsed if parsed > 0 else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def _scan_security_counts(scan: ScanModel | None) -> tuple[int, int]:
+    if not scan or scan.status != ScanStatus.completed or not scan.results_json:
+        return 0, 0
+
+    if scan.results_json.startswith("__pending_token:"):
+        return 0, 0
+
+    try:
+        payload = json.loads(scan.results_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return 0, 0
+
+    summary = payload.get("summary") if isinstance(payload, dict) else None
+    findings = payload.get("findings") if isinstance(payload, dict) else []
+    findings = findings if isinstance(findings, list) else []
+
+    if isinstance(summary, dict):
+        total = _to_non_negative_int(summary.get("total_findings", summary.get("total", len(findings))))
+        critical = _to_non_negative_int(summary.get("critical", None))
+        if critical == 0:
+            critical = sum(1 for finding in findings if str((finding or {}).get("severity", "")).lower() == "critical")
+        return total, critical
+
+    total = len(findings)
+    critical = sum(1 for finding in findings if str((finding or {}).get("severity", "")).lower() == "critical")
+    return total, critical
+
+
+def _ensure_validation_can_be_confirmed(db: Session, project_id: uuid.UUID) -> None:
+    completed_scans = (
+        db.query(ScanModel)
+        .filter(ScanModel.project_id == project_id, ScanModel.status == ScanStatus.completed)
+        .order_by(ScanModel.started_at.desc())
+        .limit(2)
+        .all()
+    )
+
+    if not completed_scans:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot confirm validation: no completed scan available.",
+        )
+
+    latest_total, latest_critical = _scan_security_counts(completed_scans[0])
+    if latest_critical > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot confirm validation: latest completed scan still has critical findings.",
+        )
+
+    if len(completed_scans) == 1:
+        if latest_total > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot confirm validation: at least one follow-up completed scan with reduced findings is required.",
+            )
+        return
+
+    previous_total, _ = _scan_security_counts(completed_scans[1])
+    if latest_total >= previous_total and latest_total > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot confirm validation: findings did not decrease versus previous completed scan.",
+        )
+
+
+def _normalize_finding_text(value) -> str:
+    return " ".join(str(value or "").strip().lower().split())
+
+
+def _finding_fingerprint(finding: dict) -> str:
+    rule_id = _normalize_finding_text(finding.get("rule_id") or "rule")
+    title = _normalize_finding_text(finding.get("title") or "untitled")
+    file_path = _normalize_finding_text(finding.get("file") or finding.get("path") or "")
+    line_number = _finding_line_number(finding) or 0
+    raw_key = f"{rule_id}|{title}|{file_path}|{line_number}"
+    if len(raw_key) <= 190:
+        return raw_key
+    return raw_key[:190]
+
+
+def _finding_line_number(finding: dict) -> int | None:
+    try:
+        value = finding.get("line")
+        if value is None:
+            return None
+        parsed = int(value)
+        return parsed if parsed > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _latest_completed_scan_with_findings(db: Session, project_id: uuid.UUID) -> tuple[ScanModel | None, list[dict]]:
+    latest_scan = (
+        db.query(ScanModel)
+        .filter(ScanModel.project_id == project_id, ScanModel.status == ScanStatus.completed)
+        .order_by(ScanModel.started_at.desc())
+        .first()
+    )
+    if not latest_scan or not latest_scan.results_json:
+        return latest_scan, []
+    if latest_scan.results_json.startswith("__pending_token:"):
+        return latest_scan, []
+    try:
+        payload = json.loads(latest_scan.results_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return latest_scan, []
+
+    findings = payload.get("findings", []) if isinstance(payload, dict) else []
+    return latest_scan, findings if isinstance(findings, list) else []
+
+
+def _is_security_actor(user: User) -> bool:
+    role_name = user.role.name if user.role else None
+    return role_name in {"Security Manager", "Admin"}
+
+
+def _project_assignable_users(db: Session, project: ProjectModel) -> list[dict]:
+    assignee_map: dict[str, dict] = {}
+
+    owner = db.query(User).filter(User.id == project.owner_id).first()
+    if owner:
+        assignee_map[str(owner.id)] = {
+            "user_id": owner.id,
+            "nom": owner.nom,
+            "role_projet": "Owner",
+            "profile_picture": owner.profile_picture,
+        }
+
+    members = (
+        db.query(MemberModel)
+        .options(joinedload(MemberModel.user))
+        .filter(MemberModel.project_id == project.id)
+        .all()
+    )
+    for member in members:
+        role_label = (member.role_projet or "Viewer").strip() or "Viewer"
+        if role_label.lower() not in {"owner", "editor"}:
+            continue
+        user = member.user
+        if not user:
+            continue
+        key = str(user.id)
+        if key in assignee_map:
+            continue
+        assignee_map[key] = {
+            "user_id": user.id,
+            "nom": user.nom,
+            "role_projet": role_label,
+            "profile_picture": user.profile_picture,
+        }
+
+    return sorted(assignee_map.values(), key=lambda item: item["nom"].lower())
+
+
+def _sync_current_vulnerability_tasks(
+    db: Session,
+    project: ProjectModel,
+    latest_scan: ScanModel | None,
+    findings: list[dict],
+) -> list[uuid.UUID]:
+    if not latest_scan or not findings:
+        return []
+
+    now = datetime.now(UTC)
+    normalized_findings: list[dict] = []
+    fingerprints: list[str] = []
+
+    seen_fingerprints: set[str] = set()
+
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        title = str(finding.get("title") or "Untitled vulnerability").strip()
+        severity = str(finding.get("severity") or "info").lower().strip()
+        if severity not in {"critical", "high", "medium", "low", "info"}:
+            severity = "info"
+        file_path = str(finding.get("file") or finding.get("path") or "").strip() or None
+        line_number = _finding_line_number(finding)
+
+        fingerprint = _finding_fingerprint(finding)
+        if fingerprint in seen_fingerprints:
+            continue
+        seen_fingerprints.add(fingerprint)
+
+        fingerprints.append(fingerprint)
+        normalized_findings.append(
+            {
+                "fingerprint": fingerprint,
+                "title": title,
+                "severity": severity,
+                "file_path": file_path,
+                "line_number": line_number,
+            }
+        )
+
+    if not normalized_findings:
+        return []
+
+    existing_tasks = (
+        db.query(VulnerabilityTask)
+        .filter(VulnerabilityTask.project_id == project.id, VulnerabilityTask.fingerprint.in_(fingerprints))
+        .all()
+    )
+    task_by_fingerprint = {task.fingerprint: task for task in existing_tasks}
+
+    touched_ids: list[uuid.UUID] = []
+    for item in normalized_findings:
+        task = task_by_fingerprint.get(item["fingerprint"])
+        if not task:
+            task = VulnerabilityTask(
+                project_id=project.id,
+                scan_id=latest_scan.id,
+                fingerprint=item["fingerprint"],
+                title=item["title"],
+                severity=item["severity"],
+                file_path=item["file_path"],
+                line_number=item["line_number"],
+                status=VulnerabilityTaskStatus.open,
+                first_seen_at=now,
+                last_seen_at=now,
+                updated_at=now,
+            )
+            db.add(task)
+            db.flush()
+            task_by_fingerprint[item["fingerprint"]] = task
+        else:
+            previous_scan_id = task.scan_id
+            task.scan_id = latest_scan.id
+            task.title = item["title"]
+            task.severity = item["severity"]
+            task.file_path = item["file_path"]
+            task.line_number = item["line_number"]
+            task.last_seen_at = now
+            if previous_scan_id and previous_scan_id != latest_scan.id and task.status in {
+                VulnerabilityTaskStatus.fixed,
+                VulnerabilityTaskStatus.verified,
+            }:
+                task.status = VulnerabilityTaskStatus.open
+
+        touched_ids.append(task.id)
+
+    db.commit()
+    return touched_ids
+
+
+def _deadline_state(task: VulnerabilityTask) -> tuple[bool, bool]:
+    if not task.due_date or task.status in {VulnerabilityTaskStatus.fixed, VulnerabilityTaskStatus.verified}:
+        return False, False
+
+    today = date.today()
+    delta = (task.due_date - today).days
+    is_overdue = delta < 0
+    is_due_soon = 0 <= delta <= 1
+    return is_overdue, is_due_soon
+
+
+def _serialize_comment(comment: VulnerabilityTaskComment) -> dict:
+    author = comment.author
+    return {
+        "id": comment.id,
+        "task_id": comment.task_id,
+        "author_id": comment.author_id,
+        "author_name": author.nom if author else "Unknown",
+        "author_profile_picture": author.profile_picture if author else None,
+        "message": comment.message,
+        "created_at": comment.created_at,
+    }
+
+
+def _serialize_task(task: VulnerabilityTask) -> dict:
+    is_overdue, is_due_soon = _deadline_state(task)
+    comments_sorted = sorted(task.comments, key=lambda c: c.created_at or datetime.now(UTC))
+    return {
+        "id": task.id,
+        "project_id": task.project_id,
+        "scan_id": task.scan_id,
+        "fingerprint": task.fingerprint,
+        "title": task.title,
+        "severity": task.severity,
+        "file_path": task.file_path,
+        "line_number": task.line_number,
+        "status": task.status.value if isinstance(task.status, VulnerabilityTaskStatus) else str(task.status),
+        "assignee_id": task.assignee_id,
+        "assignee_name": task.assignee.nom if task.assignee else None,
+        "assignee_profile_picture": task.assignee.profile_picture if task.assignee else None,
+        "assigned_by_id": task.assigned_by_id,
+        "assigned_by_name": task.assigned_by.nom if task.assigned_by else None,
+        "due_date": task.due_date,
+        "first_seen_at": task.first_seen_at,
+        "last_seen_at": task.last_seen_at,
+        "updated_at": task.updated_at,
+        "is_overdue": is_overdue,
+        "is_due_soon": is_due_soon,
+        "comments": [_serialize_comment(comment) for comment in comments_sorted],
+    }
+
+
+def _notify_deadline_if_needed(db: Session, project: ProjectModel, task: VulnerabilityTask) -> bool:
+    if not task.assignee_id or not task.due_date:
+        return False
+    if task.status in {VulnerabilityTaskStatus.fixed, VulnerabilityTaskStatus.verified}:
+        return False
+    if task.deadline_alert_sent_at is not None:
+        return False
+
+    today = date.today()
+    delta = (task.due_date - today).days
+    if delta > 1:
+        return False
+
+    if delta < 0:
+        title = f'Deadline missed for "{task.title}"'
+        message = f'The due date for project "{project.name}" has passed. Please update status or provide remediation details.'
+    elif delta == 0:
+        title = f'Deadline today for "{task.title}"'
+        message = f'This vulnerability task in "{project.name}" is due today.'
+    else:
+        title = f'Deadline approaching for "{task.title}"'
+        message = f'This vulnerability task in "{project.name}" is due tomorrow.'
+
+    create_notification(
+        db,
+        user_id=task.assignee_id,
+        type="system",
+        title=title,
+        message=message,
+        link=f"/projects/{project.id}",
+    )
+    task.deadline_alert_sent_at = datetime.now(UTC)
+    return True
+
+
+def _security_team_user_ids(db: Session) -> list[uuid.UUID]:
+    users = (
+        db.query(User)
+        .join(Role, User.role_id == Role.id)
+        .filter(Role.name.in_(["Security Manager", "Admin"]))
+        .all()
+    )
+    return [user.id for user in users]
+
+
+def _can_collaborate_on_task(current_user: User, user_role: str, task: VulnerabilityTask) -> bool:
+    if _is_security_actor(current_user):
+        return True
+    if user_role in {"owner", "editor"}:
+        return True
+    return task.assignee_id == current_user.id
+
+
+def _task_sort_key(task: VulnerabilityTask) -> tuple[int, datetime]:
+    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+    sev = str(task.severity or "info").lower()
+    updated = task.updated_at or datetime.now(UTC)
+    return severity_order.get(sev, 99), updated
 
 
 # ─── Admin Routes ──────────────────────────────────────────────────────────────
@@ -109,6 +507,321 @@ async def security_projects_overview(
 ):
     """Security-manager view with security-focused project summaries."""
     return get_security_projects_overview(db, current_user)
+
+
+@router.post("/{project_id}/security/workflow-action", response_model=SecurityWorkflowActionResponse, tags=["Security"])
+async def trigger_security_workflow_action(
+    project_id: uuid.UUID,
+    data: SecurityWorkflowActionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(P.PRIORITIZE_VULNERABILITIES)),
+):
+    project, _ = get_project_accessible(db, project_id, current_user)
+
+    if data.action == "confirm_validation":
+        _ensure_validation_can_be_confirmed(db, project_id)
+
+    owner_user = db.query(User).filter(User.id == project.owner_id).first()
+    recipient_map: dict[str, dict] = {}
+
+    recipient_map[str(project.owner_id)] = {
+        "user_id": project.owner_id,
+        "nom": owner_user.nom if owner_user else "Project Owner",
+        "role_projet": "Owner",
+    }
+
+    members = (
+        db.query(MemberModel)
+        .filter(MemberModel.project_id == project_id)
+        .all()
+    )
+
+    for member in members:
+        role_label = (member.role_projet or "Viewer").strip() or "Viewer"
+        role_normalized = role_label.lower()
+        if role_normalized not in {"owner", "editor"}:
+            continue
+
+        key = str(member.user_id)
+        if key in recipient_map:
+            continue
+
+        member_user = db.query(User).filter(User.id == member.user_id).first()
+        if not member_user:
+            continue
+
+        recipient_map[key] = {
+            "user_id": member.user_id,
+            "nom": member_user.nom,
+            "role_projet": role_label,
+        }
+
+    actor_name = current_user.nom or "Security Manager"
+    title, message = _security_workflow_template(data.action, project.name, actor_name, data.note)
+
+    for recipient in recipient_map.values():
+        create_notification(
+            db,
+            user_id=recipient["user_id"],
+            type="system",
+            title=title,
+            message=message,
+            link=f"/projects/{project.id}",
+        )
+
+    action_label = {
+        "request_fixes": "Fix request sent to project team.",
+        "request_rescan": "Re-scan request sent to project team.",
+        "confirm_validation": "Validation closure shared with project team.",
+    }[data.action]
+
+    return {
+        "action": data.action,
+        "notified_count": len(recipient_map),
+        "recipients": list(recipient_map.values()),
+        "message": action_label,
+    }
+
+
+@router.get(
+    "/{project_id}/security/vulnerability-tasks",
+    response_model=VulnerabilityWorkflowSnapshotResponse,
+    tags=["Security"],
+)
+async def get_vulnerability_workflow_snapshot(
+    project_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(P.VIEW_VULNERABILITIES)),
+):
+    project, _user_role = get_project_accessible(db, project_id, current_user)
+    latest_scan, findings = _latest_completed_scan_with_findings(db, project_id)
+    touched_ids = _sync_current_vulnerability_tasks(db, project, latest_scan, findings)
+
+    assignees = _project_assignable_users(db, project)
+    if not touched_ids:
+        return {
+            "project_id": project.id,
+            "scan_id": latest_scan.id if latest_scan else None,
+            "scan_completed_at": latest_scan.completed_at if latest_scan else None,
+            "assignees": assignees,
+            "tasks": [],
+        }
+
+    tasks = (
+        db.query(VulnerabilityTask)
+        .options(
+            joinedload(VulnerabilityTask.comments).joinedload(VulnerabilityTaskComment.author),
+            joinedload(VulnerabilityTask.assignee),
+            joinedload(VulnerabilityTask.assigned_by),
+        )
+        .filter(VulnerabilityTask.id.in_(touched_ids))
+        .all()
+    )
+
+    deadline_updates = False
+    for task in tasks:
+        deadline_updates = _notify_deadline_if_needed(db, project, task) or deadline_updates
+    if deadline_updates:
+        db.commit()
+
+    tasks_sorted = sorted(tasks, key=_task_sort_key)
+    return {
+        "project_id": project.id,
+        "scan_id": latest_scan.id if latest_scan else None,
+        "scan_completed_at": latest_scan.completed_at if latest_scan else None,
+        "assignees": assignees,
+        "tasks": [_serialize_task(task) for task in tasks_sorted],
+    }
+
+
+@router.patch(
+    "/{project_id}/security/vulnerability-tasks/{task_id}",
+    response_model=VulnerabilityTaskResponse,
+    tags=["Security"],
+)
+async def update_vulnerability_task(
+    project_id: uuid.UUID,
+    task_id: uuid.UUID,
+    data: VulnerabilityTaskUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(P.VIEW_VULNERABILITIES)),
+):
+    project, user_role = get_project_accessible(db, project_id, current_user)
+    task = (
+        db.query(VulnerabilityTask)
+        .options(
+            joinedload(VulnerabilityTask.comments).joinedload(VulnerabilityTaskComment.author),
+            joinedload(VulnerabilityTask.assignee),
+            joinedload(VulnerabilityTask.assigned_by),
+        )
+        .filter(VulnerabilityTask.id == task_id, VulnerabilityTask.project_id == project.id)
+        .first()
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="Vulnerability task not found")
+
+    if not _can_collaborate_on_task(current_user, user_role, task):
+        raise HTTPException(status_code=403, detail="You cannot update this vulnerability task")
+
+    is_security_actor = _is_security_actor(current_user)
+    if not is_security_actor and any([data.assignee_id is not None, data.clear_assignee, data.due_date is not None, data.clear_due_date]):
+        raise HTTPException(status_code=403, detail="Only Security Manager/Admin can change assignment or deadline")
+
+    if not is_security_actor and data.status == "verified":
+        raise HTTPException(status_code=403, detail="Only Security Manager/Admin can mark a task as verified")
+
+    available_assignees = _project_assignable_users(db, project)
+    available_assignee_ids = {entry["user_id"] for entry in available_assignees}
+
+    previous_assignee_id = task.assignee_id
+    previous_status = task.status.value if isinstance(task.status, VulnerabilityTaskStatus) else str(task.status)
+
+    if data.clear_assignee:
+        task.assignee_id = None
+        task.assigned_by_id = current_user.id
+
+    if data.assignee_id is not None:
+        if data.assignee_id not in available_assignee_ids:
+            raise HTTPException(status_code=400, detail="Selected assignee is not eligible for this project")
+        task.assignee_id = data.assignee_id
+        task.assigned_by_id = current_user.id
+
+    if data.clear_due_date:
+        task.due_date = None
+        task.deadline_alert_sent_at = None
+
+    if data.due_date is not None:
+        task.due_date = data.due_date
+        task.deadline_alert_sent_at = None
+
+    if data.status is not None:
+        task.status = VulnerabilityTaskStatus(data.status)
+
+    created_comment = None
+    if data.note:
+        created_comment = VulnerabilityTaskComment(
+            task_id=task.id,
+            author_id=current_user.id,
+            message=data.note,
+        )
+        db.add(created_comment)
+
+    db.commit()
+
+    if task.assignee_id and task.assignee_id != previous_assignee_id:
+        create_notification(
+            db,
+            user_id=task.assignee_id,
+            type="system",
+            title=f'You were assigned "{task.title}"',
+            message=f'{current_user.nom} assigned you a {task.severity} vulnerability in "{project.name}".',
+            link=f"/projects/{project.id}",
+        )
+
+    current_status = task.status.value if isinstance(task.status, VulnerabilityTaskStatus) else str(task.status)
+    if current_status != previous_status:
+        if current_status == "fixed":
+            security_recipients = {user_id for user_id in _security_team_user_ids(db) if user_id != current_user.id}
+            for recipient_id in security_recipients:
+                create_notification(
+                    db,
+                    user_id=recipient_id,
+                    type="system",
+                    title=f'Fix ready for review: "{task.title}"',
+                    message=f'{current_user.nom} marked this vulnerability as fixed in "{project.name}".',
+                    link=f"/projects/{project.id}",
+                )
+        elif current_status == "verified" and task.assignee_id and task.assignee_id != current_user.id:
+            create_notification(
+                db,
+                user_id=task.assignee_id,
+                type="system",
+                title=f'Fix validated: "{task.title}"',
+                message=f'{current_user.nom} verified this vulnerability in "{project.name}".',
+                link=f"/projects/{project.id}",
+            )
+
+    if created_comment and task.assignee_id and task.assignee_id != current_user.id:
+        create_notification(
+            db,
+            user_id=task.assignee_id,
+            type="system",
+            title=f'New comment on "{task.title}"',
+            message=f'{current_user.nom}: {created_comment.message}',
+            link=f"/projects/{project.id}",
+        )
+
+    updated_task = (
+        db.query(VulnerabilityTask)
+        .options(
+            joinedload(VulnerabilityTask.comments).joinedload(VulnerabilityTaskComment.author),
+            joinedload(VulnerabilityTask.assignee),
+            joinedload(VulnerabilityTask.assigned_by),
+        )
+        .filter(VulnerabilityTask.id == task.id)
+        .first()
+    )
+    return _serialize_task(updated_task)
+
+
+@router.post(
+    "/{project_id}/security/vulnerability-tasks/{task_id}/comments",
+    response_model=VulnerabilityTaskCommentResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Security"],
+)
+async def add_vulnerability_task_comment(
+    project_id: uuid.UUID,
+    task_id: uuid.UUID,
+    data: VulnerabilityTaskCommentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(P.VIEW_VULNERABILITIES)),
+):
+    project, user_role = get_project_accessible(db, project_id, current_user)
+    task = (
+        db.query(VulnerabilityTask)
+        .options(joinedload(VulnerabilityTask.assignee), joinedload(VulnerabilityTask.assigned_by))
+        .filter(VulnerabilityTask.id == task_id, VulnerabilityTask.project_id == project.id)
+        .first()
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="Vulnerability task not found")
+
+    if not _can_collaborate_on_task(current_user, user_role, task):
+        raise HTTPException(status_code=403, detail="You cannot comment on this vulnerability task")
+
+    comment = VulnerabilityTaskComment(task_id=task.id, author_id=current_user.id, message=data.message)
+    db.add(comment)
+    db.commit()
+
+    recipients: set[uuid.UUID] = set()
+    if task.assignee_id and task.assignee_id != current_user.id:
+        recipients.add(task.assignee_id)
+    if task.assigned_by_id and task.assigned_by_id != current_user.id:
+        recipients.add(task.assigned_by_id)
+
+    if not _is_security_actor(current_user):
+        for security_user_id in _security_team_user_ids(db):
+            if security_user_id != current_user.id:
+                recipients.add(security_user_id)
+
+    for recipient_id in recipients:
+        create_notification(
+            db,
+            user_id=recipient_id,
+            type="system",
+            title=f'New discussion message on "{task.title}"',
+            message=f'{current_user.nom}: {data.message}',
+            link=f"/projects/{project.id}",
+        )
+
+    saved_comment = (
+        db.query(VulnerabilityTaskComment)
+        .options(joinedload(VulnerabilityTaskComment.author))
+        .filter(VulnerabilityTaskComment.id == comment.id)
+        .first()
+    )
+    return _serialize_comment(saved_comment)
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_new_project(

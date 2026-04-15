@@ -65,6 +65,7 @@ class Project(Base):
     security_reports = relationship("SecurityReport", back_populates="project", cascade="all, delete-orphan")
     security_metrics = relationship("SecurityMetric", back_populates="project", cascade="all, delete-orphan")
     github_repositories = relationship("GitHubRepository", back_populates="project", cascade="all, delete-orphan")
+    vulnerability_tasks = relationship("VulnerabilityTask", back_populates="project", cascade="all, delete-orphan")
 
 
 class Scan(Base):
@@ -89,5 +90,6 @@ class Scan(Base):
     project = relationship("Project", back_populates="scans")
     risk_score = relationship("RiskScore", back_populates="scan", uselist=False, cascade="all, delete-orphan")
     vulnerabilities = relationship("Vulnerability", back_populates="scan", cascade="all, delete-orphan")
+    vulnerability_tasks = relationship("VulnerabilityTask", back_populates="scan")
     tool_execution = relationship("ToolExecution", back_populates="scan", uselist=False, cascade="all, delete-orphan")
     scan_comparison = relationship("ScanComparison", back_populates="scan", uselist=False, cascade="all, delete-orphan")

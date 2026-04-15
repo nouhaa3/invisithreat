@@ -23,6 +23,7 @@ MODEL_MODULES = (
     "tool_execution",
     "scan_comparison",
     "vulnerability",
+    "vulnerability_workflow",
     "recommendation",
 )
 
