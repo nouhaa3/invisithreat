@@ -1,8 +1,8 @@
 ﻿import io from 'socket.io-client'
 
 let socket = null
-const notificationListeners = new Map() // Track listeners to clean them up properly
 let currentIdentity = null
+const notificationListeners = new Map() // Track listeners to clean them up properly
 
 const getSocketBaseUrl = () => {
   const envUrl = String(import.meta.env.VITE_API_URL || '').trim()
@@ -62,6 +62,8 @@ export const initializeWebSocket = (userId, userRole, userEmail) => {
       console.log('[WS-INIT] WebSocket already connected, re-identifying...')
       emitIdentify()
       console.log('[WS-INIT] Identify event emitted')
+    } else if (socket.active) {
+      console.log('[WS-INIT] Existing WebSocket is already connecting/reconnecting...')
     } else {
       console.log('[WS-INIT] Existing WebSocket found, reconnecting...')
       socket.connect()
@@ -125,6 +127,10 @@ export const initializeWebSocket = (userId, userRole, userEmail) => {
   socket.io.on('reconnect', (attempt) => {
     console.log(`[WS-RECONNECT] Successful after ${attempt} attempts`)
     emitIdentify()
+  })
+
+  socket.on('connect_error', (error) => {
+    console.error('[WS-CONNECT-ERROR] WebSocket connection error:', error?.message || error)
   })
 
   return socket

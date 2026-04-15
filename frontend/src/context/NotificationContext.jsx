@@ -7,10 +7,15 @@ import { initializeWebSocket, closeWebSocket, onNotification } from '../services
 const NotificationContext = createContext(null)
 
 export function NotificationProvider({ children }) {
-  const { isAuthenticated, user } = useAuth()
+  const { isAuthenticated, isLoading, user } = useAuth()
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount]     = useState(0)
   const timerRef = useRef(null)
+  const refreshRef = useRef(null)
+
+  const userId = user?.id
+  const userRole = user?.role_name
+  const userEmail = user?.email
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) return
@@ -19,7 +24,7 @@ export function NotificationProvider({ children }) {
       let merged = data
 
       // Backfill role-request notifications for existing pending requests.
-      if (user?.role_name === 'Admin') {
+      if (userRole === 'Admin') {
         const users = await adminGetUsers()
         const roleRequestNotifications = users
           .filter(u => !!u.requested_role_id)
@@ -49,18 +54,26 @@ export function NotificationProvider({ children }) {
       setNotifications(merged)
       setUnreadCount(merged.filter(n => !n.is_read).length)
     } catch {}
-  }, [isAuthenticated, user])
+  }, [isAuthenticated, userRole])
+
+  useEffect(() => {
+    refreshRef.current = refresh
+  }, [refresh])
 
   // Initialize WebSocket for real-time notifications
   useEffect(() => {
-    if (!isAuthenticated || !user) {
-      console.log('[NOTIF-CONTEXT] Not initializing - not authenticated or no user')
-      closeWebSocket()
+    if (isLoading) {
       return
     }
 
-    console.log('[NOTIF-CONTEXT] Initializing WebSocket for user:', user.id, user.role_name)
-    initializeWebSocket(user.id, user.role_name, user.email)
+    if (!isAuthenticated || !userId) {
+      closeWebSocket()
+      console.debug('[NOTIF-CONTEXT] Not initializing - not authenticated or no user')
+      return
+    }
+
+    console.log('[NOTIF-CONTEXT] Initializing WebSocket for user:', userId, userRole)
+    initializeWebSocket(userId, userRole, userEmail)
 
     // Listen for real-time notifications from Socket.IO for all roles.
     const cleanup = onNotification((socketNotif) => {
@@ -74,16 +87,18 @@ export function NotificationProvider({ children }) {
 
       // Show badge quickly, then reconcile with backend source of truth.
       setUnreadCount(prev => prev + 1)
-      refresh()
+      refreshRef.current?.()
     })
 
     return () => {
       console.log('[NOTIF-CONTEXT] Cleaning up notification listener')
-      cleanup()
+      cleanup?.()
     }
-  }, [isAuthenticated, user, refresh])
+  }, [isAuthenticated, isLoading, userId, userRole, userEmail])
 
   useEffect(() => {
+    if (isLoading) return
+
     if (!isAuthenticated) {
       setNotifications([])
       setUnreadCount(0)
@@ -92,7 +107,7 @@ export function NotificationProvider({ children }) {
     refresh()
     timerRef.current = setInterval(refresh, 60_000)
     return () => clearInterval(timerRef.current)
-  }, [isAuthenticated, refresh])
+  }, [isAuthenticated, isLoading, refresh])
 
   const markRead = async (id) => {
     if (typeof id === 'string' && id.startsWith('role-request-')) {

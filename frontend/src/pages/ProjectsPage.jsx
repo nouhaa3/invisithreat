@@ -8,6 +8,7 @@ import {
   getSecurityManagerProjects,
   deleteProject,
   deleteAdminProject,
+  deleteAdminProjectsBulk,
   setAdminProjectStatus,
 } from '../services/projectService'
 import { can, PERMISSIONS } from '../utils/permissions'
@@ -271,7 +272,18 @@ function RiskBadge({ risk }) {
   )
 }
 
-function AdminProjectRow({ project, deleting, toggling, onView, onDelete, onToggleStatus, onManageMembers }) {
+function AdminProjectRow({
+  project,
+  deleting,
+  toggling,
+  selected,
+  disableSelect,
+  onToggleSelect,
+  onView,
+  onDelete,
+  onToggleStatus,
+  onManageMembers,
+}) {
   const status = project.status || 'archived'
   const nextAction = status === 'active' ? 'Disable' : 'Enable'
 
@@ -283,53 +295,65 @@ function AdminProjectRow({ project, deleting, toggling, onView, onDelete, onTogg
         border: '1px solid rgba(255,255,255,0.055)',
       }}
     >
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
+      <div className="flex items-start gap-3">
+        <div className="pt-1">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            disabled={disableSelect}
+            className="w-5 h-5 rounded cursor-pointer accent-orange-500 disabled:opacity-40 disabled:cursor-not-allowed"
+          />
+        </div>
+
+        <div className="flex-1 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 min-w-0">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
             <p className="text-white font-semibold text-sm truncate">{project.name}</p>
             <StatusBadge status={status} />
             <RiskBadge risk={project.global_risk_level} />
+            </div>
+            <p className="text-[11px] text-white/40">Owner: {project.owner_name}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <MetaPill label="Users" value={project.users_assigned_count} />
+              <MetaPill label="Scans" value={project.total_scans} />
+              <MetaPill label="Created" value={formatDate(project.created_at)} />
+              <MetaPill label="Last Activity" value={formatDate(project.last_activity_at)} />
+            </div>
           </div>
-          <p className="text-[11px] text-white/40">Owner: {project.owner_name}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <MetaPill label="Users" value={project.users_assigned_count} />
-            <MetaPill label="Scans" value={project.total_scans} />
-            <MetaPill label="Created" value={formatDate(project.created_at)} />
-            <MetaPill label="Last Activity" value={formatDate(project.last_activity_at)} />
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2 flex-wrap lg:justify-end">
-          <button
-            onClick={onView}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-            style={{ background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.3)', color: '#60a5fa' }}
-          >
-            View
-          </button>
-          <button
-            onClick={onManageMembers}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-            style={{ background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', color: '#a78bfa' }}
-          >
-            Members
-          </button>
-          <button
-            onClick={onToggleStatus}
-            disabled={toggling}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
-            style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}
-          >
-            {nextAction}
-          </button>
-          <button
-            onClick={onDelete}
-            disabled={deleting}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
-            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444' }}
-          >
-            Delete
-          </button>
+          <div className="flex items-center gap-2 flex-wrap lg:justify-end">
+            <button
+              onClick={onView}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={{ background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.3)', color: '#60a5fa' }}
+            >
+              View
+            </button>
+            <button
+              onClick={onManageMembers}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={{ background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', color: '#a78bfa' }}
+            >
+              Members
+            </button>
+            <button
+              onClick={onToggleStatus}
+              disabled={toggling}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+              style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}
+            >
+              {nextAction}
+            </button>
+            <button
+              onClick={onDelete}
+              disabled={deleting}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444' }}
+            >
+              Delete
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -792,6 +816,8 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState(null)
   const [togglingId, setTogglingId] = useState(null)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [selectedProjectIds, setSelectedProjectIds] = useState(new Set())
   const [viewingProject, setViewingProject] = useState(null)
   const [summary, setSummary] = useState({
     total_projects: 0,
@@ -923,6 +949,12 @@ export default function ProjectsPage() {
         ? securityProjects
         : projects
 
+  const adminVisibleIds = isAdmin ? visibleProjects.map((p) => p.id) : []
+  const selectedVisibleCount = isAdmin
+    ? adminVisibleIds.filter((id) => selectedProjectIds.has(id)).length
+    : 0
+  const allVisibleSelected = isAdmin && adminVisibleIds.length > 0 && selectedVisibleCount === adminVisibleIds.length
+
   const adminHighRiskCount = isAdmin
     ? projects.filter((project) => normalizeProjectText(project.global_risk_level) === 'high').length
     : 0
@@ -938,7 +970,12 @@ export default function ProjectsPage() {
     try {
       if (isAdmin) {
         const payload = await getAdminProjects()
-        setProjects(payload?.projects || [])
+        const adminProjects = payload?.projects || []
+        setProjects(adminProjects)
+        setSelectedProjectIds((prev) => {
+          const validIds = new Set(adminProjects.map((p) => p.id))
+          return new Set(Array.from(prev).filter((id) => validIds.has(id)))
+        })
         setSummary(payload?.summary || {
           total_projects: 0,
           active_projects: 0,
@@ -948,6 +985,7 @@ export default function ProjectsPage() {
       } else if (isSecurityManager) {
         const payload = await getSecurityManagerProjects()
         setProjects(payload?.projects || [])
+        setSelectedProjectIds(new Set())
         setSecuritySummary(payload?.summary || {
           total_projects: 0,
           projects_with_findings: 0,
@@ -957,6 +995,7 @@ export default function ProjectsPage() {
       } else {
         const proj = await getDevProjects()
         setProjects(proj)
+        setSelectedProjectIds(new Set())
       }
     } catch (err) {
       console.error('Projects page error:', err)
@@ -993,6 +1032,11 @@ export default function ProjectsPage() {
     try {
       if (isAdmin) {
         await deleteAdminProject(id)
+        setSelectedProjectIds((prev) => {
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
         await load()
       } else {
         await deleteProject(id)
@@ -1023,6 +1067,54 @@ export default function ProjectsPage() {
   const handleToggleStatus = async (e, project) => {
     e.stopPropagation()
     await handleToggleStatusByProject(project)
+  }
+
+  const toggleProjectSelection = (projectId) => {
+    if (!isAdmin || bulkDeleting) return
+    setSelectedProjectIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(projectId)) {
+        next.delete(projectId)
+      } else {
+        next.add(projectId)
+      }
+      return next
+    })
+  }
+
+  const toggleSelectAllProjects = () => {
+    if (!isAdmin || adminVisibleIds.length === 0 || bulkDeleting) return
+    setSelectedProjectIds((prev) => {
+      const next = new Set(prev)
+      if (allVisibleSelected) {
+        adminVisibleIds.forEach((id) => next.delete(id))
+      } else {
+        adminVisibleIds.forEach((id) => next.add(id))
+      }
+      return next
+    })
+  }
+
+  const handleBulkDeleteProjects = async () => {
+    if (!isAdmin || selectedProjectIds.size === 0) return
+
+    const ids = Array.from(selectedProjectIds)
+    if (!window.confirm(`Delete ${ids.length} selected project(s)? This cannot be undone.`)) return
+
+    setBulkDeleting(true)
+    try {
+      const result = await deleteAdminProjectsBulk(ids)
+      await load()
+      setSelectedProjectIds(new Set())
+
+      const base = `Deleted ${result.success_count} project(s)`
+      const details = result.failed_count > 0 ? `. Failed: ${result.failed_count}` : ''
+      alert(`${base}${details}`)
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to delete selected projects')
+    } finally {
+      setBulkDeleting(false)
+    }
   }
 
   return (
@@ -1284,6 +1376,65 @@ export default function ProjectsPage() {
                   <h2 className="text-xs font-semibold uppercase tracking-widest text-white/30">
                     {isAdmin ? 'Projects Governance' : 'Security Portfolio'}
                   </h2>
+
+                  {isAdmin && visibleProjects.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={toggleSelectAllProjects}
+                      disabled={bulkDeleting}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+                      style={{
+                        background: allVisibleSelected ? 'rgba(255,107,43,0.15)' : 'rgba(255,255,255,0.03)',
+                        border: allVisibleSelected ? '1px solid rgba(255,107,43,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                        color: allVisibleSelected ? '#FF8C5A' : 'rgba(255,255,255,0.35)',
+                      }}
+                    >
+                      {allVisibleSelected ? 'Deselect All' : 'Select All'}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {isAdmin && selectedProjectIds.size > 0 && (
+                <div
+                  className="mb-4 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3"
+                  style={{
+                    background: 'rgba(255,107,43,0.08)',
+                    border: '1px solid rgba(255,107,43,0.2)',
+                  }}
+                >
+                  <p className="text-sm text-white/85 font-medium">
+                    {selectedProjectIds.size} project{selectedProjectIds.size > 1 ? 's' : ''} selected
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProjectIds(new Set())}
+                      disabled={bulkDeleting}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                      style={{
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        color: 'rgba(255,255,255,0.75)',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBulkDeleteProjects}
+                      disabled={bulkDeleting}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 flex items-center gap-2"
+                      style={{
+                        background: 'rgba(239,68,68,0.12)',
+                        border: '1px solid rgba(239,68,68,0.3)',
+                        color: '#f87171',
+                      }}
+                    >
+                      {bulkDeleting && <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />}
+                      Delete Selected
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1376,8 +1527,11 @@ export default function ProjectsPage() {
                       <AdminProjectRow
                         key={p.id}
                         project={p}
-                        deleting={deletingId === p.id}
-                        toggling={togglingId === p.id}
+                        deleting={bulkDeleting || deletingId === p.id}
+                        toggling={bulkDeleting || togglingId === p.id}
+                        selected={selectedProjectIds.has(p.id)}
+                        disableSelect={bulkDeleting || deletingId === p.id || togglingId === p.id}
+                        onToggleSelect={() => toggleProjectSelection(p.id)}
                         onView={() => setViewingProject(p)}
                         onManageMembers={() => navigate(`/projects/${p.id}/members`)}
                         onToggleStatus={(e) => handleToggleStatus(e, p)}

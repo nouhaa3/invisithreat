@@ -15,6 +15,7 @@ from app.api.routes import audit_logs
 from app.api.routes import user_audit_logs
 from app.api.routes import totp
 from app.api.routes import integrations
+from app.api.routes import dast
 
 api_router = APIRouter()
 
@@ -32,3 +33,4 @@ api_router.include_router(user_audit_logs.router)
 api_router.include_router(audit_logs.router)
 api_router.include_router(totp.router)
 api_router.include_router(integrations.router)
+api_router.include_router(dast.router, prefix="/dast", tags=["dast"])

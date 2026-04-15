@@ -1,3 +1,4 @@
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status
 from app.models.scan import Project, Scan, ScanStatus
@@ -102,6 +103,7 @@ def update_project(db: Session, project_id: uuid.UUID, user: User, data: Project
 
 def delete_project(db: Session, project_id: uuid.UUID, user: User) -> None:
     project = get_project(db, project_id, user)
+    _delete_legacy_dast_scans_for_project(db, project.id)
     db.delete(project)
     db.commit()
 
@@ -421,9 +423,29 @@ def update_project_status_admin(db: Session, project_id: uuid.UUID, status_value
     return {"id": project.id, "status": normalized_status}
 
 
+def _delete_legacy_dast_scans_for_project(db: Session, project_id: uuid.UUID) -> None:
+    """Cleanup compatibility: some environments still contain a legacy `dast_scans` table.
+
+    If present, rows referencing the project must be deleted before removing the project,
+    otherwise PostgreSQL raises a FK violation.
+    """
+    bind = db.get_bind()
+    if bind is None:
+        return
+
+    if not inspect(bind).has_table("dast_scans"):
+        return
+
+    db.execute(
+        text("DELETE FROM dast_scans WHERE project_id = :project_id"),
+        {"project_id": str(project_id)},
+    )
+
+
 def delete_project_admin(db: Session, project_id: uuid.UUID) -> None:
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    _delete_legacy_dast_scans_for_project(db, project.id)
     db.delete(project)
     db.commit()

@@ -54,9 +54,6 @@ export default function AdminPage() {
   const [saving, setSaving]           = useState({})
   const [selectedUserIds, setSelectedUserIds] = useState(new Set())
   const [bulkProcessing, setBulkProcessing] = useState(false)
-  const [toolbarPos, setToolbarPos] = useState({ x: 0, y: 0 })
-  const [isDragging, setIsDragging] = useState(false)
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [detailsUserId, setDetailsUserId] = useState(null)  // Modal user details
 
   useEffect(() => {
@@ -280,31 +277,6 @@ export default function AdminPage() {
     }
   }
 
-  const handleToolbarMouseDown = (e) => {
-    setIsDragging(true)
-    setDragOffset({
-      x: e.clientX - toolbarPos.x,
-      y: e.clientY - toolbarPos.y,
-    })
-  }
-
-  useEffect(() => {
-    if (!isDragging) return
-    const handleMouseMove = (e) => {
-      setToolbarPos({
-        x: e.clientX - dragOffset.x,
-        y: e.clientY - dragOffset.y,
-      })
-    }
-    const handleMouseUp = () => setIsDragging(false)
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
-    }
-  }, [isDragging, dragOffset])
-
   const pending  = users.filter(u => u.is_pending)
   const active   = users.filter(u => !u.is_pending)
   const filtered = active.filter(u => {
@@ -471,6 +443,74 @@ export default function AdminPage() {
             )}
           </div>
 
+          {/* ── Bulk actions bar (inline) ─────────────────────────────────────── */}
+          {selectedUserIds.size > 0 && (
+            <div
+              className="mb-6 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 animate-slide-up"
+              style={{
+                background: 'rgba(255,107,43,0.08)',
+                border: '1px solid rgba(255,107,43,0.2)',
+              }}
+            >
+              <p className="text-sm text-white/85 font-medium">
+                {selectedUserIds.size} user{selectedUserIds.size !== 1 ? 's' : ''} selected
+              </p>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setSelectedUserIds(new Set())}
+                  disabled={bulkProcessing}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: 'rgba(255,255,255,0.75)',
+                  }}>
+                  Cancel
+                </button>
+
+                <button
+                  onClick={handleBulkActivate}
+                  disabled={bulkProcessing}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 flex items-center gap-2"
+                  style={{
+                    background: 'rgba(34,197,94,0.12)',
+                    border: '1px solid rgba(34,197,94,0.3)',
+                    color: '#22c55e',
+                  }}>
+                  {bulkProcessing && <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />}
+                  Activate
+                </button>
+
+                <button
+                  onClick={handleBulkDeactivate}
+                  disabled={bulkProcessing}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 flex items-center gap-2"
+                  style={{
+                    background: 'rgba(245,158,11,0.12)',
+                    border: '1px solid rgba(245,158,11,0.3)',
+                    color: '#fbbf24',
+                  }}>
+                  {bulkProcessing && <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />}
+                  Deactivate
+                </button>
+
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkProcessing}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 flex items-center gap-2"
+                  style={{
+                    background: 'rgba(239,68,68,0.12)',
+                    border: '1px solid rgba(239,68,68,0.3)',
+                    color: '#f87171',
+                  }}>
+                  {bulkProcessing && <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />}
+                  Delete
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ── All users cards ───────────────────────────────────────────────── */}
           {loading ? (
             <div className="flex justify-center py-20">
@@ -559,110 +599,6 @@ export default function AdminPage() {
               })}
             </div>
           )}
-
-          {/* ── Bulk actions toolbar ─────────────────────────────────────────── */}
-          {selectedUserIds.size > 0 && (
-            <div className="fixed px-4 z-50 pointer-events-none animate-slide-up"
-              style={{
-                left: `${toolbarPos.x}px`,
-                top: `${toolbarPos.y}px`,
-                animation: 'slideUpBouncy 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
-              }}>
-              <style>{`
-                @keyframes slideUpBouncy {
-                  0% { opacity: 0; transform: translateY(48px); }
-                  100% { opacity: 1; transform: translateY(0); }
-                }
-              `}</style>
-              <div className="rounded-2xl overflow-hidden shadow-2xl pointer-events-auto cursor-move select-none"
-                onMouseDown={handleToolbarMouseDown}
-                style={{
-                  background: 'rgba(17, 17, 17, 0.95)',
-                  border: '1px solid rgba(255,107,43,0.4)',
-                  backdropFilter: 'blur(20px)',
-                  boxShadow: '0 20px 60px rgba(0,0,0,0.3), 0 0 40px rgba(0,0,0,0.5)',
-                }}>
-                <div className="flex items-center justify-between gap-6 px-6 py-4">
-                  
-                  {/* Left: Selection info */}
-                  <div className="flex items-center gap-3 min-w-max">
-                    <div className="flex items-center justify-center w-8 h-8 rounded-lg"
-                      style={{
-                        background: 'rgba(255,107,43,0.15)',
-                        border: '1px solid rgba(255,107,43,0.3)',
-                      }}>
-                      <span className="text-xs font-bold text-orange-400">
-                        {selectedUserIds.size}
-                      </span>
-                    </div>
-                    <span className="text-sm font-semibold text-white">
-                      {selectedUserIds.size} user{selectedUserIds.size !== 1 ? 's' : ''} selected
-                    </span>
-                  </div>
-
-                  {/* Divider */}
-                  <div className="h-6 w-px bg-white/10" />
-
-                  {/* Right: Actions */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setSelectedUserIds(new Set())}
-                      disabled={bulkProcessing}
-                      className="px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 disabled:opacity-50"
-                      style={{
-                        background: 'rgba(255,255,255,0.05)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        color: 'rgba(255,255,255,0.5)',
-                      }}>
-                      Cancel
-                    </button>
-                    
-                    <button
-                      onClick={handleBulkActivate}
-                      disabled={bulkProcessing}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 disabled:opacity-50"
-                      style={{
-                        background: 'rgba(34,197,94,0.12)',
-                        border: '1px solid rgba(34,197,94,0.3)',
-                        color: '#22c55e',
-                      }}>
-                      {bulkProcessing && <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />}
-                      Activate
-                    </button>
-
-                    <button
-                      onClick={handleBulkDeactivate}
-                      disabled={bulkProcessing}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 disabled:opacity-50"
-                      style={{
-                        background: 'rgba(245,158,11,0.12)',
-                        border: '1px solid rgba(245,158,11,0.3)',
-                        color: '#fbbf24',
-                      }}>
-                      {bulkProcessing && <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />}
-                      Deactivate
-                    </button>
-
-                    <button
-                      onClick={handleBulkDelete}
-                      disabled={bulkProcessing}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 disabled:opacity-50"
-                      style={{
-                        background: 'rgba(239,68,68,0.12)',
-                        border: '1px solid rgba(239,68,68,0.3)',
-                        color: '#f87171',
-                      }}>
-                      {bulkProcessing && <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />}
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Padding for bulk toolbar */}
-          {selectedUserIds.size > 0 && <div className="h-24" />}
 
           {/* ── User Details Modal ────────────────────────────────────────────── */}
           {detailsUserId && (

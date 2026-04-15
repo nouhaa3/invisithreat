@@ -107,6 +107,18 @@ class ProjectAdminStatusResponse(BaseModel):
     status: Literal["active", "archived"]
 
 
+class BulkProjectActionRequest(BaseModel):
+    """Payload for bulk project operations (admin)."""
+    project_ids: list[uuid.UUID] = Field(..., min_length=1, max_length=1000)
+
+
+class BulkProjectActionResponse(BaseModel):
+    """Response for bulk project operations (admin)."""
+    success_count: int
+    failed_count: int
+    errors: dict[str, str] = {}
+
+
 class SecurityProjectsSummary(BaseModel):
     total_projects: int
     projects_with_findings: int
