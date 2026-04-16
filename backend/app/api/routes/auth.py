@@ -532,7 +532,7 @@ async def request_role(
         create_notification(
             db,
             admin_user.id,
-            "system",
+            "role_request",
             "New Role Request",
             f"{current_user.nom} requested {role_name} role.",
             "/admin",
@@ -541,7 +541,7 @@ async def request_role(
     create_notification(
         db,
         current_user.id,
-        "system",
+        "role_request",
         "Role Request Submitted",
         f"Your request for {role_name} role was sent to administrators.",
         "/dashboard",
@@ -720,7 +720,7 @@ async def admin_approve_role_request(
     create_notification(
         db,
         user.id,
-        "system",
+        "role_request",
         "Role Request Approved",
         f"Your role has been upgraded to {role_name}.",
         "/dashboard",
@@ -730,7 +730,7 @@ async def admin_approve_role_request(
     create_notification(
         db,
         admin.id,
-        "system",
+        "role_request",
         "Role Approval Completed",
         f"You approved {user.email} for {role_name} role.",
         "/admin",

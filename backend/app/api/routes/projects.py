@@ -416,7 +416,7 @@ def _security_team_user_ids(db: Session) -> list[uuid.UUID]:
     users = (
         db.query(User)
         .join(Role, User.role_id == Role.id)
-        .filter(Role.name.in_(["Security Manager", "Admin"]))
+        .filter(Role.name == "Security Manager", User.is_active == True)
         .all()
     )
     return [user.id for user in users]
