@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 # Create Socket.IO instance
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins='*',
+    # Disable Engine.IO CORS header injection and rely on app-level CORSMiddleware.
+    cors_allowed_origins=[],
     logger=False,  # Reduce verbosity
     engineio_logger=False,
 )

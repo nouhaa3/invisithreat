@@ -77,12 +77,13 @@ export const initializeWebSocket = (userId, userRole, userEmail) => {
   
   socket = io(socketBaseUrl, {
     path: '/socket.io',
-    tryAllTransports: true,
+    transports: ['polling', 'websocket'],
+    upgrade: true,
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     reconnectionAttempts: Infinity,
-    timeout: 20000,
+    timeout: 30000,
   })
 
   socket.on('connect', () => {
@@ -129,8 +130,8 @@ export const initializeWebSocket = (userId, userRole, userEmail) => {
     emitIdentify()
   })
 
-  socket.on('connect_error', (error) => {
-    console.error('[WS-CONNECT-ERROR] WebSocket connection error:', error?.message || error)
+  socket.io.on('reconnect_error', (error) => {
+    console.error('[WS-RECONNECT-ERROR] Socket.IO reconnect error:', error?.message || error)
   })
 
   return socket

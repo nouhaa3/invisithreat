@@ -21,6 +21,13 @@ from app.services.socketio_service import sio
 
 logger = logging.getLogger(__name__)
 
+ALLOWED_ORIGINS = list(dict.fromkeys([
+    settings.FRONTEND_URL,
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+]))
+
 # ─── Scheduler Setup ──────────────────────────────────────────────────────────
 scheduler = AsyncIOScheduler()
 
@@ -67,19 +74,6 @@ app_fastapi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handle
 app_fastapi.add_middleware(SlowAPIMiddleware)
 
 # CORS middleware - restricted configuration for security (add last to apply first)
-app_fastapi.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        settings.FRONTEND_URL,
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:3002",
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
-)
-
 # Include API router
 app_fastapi.include_router(api_router, prefix="/api")
 
@@ -95,15 +89,10 @@ async def root():
 # Wrap FastAPI with Socket.IO ASGI app
 _asgi_app = ASGIApp(sio, app_fastapi)
 
-# Apply CORS middleware to the ASGIApp wrapper
+# Apply CORS middleware once at top-level to cover API and Socket.IO HTTP polling.
 app = CORSMiddleware(
     _asgi_app,
-    allow_origins=[
-        settings.FRONTEND_URL,
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:3002",
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
