@@ -816,6 +816,8 @@ export default function ProjectDetail() {
   })
   const pollRef = useRef(null)
   const vulnerabilityPollRef = useRef(null)
+  const vulnerabilityInFlightRef = useRef(false)
+  const lastWorkflowErrorLogAtRef = useRef(0)
 
   const syncActiveDastStatuses = useCallback(async (scanList) => {
     const activeDast = (scanList || []).filter(
@@ -836,6 +838,11 @@ export default function ProjectDetail() {
   }, [id])
 
   const loadVulnerabilityWorkflow = useCallback(async () => {
+    if (vulnerabilityInFlightRef.current) return null
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return null
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return null
+
+    vulnerabilityInFlightRef.current = true
     try {
       const snapshot = await getVulnerabilityWorkflow(id)
       setVulnerabilityWorkflow({
@@ -845,8 +852,14 @@ export default function ProjectDetail() {
       })
       return snapshot
     } catch (err) {
-      console.debug('Workflow snapshot error:', err)
+      const now = Date.now()
+      if (now - lastWorkflowErrorLogAtRef.current > 30000) {
+        lastWorkflowErrorLogAtRef.current = now
+        console.warn('Workflow snapshot temporary network issue')
+      }
       return null
+    } finally {
+      vulnerabilityInFlightRef.current = false
     }
   }, [id])
 
@@ -909,7 +922,7 @@ export default function ProjectDetail() {
 
   useEffect(() => {
     if (!vulnerabilityPollRef.current) {
-      vulnerabilityPollRef.current = setInterval(loadVulnerabilityWorkflow, 8000)
+      vulnerabilityPollRef.current = setInterval(loadVulnerabilityWorkflow, 12000)
     }
     return () => {
       if (vulnerabilityPollRef.current) {

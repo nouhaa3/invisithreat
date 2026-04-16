@@ -29,15 +29,28 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 def _env_int_capped(name: str, default: int, max_value: int) -> int:
     """Read int env var while enforcing an upper bound for predictable runtimes."""
     return min(_env_int(name, default), max_value)
 
 
-DEFAULT_SPIDER_TIMEOUT = _env_int_capped("DAST_SPIDER_TIMEOUT", 180, 300)
-DEFAULT_ASCAN_TIMEOUT = _env_int_capped("DAST_ASCAN_TIMEOUT", 300, 600)
-DEFAULT_NO_PROGRESS_TIMEOUT = _env_int_capped("DAST_NO_PROGRESS_TIMEOUT", 120, 240)
-DEFAULT_PASSIVE_WAIT_SECONDS = _env_int_capped("DAST_PASSIVE_WAIT_SECONDS", 20, 60)
+DEFAULT_SPIDER_TIMEOUT = _env_int_capped("DAST_SPIDER_TIMEOUT", 90, 180)
+DEFAULT_ASCAN_TIMEOUT = _env_int_capped("DAST_ASCAN_TIMEOUT", 180, 300)
+DEFAULT_NO_PROGRESS_TIMEOUT = _env_int_capped("DAST_NO_PROGRESS_TIMEOUT", 60, 120)
+DEFAULT_PASSIVE_WAIT_SECONDS = _env_int_capped("DAST_PASSIVE_WAIT_SECONDS", 8, 20)
+DEFAULT_SPIDER_RECURSE = _env_bool("DAST_SPIDER_RECURSE", True)
+DEFAULT_ASCAN_RECURSE = _env_bool("DAST_ASCAN_RECURSE", False)
 
 
 def _validate_target_url(target_url: str) -> None:
@@ -155,6 +168,8 @@ async def run_dast_scan_async(
     ascan_timeout: int = DEFAULT_ASCAN_TIMEOUT,
     no_progress_timeout: int = DEFAULT_NO_PROGRESS_TIMEOUT,
     passive_wait_seconds: int = DEFAULT_PASSIVE_WAIT_SECONDS,
+    spider_recurse: bool = DEFAULT_SPIDER_RECURSE,
+    ascan_recurse: bool = DEFAULT_ASCAN_RECURSE,
 ) -> dict:
     _validate_target_url(target_url)
 
@@ -184,7 +199,7 @@ async def run_dast_scan_async(
 
         client.new_session(name="invisithreat_dast", overwrite=True)
 
-        spider_resp = client.spider.scan(target_url, recurse=True)
+        spider_resp = client.spider.scan(target_url, recurse=spider_recurse)
         spider_id = spider_resp.get("scan")
         if not spider_id:
             raise RuntimeError("Failed to start spider scan.")
@@ -237,7 +252,7 @@ async def run_dast_scan_async(
         same_host_urls = [u for u in discovered_urls if urlparse(u).hostname == target_host]
         active_target = same_host_urls[0] if same_host_urls else discovered_urls[0]
 
-        ascan_resp = client.ascan.scan(active_target, recurse=True)
+        ascan_resp = client.ascan.scan(active_target, recurse=ascan_recurse)
         ascan_id = ascan_resp.get("scan")
         if not ascan_id:
             raise RuntimeError("Failed to start active scan.")
