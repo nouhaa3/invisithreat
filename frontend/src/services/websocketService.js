@@ -56,7 +56,7 @@ export const initializeWebSocket = (userId, userRole, userEmail) => {
     email: userEmail,
     role: userRole,
   }
-  
+
   // Reuse existing socket instead of creating duplicates (important with React StrictMode).
   if (socket !== null) {
     if (socket.connected) {
@@ -75,15 +75,16 @@ export const initializeWebSocket = (userId, userRole, userEmail) => {
   console.log('[WS-INIT] Creating new Socket.IO connection...')
   const socketBaseUrl = getSocketBaseUrl()
   console.log('[WS-INIT] Socket base URL:', socketBaseUrl)
-  
+
   socket = io(socketBaseUrl, {
     path: '/socket.io',
-    tryAllTransports: true,
+    transports: ['polling', 'websocket'],
+    upgrade: true,
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     reconnectionAttempts: Infinity,
-    timeout: 20000,
+    timeout: 30000,
   })
 
   socket.on('connect', () => {
@@ -142,6 +143,10 @@ export const initializeWebSocket = (userId, userRole, userEmail) => {
     emitIdentify()
   })
 
+  socket.io.on('reconnect_error', (error) => {
+    console.error('[WS-RECONNECT-ERROR] Socket.IO reconnect error:', error?.message || error)
+  })
+
   return socket
 }
 
@@ -170,11 +175,11 @@ export const getSocket = () => socket
  */
 export const onNotification = (callback) => {
   const callbackId = Math.random().toString(36).slice(2)
-  
+
   // Store callback with unique ID
   notificationListeners.set(callbackId, callback)
   console.log(`[LISTENER-REGISTERED] Registered notification listener (ID: ${callbackId}), total listeners: ${notificationListeners.size}`)
-  
+
   // Return cleanup function
   return () => {
     notificationListeners.delete(callbackId)

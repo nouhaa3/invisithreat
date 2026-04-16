@@ -43,7 +43,7 @@ async def lifespan(_app: FastAPI):
     # Startup
     scheduler.start()
     logger.info("[OK] Background job scheduler started")
-    
+
     # Schedule daily cleanup
     scheduler.add_job(
         cleanup_old_audit_logs,
@@ -54,9 +54,9 @@ async def lifespan(_app: FastAPI):
         name="Clean old audit logs (> 2 weeks)",
     )
     logger.info("Scheduled cleanup_old_audit_logs to run daily at 02:00")
-    
+
     yield
-    
+
     # Shutdown
     scheduler.shutdown()
     logger.info("[OK] Background job scheduler stopped")
@@ -79,6 +79,7 @@ app_fastapi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handle
 app_fastapi.add_middleware(SlowAPIMiddleware)
 
 # CORS middleware - restricted configuration for security (add last to apply first)
+# Applied on app_fastapi only; Socket.IO manages its own CORS via cors_allowed_origins.
 app_fastapi.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -99,11 +100,9 @@ async def root():
         "docs": "/api/docs"
     }
 
-# Wrap FastAPI with Socket.IO ASGI app
-_asgi_app = ASGIApp(sio, app_fastapi)
-
+# Wrap FastAPI with Socket.IO ASGI app.
 # Socket.IO handles CORS for /socket.io requests; FastAPI CORS covers API routes.
-app = _asgi_app
+app = ASGIApp(sio, app_fastapi)
 
 if __name__ == "__main__":
     import uvicorn

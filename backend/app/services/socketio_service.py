@@ -1,4 +1,4 @@
-﻿"""
+"""
 Socket.IO service for real-time notifications
 Manages WebSocket connections and emits events for real-time updates
 """
