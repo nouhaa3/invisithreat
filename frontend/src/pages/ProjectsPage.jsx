@@ -392,7 +392,15 @@ function AdminToolbarSelect({ value, onChange, options }) {
   )
 }
 
-function AdminProjectCard({ project, onView }) {
+function AdminProjectCard({
+  project,
+  selected,
+  disableSelect,
+  deleting,
+  toggling,
+  onToggleSelect,
+  onView,
+}) {
   const status = project.status || 'archived'
   const ownerAvatarSrc = resolveProfilePictureSrc(project.owner_profile_picture)
   const ownerInitials = getInitials(project.owner_name)
@@ -416,40 +424,55 @@ function AdminProjectCard({ project, onView }) {
       className="rounded-2xl p-4 sm:p-5 flex flex-col gap-4 min-h-[245px]"
       style={{
         background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))',
-        border: '1px solid rgba(255,255,255,0.06)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 25px rgba(0,0,0,0.22)',
+        border: selected ? '1px solid rgba(255,107,43,0.35)' : '1px solid rgba(255,255,255,0.06)',
+        boxShadow: selected
+          ? 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 25px rgba(0,0,0,0.22), 0 0 22px rgba(255,107,43,0.16)'
+          : 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 25px rgba(0,0,0,0.22)',
       }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="min-w-0">
-            <p className="text-white font-semibold text-sm sm:text-base truncate">{project.name}</p>
-            <div className="mt-2 flex items-center gap-2 flex-wrap">
-              <StatusBadge status={status} />
-              <RiskBadge risk={project.global_risk_level} />
-            </div>
-          </div>
+      <div className="flex items-start gap-3">
+        <div className="pt-0.5">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            disabled={disableSelect}
+            className="w-4 h-4 rounded cursor-pointer accent-orange-500 disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label={`Select ${project.name}`}
+          />
         </div>
 
-        <div
-          className="w-11 h-11 rounded-none flex items-center justify-center flex-shrink-0 overflow-hidden"
-          style={{
-            background: 'linear-gradient(145deg, rgba(255,107,43,0.2), rgba(255,140,90,0.08))',
-            border: '1px solid rgba(255,107,43,0.35)',
-            color: '#FFD6C4',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15)',
-          }}
-          title={project.owner_name || 'Project owner'}
-        >
-          {ownerAvatarSrc ? (
-            <img
-              src={ownerAvatarSrc}
-              alt={project.owner_name || 'Project owner'}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <span className="text-xs font-semibold">{ownerInitials}</span>
-          )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-white font-semibold text-sm sm:text-base truncate">{project.name}</p>
+              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                <StatusBadge status={status} />
+                <RiskBadge risk={project.global_risk_level} />
+              </div>
+            </div>
+
+            <div
+              className="w-11 h-11 rounded-none flex items-center justify-center flex-shrink-0 overflow-hidden"
+              style={{
+                background: 'linear-gradient(145deg, rgba(255,107,43,0.2), rgba(255,140,90,0.08))',
+                border: '1px solid rgba(255,107,43,0.35)',
+                color: '#FFD6C4',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15)',
+              }}
+              title={project.owner_name || 'Project owner'}
+            >
+              {ownerAvatarSrc ? (
+                <img
+                  src={ownerAvatarSrc}
+                  alt={project.owner_name || 'Project owner'}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-xs font-semibold">{ownerInitials}</span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -469,6 +492,7 @@ function AdminProjectCard({ project, onView }) {
         <div className="flex justify-end mt-3">
           <button
             onClick={onView}
+            disabled={deleting || toggling}
             className="px-2 py-0.5 text-xs font-normal transition-all"
             style={{ color: 'rgba(255,255,255,0.6)' }}
             onMouseEnter={(e) => {
@@ -1517,6 +1541,11 @@ export default function ProjectsPage() {
                       <AdminProjectCard
                         key={p.id}
                         project={p}
+                        selected={selectedProjectIds.has(p.id)}
+                        disableSelect={bulkDeleting || deletingId === p.id || togglingId === p.id}
+                        deleting={bulkDeleting || deletingId === p.id}
+                        toggling={bulkDeleting || togglingId === p.id}
+                        onToggleSelect={() => toggleProjectSelection(p.id)}
                         onView={() => setViewingProject(p)}
                       />
                     ))}
