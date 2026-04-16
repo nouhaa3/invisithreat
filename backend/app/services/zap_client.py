@@ -273,6 +273,19 @@ class ZapAscanAPI:
         return result
 
 
+class ZapPscanAPI:
+    """OWASP ZAP Passive Scanner API operations."""
+
+    def __init__(self, client: "ZapClient"):
+        self.client = client
+
+    def records_to_scan(self) -> int:
+        """Return number of records remaining in passive scanner queue."""
+        result = self.client._api_call("pscan", "recordsToScan")
+        value = result.get("recordsToScan")
+        return int(str(value)) if str(value).isdigit() else 0
+
+
 class ZapClient:
     """
     Client for interacting with OWASP ZAP Running in daemon mode.
@@ -305,6 +318,7 @@ class ZapClient:
         self.core = ZapCoreAPI(self)
         self.spider = ZapSpiderAPI(self)
         self.ascan = ZapAscanAPI(self)
+        self.pscan = ZapPscanAPI(self)
         
         logger.info(f"ZapClient initialized for {self.base_url}")
     

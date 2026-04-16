@@ -1,4 +1,4 @@
-﻿from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum
+﻿from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime, UTC
@@ -47,6 +47,10 @@ class ProjectVisibility(str, enum.Enum):
 
 class Project(Base):
     __tablename__ = "projects"
+    __table_args__ = (
+        Index("ix_projects_created_at", "created_at"),
+        Index("ix_projects_status", "status"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
@@ -70,6 +74,9 @@ class Project(Base):
 
 class Scan(Base):
     __tablename__ = "scans"
+    __table_args__ = (
+        Index("ix_scans_project_started_at", "project_id", "started_at"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)

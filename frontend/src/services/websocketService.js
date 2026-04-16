@@ -2,6 +2,7 @@
 
 let socket = null
 let currentIdentity = null
+let lastTimeoutLogAt = 0
 const notificationListeners = new Map() // Track listeners to clean them up properly
 
 const getSocketBaseUrl = () => {
@@ -113,7 +114,19 @@ export const initializeWebSocket = (userId, userRole, userEmail) => {
   })
 
   socket.on('connect_error', (error) => {
-    console.error('[WS-CONNECT-ERROR] Socket.IO connection error:', error?.message || error)
+    const message = String(error?.message || error || '')
+    const now = Date.now()
+
+    // Timeout spikes are common during backend restarts / Vite HMR swaps.
+    if (message.toLowerCase().includes('timeout')) {
+      if (now - lastTimeoutLogAt > 30000) {
+        lastTimeoutLogAt = now
+        console.warn('[WS-CONNECT-WARN] Temporary Socket.IO timeout, reconnecting...')
+      }
+      return
+    }
+
+    console.error('[WS-CONNECT-ERROR] Socket.IO connection error:', message)
   })
 
   socket.on('error', (error) => {
@@ -127,10 +140,6 @@ export const initializeWebSocket = (userId, userRole, userEmail) => {
   socket.io.on('reconnect', (attempt) => {
     console.log(`[WS-RECONNECT] Successful after ${attempt} attempts`)
     emitIdentify()
-  })
-
-  socket.on('connect_error', (error) => {
-    console.error('[WS-CONNECT-ERROR] WebSocket connection error:', error?.message || error)
   })
 
   return socket
@@ -183,4 +192,16 @@ export const offNotification = (callbackOrCleanup) => {
   if (typeof callbackOrCleanup === 'function') {
     callbackOrCleanup()
   }
+}
+
+// Ensure old sockets are closed during Vite hot reloads so stale managers do not
+// keep reconnecting in the background and spam timeout errors.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    try {
+      closeWebSocket()
+    } catch {
+      // Ignore cleanup failures during module replacement.
+    }
+  })
 }

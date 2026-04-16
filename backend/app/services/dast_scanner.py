@@ -11,7 +11,7 @@ from typing import Callable, Optional
 from urllib.parse import urlparse
 
 from app.services.owasp_zap import ensure_zap_running
-from app.services.zap_client import ZapClient
+from app.services.zap_client import ZapApiException, ZapClient
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +29,15 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-DEFAULT_SPIDER_TIMEOUT = _env_int("DAST_SPIDER_TIMEOUT", 600)
-DEFAULT_ASCAN_TIMEOUT = _env_int("DAST_ASCAN_TIMEOUT", 1800)
-DEFAULT_NO_PROGRESS_TIMEOUT = _env_int("DAST_NO_PROGRESS_TIMEOUT", 420)
+def _env_int_capped(name: str, default: int, max_value: int) -> int:
+    """Read int env var while enforcing an upper bound for predictable runtimes."""
+    return min(_env_int(name, default), max_value)
+
+
+DEFAULT_SPIDER_TIMEOUT = _env_int_capped("DAST_SPIDER_TIMEOUT", 180, 300)
+DEFAULT_ASCAN_TIMEOUT = _env_int_capped("DAST_ASCAN_TIMEOUT", 300, 600)
+DEFAULT_NO_PROGRESS_TIMEOUT = _env_int_capped("DAST_NO_PROGRESS_TIMEOUT", 120, 240)
+DEFAULT_PASSIVE_WAIT_SECONDS = _env_int_capped("DAST_PASSIVE_WAIT_SECONDS", 20, 60)
 
 
 def _validate_target_url(target_url: str) -> None:
@@ -88,14 +94,36 @@ def _build_severity_distribution(findings: list[dict]) -> dict:
     return distribution
 
 
-def _safe_fetch_alerts(client: ZapClient) -> list[dict]:
+def _safe_fetch_alerts(client: ZapClient, base_url: str | None = None) -> list[dict]:
     try:
-        alerts_resp = client._api_call("core", "alerts")
+        if base_url:
+            alerts_resp = client.core.alerts(baseurl=base_url)
+        else:
+            alerts_resp = client.core.alerts()
         alerts = alerts_resp.get("alerts", []) if isinstance(alerts_resp, dict) else []
         return alerts if isinstance(alerts, list) else []
-    except Exception:
+    except ZapApiException:
         logger.exception("Failed to fetch alerts from ZAP after scan interruption")
         return []
+
+
+async def _wait_for_passive_scan(client: ZapClient, timeout_seconds: int) -> None:
+    """Wait briefly for passive scan backlog to drain before reading alerts."""
+    if timeout_seconds <= 0:
+        return
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            pending = client.pscan.records_to_scan()
+        except ZapApiException:
+            # If pscan endpoint is unavailable, do not block scan finalization.
+            return
+
+        if pending <= 0:
+            return
+
+        await asyncio.sleep(1)
 
 
 def _build_result_payload(
@@ -126,6 +154,7 @@ async def run_dast_scan_async(
     spider_timeout: int = DEFAULT_SPIDER_TIMEOUT,
     ascan_timeout: int = DEFAULT_ASCAN_TIMEOUT,
     no_progress_timeout: int = DEFAULT_NO_PROGRESS_TIMEOUT,
+    passive_wait_seconds: int = DEFAULT_PASSIVE_WAIT_SECONDS,
 ) -> dict:
     _validate_target_url(target_url)
 
@@ -186,7 +215,7 @@ async def run_dast_scan_async(
             if now - spider_last_change_at >= no_progress_timeout:
                 try:
                     client.spider.stop_scan(spider_id)
-                except Exception:
+                except ZapApiException:
                     pass
                 raise RuntimeError("Spider scan stalled with no progress.")
 
@@ -195,6 +224,14 @@ async def run_dast_scan_async(
         discovered_urls = client.spider.results(spider_id)
         if not discovered_urls:
             raise RuntimeError("Spider found 0 URLs. Target may be unreachable from ZAP.")
+
+        _emit(progress_callback, {
+            "stage": "finalizing_passive_scan",
+            "spider_progress": 100,
+            "active_scan_progress": 0,
+            "alerts_found": 0,
+        })
+        await _wait_for_passive_scan(client, passive_wait_seconds)
 
         target_host = urlparse(target_url).hostname
         same_host_urls = [u for u in discovered_urls if urlparse(u).hostname == target_host]
@@ -228,20 +265,28 @@ async def run_dast_scan_async(
             if now - ascan_started_at >= ascan_timeout:
                 try:
                     client.ascan.stop_scan(ascan_id)
-                except Exception:
+                except ZapApiException:
                     pass
                 raise RuntimeError("Active scan timed out.")
 
             if now - ascan_last_change_at >= no_progress_timeout:
                 try:
                     client.ascan.stop_scan(ascan_id)
-                except Exception:
+                except ZapApiException:
                     pass
                 raise RuntimeError("Active scan stalled with no progress.")
 
             await asyncio.sleep(3)
 
-        alerts = _safe_fetch_alerts(client)
+        _emit(progress_callback, {
+            "stage": "collecting_alerts",
+            "spider_progress": 100,
+            "active_scan_progress": 100,
+            "alerts_found": 0,
+        })
+        await _wait_for_passive_scan(client, passive_wait_seconds)
+
+        alerts = _safe_fetch_alerts(client, base_url=target_url)
 
         findings = [_normalize_alert(alert, idx) for idx, alert in enumerate(alerts, start=1)]
 
@@ -261,13 +306,14 @@ async def run_dast_scan_async(
             error=None,
         )
 
-    except Exception as exc:
+    except (ZapApiException, RuntimeError, ValueError) as exc:
         logger.exception("DAST scan failed for %s", target_url)
         message = str(exc)
         recoverable = any(token in message.lower() for token in ("timed out", "stalled"))
 
         if client is not None and recoverable:
-            alerts = _safe_fetch_alerts(client)
+            await _wait_for_passive_scan(client, passive_wait_seconds)
+            alerts = _safe_fetch_alerts(client, base_url=target_url)
             findings = [_normalize_alert(alert, idx) for idx, alert in enumerate(alerts, start=1)]
             warning = f"Scan completed with warnings: {message}"
             _emit(progress_callback, {

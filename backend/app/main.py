@@ -21,11 +21,24 @@ from app.services.socketio_service import sio
 
 logger = logging.getLogger(__name__)
 
+ALLOWED_ORIGINS = list(
+    dict.fromkeys(
+        origin
+        for origin in [
+            (settings.FRONTEND_URL or "").strip().rstrip("/"),
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:3002",
+        ]
+        if origin
+    )
+)
+
 # ─── Scheduler Setup ──────────────────────────────────────────────────────────
 scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     """Manage app startup and shutdown"""
     # Startup
     scheduler.start()
@@ -48,8 +61,7 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
     logger.info("[OK] Background job scheduler stopped")
 
-# Apply database migrations on startup
-# run_migrations()  # TODO: Fix Alembic revision conflict - database already initialized
+# Startup migrations are temporarily disabled pending Alembic conflict resolution.
 
 app_fastapi = FastAPI(
     title=settings.APP_NAME,
@@ -69,12 +81,7 @@ app_fastapi.add_middleware(SlowAPIMiddleware)
 # CORS middleware - restricted configuration for security (add last to apply first)
 app_fastapi.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.FRONTEND_URL,
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:3002",
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
@@ -95,19 +102,8 @@ async def root():
 # Wrap FastAPI with Socket.IO ASGI app
 _asgi_app = ASGIApp(sio, app_fastapi)
 
-# Apply CORS middleware to the ASGIApp wrapper
-app = CORSMiddleware(
-    _asgi_app,
-    allow_origins=[
-        settings.FRONTEND_URL,
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:3002",
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
-)
+# Socket.IO handles CORS for /socket.io requests; FastAPI CORS covers API routes.
+app = _asgi_app
 
 if __name__ == "__main__":
     import uvicorn

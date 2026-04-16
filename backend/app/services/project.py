@@ -1,5 +1,7 @@
+from datetime import UTC, datetime
+
 from sqlalchemy import inspect, text
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from fastapi import HTTPException, status
 from app.models.scan import Project, Scan, ScanStatus
 from app.models.user import User
@@ -42,8 +44,8 @@ def get_projects_for_user(db: Session, user: User) -> list[Project]:
                 db.query(ProjectMember.project_id).filter(ProjectMember.user_id == user.id)
             )
         )
-    ).all()
-    return sorted(all_projects, key=lambda p: p.created_at, reverse=True)
+    ).order_by(Project.created_at.desc()).all()
+    return all_projects
 
 
 def get_projects_for_security_scope(db: Session, user: User) -> list[Project]:
@@ -194,8 +196,8 @@ def get_admin_projects_management(db: Session) -> dict:
         db.query(Project)
         .options(
             joinedload(Project.owner),
-            joinedload(Project.members).joinedload(ProjectMember.user),
-            joinedload(Project.scans).joinedload(Scan.risk_score),
+            selectinload(Project.members).joinedload(ProjectMember.user),
+            selectinload(Project.scans).joinedload(Scan.risk_score),
         )
         .order_by(Project.created_at.desc())
         .all()
@@ -322,7 +324,7 @@ def get_security_projects_overview(db: Session, user: User) -> dict:
         db.query(Project)
         .options(
             joinedload(Project.owner),
-            joinedload(Project.scans).joinedload(Scan.risk_score),
+            selectinload(Project.scans).joinedload(Scan.risk_score),
         )
         .filter(Project.id.in_(project_ids))
         .order_by(Project.created_at.desc())
@@ -342,7 +344,7 @@ def get_security_projects_overview(db: Session, user: User) -> dict:
     for project in projects:
         scans_sorted = sorted(
             project.scans,
-            key=lambda s: (s.completed_at or s.started_at or project.created_at),
+            key=lambda scan: scan.completed_at or scan.started_at or datetime.min.replace(tzinfo=UTC),
             reverse=True,
         )
 

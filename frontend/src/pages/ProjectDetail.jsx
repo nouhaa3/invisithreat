@@ -1126,8 +1126,8 @@ export default function ProjectDetail() {
         <main className="flex-1 overflow-auto flex items-center justify-center">
           <div className="text-center">
             <p className="text-red-400 text-sm mb-4">{error}</p>
-            <button onClick={() => navigate('/dashboard')} className="text-white/40 text-sm hover:text-white/70 transition-colors">
-              Back to Dashboard
+            <button onClick={() => navigate('/projects')} className="text-white/40 text-sm hover:text-white/70 transition-colors">
+              Back to projects
             </button>
           </div>
         </main>
@@ -1143,13 +1143,13 @@ export default function ProjectDetail() {
           {/* Header */}
           <div className="mb-8 animate-slide-up">
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate('/projects')}
               className="flex items-center gap-2 text-white/30 hover:text-white/60 text-sm mb-5 transition-colors"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="15 18 9 12 15 6" />
               </svg>
-              Back to Dashboard
+              Back to projects
             </button>
 
             <div className="flex items-start justify-between gap-4">

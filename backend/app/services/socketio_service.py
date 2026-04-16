@@ -7,12 +7,32 @@ from datetime import datetime
 from typing import Dict
 import socketio
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
+
+
+def _socket_allowed_origins() -> list[str]:
+    """Return stable, deduplicated origins accepted by Socket.IO CORS."""
+    candidates = [
+        (settings.FRONTEND_URL or "").strip().rstrip("/"),
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+    ]
+    seen = set()
+    origins: list[str] = []
+    for origin in candidates:
+        if not origin or origin in seen:
+            continue
+        seen.add(origin)
+        origins.append(origin)
+    return origins
 
 # Create Socket.IO instance
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins='*',
+    cors_allowed_origins=_socket_allowed_origins(),
     logger=False,  # Reduce verbosity
     engineio_logger=False,
 )

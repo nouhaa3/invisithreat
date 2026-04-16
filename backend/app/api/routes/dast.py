@@ -16,6 +16,7 @@ from app.db.session import SessionLocal, get_db
 from app.models.scan import Scan, ScanMethod, ScanStatus
 from app.models.user import User
 from app.services.dast_scanner import run_dast_scan_async
+from app.services.zap_client import ZapApiException, ZapClient
 from app.services.project import get_project_accessible
 from app.services.risk_score import get_or_create_scan_risk_score
 
@@ -53,11 +54,11 @@ def _parse_iso_utc(value: str | None) -> datetime | None:
 
 
 def _get_stale_timeout_seconds() -> int:
-    raw = (os.getenv("DAST_STATUS_STALE_SECONDS") or os.getenv("DAST_NO_PROGRESS_TIMEOUT") or "900").strip()
+    raw = (os.getenv("DAST_STATUS_STALE_SECONDS") or os.getenv("DAST_NO_PROGRESS_TIMEOUT") or "300").strip()
     try:
-        return max(60, int(raw))
+        return min(600, max(60, int(raw)))
     except ValueError:
-        return 900
+        return 300
 
 
 def _finalize_if_stale_running_scan(db: Session, scan: Scan, progress: dict) -> dict:
@@ -131,6 +132,133 @@ def _build_results_payload(findings: list[dict]) -> dict:
     }
 
 
+def _map_zap_risk(risk: str | None) -> str:
+    normalized = (risk or "").strip().lower()
+    if normalized == "high":
+        return "high"
+    if normalized == "medium":
+        return "medium"
+    if normalized == "low":
+        return "low"
+    return "info"
+
+
+def _normalize_zap_alert(alert: dict, index: int) -> dict:
+    description = alert.get("description") or alert.get("desc") or "No description provided by ZAP."
+    recommendation = alert.get("solution") or f"Review and remediate: {alert.get('name', 'Unknown alert')}"
+    endpoint = alert.get("url") or ""
+    severity = _map_zap_risk(alert.get("risk"))
+
+    return {
+        "id": f"dast-{index}",
+        "rule_id": f"DAST_{index}",
+        "title": alert.get("name") or "Unknown DAST finding",
+        "severity": severity,
+        "category": "dast",
+        "description": description,
+        "recommendation": recommendation,
+        "file": endpoint,
+        "line": 0,
+        "code": description[:200],
+        "source_tool": "owasp_zap",
+    }
+
+
+def _fetch_zap_findings_for_target(target_url: str | None) -> list[dict]:
+    try:
+        client = ZapClient()
+        alerts_resp = client.core.alerts(baseurl=target_url or None)
+        alerts = alerts_resp.get("alerts", []) if isinstance(alerts_resp, dict) else []
+        if not isinstance(alerts, list):
+            return []
+        return [_normalize_zap_alert(alert, idx) for idx, alert in enumerate(alerts, start=1)]
+    except ZapApiException:
+        logger.exception("Failed to fetch ZAP findings for target %s", target_url)
+        return []
+
+
+def _recover_running_scan_from_zap(db: Session, scan: Scan, progress: dict) -> dict:
+    """Recover scans stuck in running state after backend reload/interruption.
+
+    If ZAP has already completed its work, finalize the DB scan immediately
+    with recovered findings so the UI no longer remains in running forever.
+    """
+    if scan.status != ScanStatus.running:
+        return progress
+
+    last_update = _parse_iso_utc(progress.get("_updated_at"))
+    if last_update and (datetime.now(UTC) - last_update).total_seconds() < 20:
+        return progress
+
+    try:
+        client = ZapClient()
+        if not client.is_running():
+            return progress
+
+        spider_progress = client.spider.status()
+        active_scans = client.ascan.scans()
+
+        running_active_scan = False
+        active_progress = 100
+        if isinstance(active_scans, list) and active_scans:
+            parsed_progresses: list[int] = []
+            for item in active_scans:
+                try:
+                    item_progress = int(str(item.get("progress", "0")))
+                except (ValueError, TypeError):
+                    item_progress = 0
+                parsed_progresses.append(max(0, min(100, item_progress)))
+
+                state = str(item.get("state", "")).strip().upper()
+                if item_progress < 100 or state not in {"FINISHED", "COMPLETE", "COMPLETED", "STOPPED"}:
+                    running_active_scan = True
+
+            if parsed_progresses:
+                active_progress = min(parsed_progresses)
+
+        if running_active_scan:
+            live_progress = _stamp_progress({
+                "stage": "active_scan_in_progress",
+                "spider_progress": max(0, min(100, spider_progress)),
+                "active_scan_progress": active_progress,
+                "alerts_found": progress.get("alerts_found", 0),
+                "error": progress.get("error"),
+            })
+            _progress_cache[str(scan.id)] = live_progress
+            return live_progress
+
+        if spider_progress >= 100:
+            findings = _fetch_zap_findings_for_target(scan.repo_url)
+            now = datetime.now(UTC)
+
+            scan.results_json = json.dumps(_build_results_payload(findings))
+            scan.status = ScanStatus.completed
+            scan.completed_at = now
+
+            recovery_note = "Recovered DAST results after background interruption."
+            if not scan.error_message:
+                scan.error_message = recovery_note
+            elif recovery_note not in scan.error_message:
+                scan.error_message = f"{scan.error_message} | {recovery_note}"
+
+            db.commit()
+            get_or_create_scan_risk_score(db, scan)
+
+            completed_progress = _stamp_progress({
+                "stage": "completed",
+                "spider_progress": 100,
+                "active_scan_progress": 100,
+                "alerts_found": len(findings),
+                "error": scan.error_message,
+            })
+            _progress_cache[str(scan.id)] = completed_progress
+            return completed_progress
+    except ZapApiException:
+        logger.exception("Unable to recover running DAST scan %s from ZAP state", scan.id)
+
+    return progress
+
+
 def run_dast_scan_background(scan_id: str, target_url: str) -> None:
     db = SessionLocal()
     try:
@@ -164,7 +292,7 @@ def run_dast_scan_background(scan_id: str, target_url: str) -> None:
             "alerts_found": len(findings),
             "error": result.get("error"),
         })
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.exception("Background DAST scan failed: %s", scan_id)
         scan = db.query(Scan).filter(Scan.id == UUID(scan_id), Scan.method == ScanMethod.dast).first()
         if scan:
@@ -247,6 +375,7 @@ async def get_dast_scan_status(
     get_project_accessible(db, scan.project_id, current_user)
 
     progress = _progress_cache.get(scan_id, {})
+    progress = _recover_running_scan_from_zap(db, scan, progress)
     progress = _finalize_if_stale_running_scan(db, scan, progress)
     results = None
     if scan.results_json:
@@ -328,6 +457,25 @@ async def list_project_dast_scans(
         .order_by(Scan.started_at.desc())
         .all()
     )
+
+    updated_any = False
+    for scan in scans:
+        if scan.status != ScanStatus.running:
+            continue
+        original_status = scan.status
+        progress = _progress_cache.get(str(scan.id), {})
+        progress = _recover_running_scan_from_zap(db, scan, progress)
+        _finalize_if_stale_running_scan(db, scan, progress)
+        if scan.status != original_status:
+            updated_any = True
+
+    if updated_any:
+        scans = (
+            db.query(Scan)
+            .filter(Scan.project_id == project_uuid, Scan.method == ScanMethod.dast)
+            .order_by(Scan.started_at.desc())
+            .all()
+        )
 
     return {
         "total": len(scans),
