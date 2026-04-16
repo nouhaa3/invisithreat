@@ -63,19 +63,24 @@ services:
         condition: service_healthy
       zap:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - ZAP_ENABLED=true
       - ZAP_URL=http://zap:8080
-      - DAST_SPIDER_TIMEOUT=1200
-      - DAST_ASCAN_TIMEOUT=3600
-      - DAST_NO_PROGRESS_TIMEOUT=900
+      - DAST_SPIDER_TIMEOUT=90
+      - DAST_ASCAN_TIMEOUT=180
+      - DAST_NO_PROGRESS_TIMEOUT=60
+      - DAST_PASSIVE_WAIT_SECONDS=8
+      - DAST_SPIDER_RECURSE=true
+      - DAST_ASCAN_RECURSE=false
       - DB_POOL_SIZE=2
       - DB_MAX_OVERFLOW=1
       - DB_POOL_TIMEOUT=30
       - DB_POOL_RECYCLE=1800
     networks:
       - invisithreat-network
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 
   # React Frontend
   frontend:

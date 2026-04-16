@@ -816,6 +816,8 @@ export default function ProjectDetail() {
   })
   const pollRef = useRef(null)
   const vulnerabilityPollRef = useRef(null)
+  const vulnerabilityInFlightRef = useRef(false)
+  const lastWorkflowErrorLogAtRef = useRef(0)
 
   const syncActiveDastStatuses = useCallback(async (scanList) => {
     const activeDast = (scanList || []).filter(
@@ -836,6 +838,11 @@ export default function ProjectDetail() {
   }, [id])
 
   const loadVulnerabilityWorkflow = useCallback(async () => {
+    if (vulnerabilityInFlightRef.current) return null
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return null
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return null
+
+    vulnerabilityInFlightRef.current = true
     try {
       const snapshot = await getVulnerabilityWorkflow(id)
       setVulnerabilityWorkflow({
@@ -845,8 +852,14 @@ export default function ProjectDetail() {
       })
       return snapshot
     } catch (err) {
-      console.debug('Workflow snapshot error:', err)
+      const now = Date.now()
+      if (now - lastWorkflowErrorLogAtRef.current > 30000) {
+        lastWorkflowErrorLogAtRef.current = now
+        console.warn('Workflow snapshot temporary network issue')
+      }
       return null
+    } finally {
+      vulnerabilityInFlightRef.current = false
     }
   }, [id])
 
@@ -909,7 +922,7 @@ export default function ProjectDetail() {
 
   useEffect(() => {
     if (!vulnerabilityPollRef.current) {
-      vulnerabilityPollRef.current = setInterval(loadVulnerabilityWorkflow, 8000)
+      vulnerabilityPollRef.current = setInterval(loadVulnerabilityWorkflow, 12000)
     }
     return () => {
       if (vulnerabilityPollRef.current) {
@@ -1172,38 +1185,29 @@ export default function ProjectDetail() {
                 {isOwner && (
                   <button
                     onClick={() => navigate(`/projects/${project.id}/members`)}
-                    className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-white/5 text-white/20 hover:text-white/60"
-                    style={{ border: '1px solid rgba(255,255,255,0.06)' }}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-90 active:scale-[0.97]"
+                    style={{ background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.3)', color: '#FF6B2B' }}
                     title="Manage members"
                   >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                       <circle cx="9" cy="7" r="4" />
                       <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
                     </svg>
-                  </button>
-                )}
-
-                {canEdit && (
-                  <button
-                    onClick={() => navigate('/scans/new')}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98]"
-                    style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 14px rgba(255,107,43,0.2)' }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                    New Scan
+                    Members
                   </button>
                 )}
 
                 {isOwner && (
                   <button
                     onClick={() => navigate(`/projects/${project.id}/edit`)}
-                    className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:bg-white/5 text-white/60 hover:text-white"
-                    style={{ border: '1px solid rgba(255,255,255,0.06)' }}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-90 active:scale-[0.97]"
+                    style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}
                     title="Edit project"
                   >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                    </svg>
                     Edit
                   </button>
                 )}
@@ -1211,9 +1215,15 @@ export default function ProjectDetail() {
                 {isOwner && (
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
-                    className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:bg-red-500/10 text-red-400/60 hover:text-red-400"
-                    style={{ border: '1px solid rgba(255,255,255,0.06)' }}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-90 active:scale-[0.97]"
+                    style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444' }}
                   >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      <line x1="10" y1="11" x2="10" y2="17" />
+                      <line x1="14" y1="11" x2="14" y2="17" />
+                    </svg>
                     Delete
                   </button>
                 )}
