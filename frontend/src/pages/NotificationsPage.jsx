@@ -6,17 +6,6 @@ import { useAuth } from '../context/AuthContext'
 import { useRelativeTime } from '../hooks/useRelativeTime'
 import { adminApproveRoleRequest, adminChangeRole, adminGetUsers } from '../services/adminService'
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function timeAgo(iso) {
-  const diff = Date.now() - new Date(iso).getTime()
-  if (diff < 60_000)      return 'Just now'
-  if (diff < 3_600_000)   return `${Math.floor(diff / 60_000)}m ago`
-  if (diff < 86_400_000)  return `${Math.floor(diff / 3_600_000)}h ago`
-  if (diff < 604_800_000) return `${Math.floor(diff / 86_400_000)}d ago`
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
 // Real-time timestamp component
 function RelativeTime({ iso }) {
   const relativeTime = useRelativeTime(iso)
@@ -355,29 +344,27 @@ export default function NotificationsPage() {
 
   return (
     <AppLayout>
-      <div className="px-8 py-8">
+      <div className="ui-container">
 
         {/* ── Header ── */}
-        <div className="flex items-start justify-between mb-6">
+        <div className="ui-hero mb-6 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-white">Notifications</h1>
-            <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            <h1 className="text-3xl font-bold text-white">Notifications</h1>
+            <p className="text-sm mt-2 text-white/50">
               {totalUnread > 0
                 ? `${totalUnread} unread notification${totalUnread !== 1 ? 's' : ''}`
                 : 'All caught up!'}
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="ui-chip">Real-time alert stream</span>
+              <span className="ui-chip">Trust-first moderation</span>
+              <span className="ui-chip">Actionable workflow updates</span>
+            </div>
           </div>
           {unreadCount > 0 && (
             <button
               onClick={markAllRead}
-              className="flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg transition-all"
-              style={{
-                background: 'rgba(255,107,43,0.1)',
-                border: '1px solid rgba(255,107,43,0.2)',
-                color: '#FF8C5A',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,107,43,0.18)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,107,43,0.1)' }}
+              className="flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl transition-all bg-brand-orange/10 border border-brand-orange/30 text-brand-orange-light hover:bg-brand-orange/20"
             >
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path d="M20 6 9 17l-5-5" />
@@ -395,12 +382,11 @@ export default function NotificationsPage() {
               <button
                 key={f}
                 onClick={() => setActiveFilter(f)}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                style={{
-                  background: isActive ? 'rgba(255,107,43,0.1)' : 'rgba(255,255,255,0.03)',
-                  border:     isActive ? '1px solid rgba(255,107,43,0.25)' : '1px solid rgba(255,255,255,0.06)',
-                  color:      isActive ? '#FF8C5A' : 'rgba(255,255,255,0.35)',
-                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                  isActive
+                    ? 'bg-brand-orange/10 border-brand-orange/30 text-brand-orange-light'
+                    : 'bg-white/5 border-white/10 text-white/45 hover:text-white/70'
+                }`}
               >
                 {FILTER_LABELS[f]}
               </button>
@@ -411,8 +397,7 @@ export default function NotificationsPage() {
         {/* ── List ── */}
         {filtered.length === 0 ? (
           <div
-            className="flex flex-col items-center justify-center py-20 rounded-2xl"
-            style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}
+            className="ui-card flex flex-col items-center justify-center py-20 rounded-2xl"
           >
             <div
               className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
@@ -423,10 +408,10 @@ export default function NotificationsPage() {
                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
             </div>
-            <p className="text-base font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <p className="text-base font-semibold text-white/55">
               {activeFilter === 'All' ? 'No notifications yet' : `No ${FILTER_LABELS[activeFilter].toLowerCase()} notifications`}
             </p>
-            <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.15)' }}>
+            <p className="text-sm mt-1 text-white/30">
               {activeFilter === 'Unread' ? 'You\'re all caught up!' : 'Nothing here yet.'}
             </p>
           </div>

@@ -17,6 +17,7 @@ import SettingsPage from './pages/SettingsPage'
 import NotificationsPage from './pages/NotificationsPage'
 import AuditLogsPage from './pages/AuditLogsPage'
 import GitHubOAuthCallbackPage from './pages/GitHubOAuthCallbackPage'
+import LandingPage from './pages/LandingPage'
 
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth()
@@ -45,7 +46,7 @@ export default function App() {
       <NotificationProvider>
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
           <Route path="/verify-email" element={<PublicRoute><VerifyEmailPage /></PublicRoute>} />

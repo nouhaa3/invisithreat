@@ -12,7 +12,7 @@ const ACCENT = '#ff8c5a'
 const choiceClasses = (active, { compact = false, grow = false } = {}) => [
   'text-left rounded-xl px-4 py-2.5 flex items-center gap-3 transition-all duration-150',
   'border backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-0',
-  `focus-visible:ring-[${ACCENT}] focus-visible:ring-opacity-60`,
+  'focus-visible:ring-brand-orange/60',
   active
     ? `border-[${ACCENT}] border-opacity-50 bg-[rgba(255,140,90,0.08)]`
     : 'border-white/10 bg-white/5 hover:border-[rgba(255,140,90,0.4)] hover:bg-[rgba(255,140,90,0.06)]',

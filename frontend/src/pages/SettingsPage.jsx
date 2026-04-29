@@ -1196,22 +1196,27 @@ export default function SettingsPage() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col" style={{ flex: 1, minHeight: 0, background: '#080808' }}>
+      <div className="flex flex-col ui-page" style={{ flex: 1, minHeight: 0 }}>
 
         {/* Top header */}
-        <div className="flex-shrink-0 px-8 py-6" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-          <h1 className="text-xl font-bold text-white">Settings</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+        <div className="flex-shrink-0 px-6 md:px-8 py-6 border-b border-white/10">
+          <h1 className="text-2xl font-bold text-white">Settings</h1>
+          <p className="text-sm mt-1 text-white/45">
             Manage your account, integrations, and platform preferences.
           </p>
+          <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+            <span className="ui-chip">Secure account controls</span>
+            <span className="ui-chip">Privacy-focused configuration</span>
+            <span className="ui-chip">Enterprise-ready integrations</span>
+          </div>
         </div>
 
         {/* Sidebar + content */}
         <div className="flex" style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
           {/* Sidebar */}
-          <div className="flex-shrink-0 flex flex-col gap-4 p-4 overflow-y-auto"
-            style={{ width: 210, borderRight: '1px solid rgba(255,255,255,0.05)' }}>
+          <div className="flex-shrink-0 flex flex-col gap-4 p-4 overflow-y-auto border-r border-white/10"
+            style={{ width: 230 }}>
             {NAV_GROUPS.map(g => (
               <div key={g.label}>
                 <p className="text-[10px] font-bold uppercase tracking-widest px-3 mb-1.5"
@@ -1226,8 +1231,8 @@ export default function SettingsPage() {
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto" style={{ minWidth: 0, padding: '40px 100px' }}>
-            <div style={{ maxWidth: 720 }}>
+          <div className="flex-1 overflow-y-auto px-4 sm:px-8 lg:px-16 py-8" style={{ minWidth: 0 }}>
+            <div className="ui-card p-5 sm:p-7" style={{ maxWidth: 860 }}>
               {PANELS[tab]}
             </div>
           </div>

@@ -1,7 +1,5 @@
 import PropTypes from 'prop-types'
 
-const ACCENT = '#ff8c5a'
-
 const PROJECT_TYPES = [
   { value: 'Web Application', title: 'Web Application', desc: 'Browser-based frontends & SPAs' },
   { value: 'Mobile Application', title: 'Mobile Application', desc: 'iOS/Android clients and APIs' },
@@ -16,18 +14,17 @@ function Option({ option, active, onSelect }) {
       type="button"
       onClick={() => onSelect(option.value)}
       aria-pressed={active}
-      className="w-full text-left rounded-xl px-4 py-2.5 flex items-center gap-3 transition-all"
-      style={{
-        background: active ? 'rgba(255,107,43,0.12)' : 'rgba(255,255,255,0.03)',
-        border: active ? '1px solid rgba(255,107,43,0.35)' : '1px solid rgba(255,255,255,0.07)',
-        color: active ? '#FF8C5A' : 'rgba(255,255,255,0.35)',
-      }}
+      className={`w-full text-left rounded-xl px-4 py-3 flex items-center gap-3 transition-all border ${
+        active
+          ? 'border-brand-orange/40 bg-brand-orange/10 text-brand-orange-light shadow-orange-sm'
+          : 'border-white/10 bg-white/5 text-white/60 hover:border-white/20 hover:bg-white/10'
+      }`}
     >
       <div className="flex flex-col">
         <span className="text-sm font-semibold">
           {option.title}
         </span>
-        <span className="text-xs text-white/40">{option.desc}</span>
+        <span className="text-xs text-white/45">{option.desc}</span>
       </div>
     </button>
   )

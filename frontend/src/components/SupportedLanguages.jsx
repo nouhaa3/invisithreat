@@ -156,12 +156,8 @@ export default function SupportedLanguages() {
 
   const LanguageCard = ({ lang, idx, isExpanded }) => (
     <div
-      className="rounded-2xl p-5 cursor-pointer transition-all duration-300 hover:scale-105"
-      style={{
-        background: "rgba(255,255,255,0.02)",
-        border: `2px solid ${lang.color}`,
-        borderOpacity: "0.2",
-      }}
+      className="card card-hover p-5 cursor-pointer transition-all duration-300"
+      style={{ border: `1px solid ${lang.color}33` }}
       onClick={() => toggleExpanded(idx)}
     >
       <div className="flex items-start justify-between mb-3">
@@ -214,19 +210,19 @@ export default function SupportedLanguages() {
         </p>
         
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="rounded-lg p-3" style={{ background: "rgba(34, 197, 94, 0.1)", border: "1px solid rgba(34, 197, 94, 0.2)" }}>
+          <div className="card p-3" style={{ border: "1px solid rgba(34, 197, 94, 0.2)" }}>
             <p className="text-2xl font-bold" style={{ color: "#22c55e" }}>{stats.complete}</p>
             <p className="text-xs text-white/50">Production Ready</p>
           </div>
-          <div className="rounded-lg p-3" style={{ background: "rgba(234, 179, 8, 0.1)", border: "1px solid rgba(234, 179, 8, 0.2)" }}>
+          <div className="card p-3" style={{ border: "1px solid rgba(234, 179, 8, 0.2)" }}>
             <p className="text-2xl font-bold" style={{ color: "#eab308" }}>{stats.partial}</p>
             <p className="text-xs text-white/50">Enhanced Support</p>
           </div>
-          <div className="rounded-lg p-3" style={{ background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.2)" }}>
+          <div className="card p-3" style={{ border: "1px solid rgba(239, 68, 68, 0.2)" }}>
             <p className="text-2xl font-bold" style={{ color: "#ef4444" }}>{stats.missing}</p>
             <p className="text-xs text-white/50">Coming Soon</p>
           </div>
-          <div className="rounded-lg p-3" style={{ background: "rgba(255, 107, 43, 0.1)", border: "1px solid rgba(255, 107, 43, 0.2)" }}>
+          <div className="card p-3" style={{ border: "1px solid rgba(255, 107, 43, 0.2)" }}>
             <p className="text-2xl font-bold" style={{ color: "#FF6B2B" }}>{stats.rules}</p>
             <p className="text-xs text-white/50">Total Rules</p>
           </div>

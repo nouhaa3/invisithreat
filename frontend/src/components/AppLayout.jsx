@@ -20,7 +20,7 @@ function SectionLabel({ children, collapsed }) {
   return (
     <p
       className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest select-none"
-      style={{ color: 'rgba(255,255,255,0.18)' }}
+      style={{ color: 'rgba(255,255,255,0.32)' }}
     >
       {children}
     </p>
@@ -35,14 +35,11 @@ function NavItem({ to, icon, children, label, end, collapsed, onNavigate }) {
       onClick={onNavigate}
       title={collapsed ? label : undefined}
       className={({ isActive }) =>
-        `flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-          isActive ? 'text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.03]'
+        `flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border ${
+          isActive
+            ? 'text-brand-orange-light border-brand-orange/30 bg-brand-orange/10 shadow-orange-sm'
+            : 'text-white/45 border-transparent hover:text-white/80 hover:border-white/10 hover:bg-white/[0.04]'
         }`
-      }
-      style={({ isActive }) =>
-        isActive
-          ? { background: 'rgba(255,107,43,0.1)', border: '1px solid rgba(255,107,43,0.15)', color: '#FF8C5A' }
-          : {}
       }
     >
       {icon}
@@ -91,7 +88,7 @@ export default function AppLayout({ children }) {
   }
 
   return (
-    <div className="h-screen flex overflow-hidden relative" style={{ background: 'radial-gradient(1200px 600px at 10% -20%, rgba(255,107,43,0.09), transparent 60%), #080808' }}>
+    <div className="app-shell h-screen flex overflow-hidden relative">
       {/* Mobile backdrop */}
       {mobileOpen && (
         <button
@@ -108,15 +105,15 @@ export default function AppLayout({ children }) {
         }`}
         style={{
           width: `${mobileOpen ? 272 : sidebarWidth}px`,
-          background: 'rgba(12,12,12,0.98)',
-          borderRight: '1px solid rgba(255,255,255,0.05)',
-          boxShadow: '0 18px 45px rgba(0,0,0,0.35)',
+          background: 'rgba(10,10,10,0.92)',
+          borderRight: '1px solid rgba(255,255,255,0.08)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
         }}
       >
         {/* Logo */}
         <div
           className={`py-4 flex items-center flex-shrink-0 ${sidebarOpen ? 'px-5 justify-between' : 'px-3 justify-center'}`}
-          style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+          style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}
         >
           <button
             onClick={handleLogoClick}
@@ -208,10 +205,10 @@ export default function AppLayout({ children }) {
         </nav>
 
         {/* User card — always at bottom */}
-        <div className="px-3 py-3 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+        <div className="px-3 py-3 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           <div
             className={`flex items-center ${sidebarOpen ? 'gap-3 px-3 py-2.5' : 'justify-center px-2 py-2'} rounded-xl`}
-            style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
           >
             <ProfileAvatar user={user} size={32} className="flex-shrink-0" />
             {sidebarOpen && (
@@ -237,11 +234,11 @@ export default function AppLayout({ children }) {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <div className="md:hidden sticky top-0 z-20 px-3 py-2" style={{ background: 'rgba(8,8,8,0.85)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="md:hidden sticky top-0 z-20 px-3 py-2" style={{ background: 'rgba(10,10,10,0.85)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <button
             onClick={() => setMobileOpen(true)}
             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-white/80"
-            style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}
+            style={{ border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="3" y1="6" x2="21" y2="6" />
@@ -250,6 +247,13 @@ export default function AppLayout({ children }) {
             </svg>
             Menu
           </button>
+        </div>
+        <div className="px-3 sm:px-5 pt-3 sm:pt-4">
+          <div className="ui-trust-strip flex flex-wrap items-center gap-2.5 text-[11px]">
+            <span className="ui-chip">Demo mode: safe testing</span>
+            <span className="ui-chip">Platform scan: fast + collaborative</span>
+            <span className="ui-chip">Local-only mode: maximum privacy</span>
+          </div>
         </div>
         {children}
       </div>

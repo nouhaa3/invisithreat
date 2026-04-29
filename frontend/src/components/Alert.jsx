@@ -5,9 +5,9 @@ export default function Alert({ type = 'error', message }) {
   if (!message) return null
 
   const styles = {
-    error: 'bg-red-500/8 border border-red-500/20 text-red-400',
-    success: 'bg-brand-orange/8 border border-brand-orange/20 text-brand-orange-light',
-    info: 'bg-white/5 border border-white/10 text-white/60',
+    error: 'bg-red-500/12 border border-red-500/30 text-red-200',
+    success: 'bg-brand-orange/10 border border-brand-orange/30 text-brand-orange-light',
+    info: 'bg-white/6 border border-white/12 text-white/70',
   }
 
   const icons = {
@@ -29,7 +29,7 @@ export default function Alert({ type = 'error', message }) {
   }
 
   return (
-    <div className={`flex items-start gap-2.5 px-4 py-3 rounded-lg text-sm ${styles[type]}`}>
+    <div className={`flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm ${styles[type]}`}>
       {icons[type]}
       <span>{message}</span>
     </div>

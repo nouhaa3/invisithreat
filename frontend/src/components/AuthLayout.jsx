@@ -5,9 +5,7 @@ import logo from '../assets/logo_invisithreat.png'
  */
 export default function AuthLayout({ children, imageContent }) {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
-      style={{ background: '#080808' }}
-    >
+    <div className="app-shell min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
       {/* Full-page ambient glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full animate-float-slow"
@@ -17,24 +15,24 @@ export default function AuthLayout({ children, imageContent }) {
       </div>
 
       {/* Main card */}
-      <div className="w-full max-w-6xl rounded-3xl overflow-hidden flex shadow-2xl min-h-[720px] relative z-10"
+      <div className="w-full max-w-6xl rounded-[32px] overflow-hidden flex shadow-elevated min-h-[720px] relative z-10"
         style={{
-          background: 'rgba(14,14,14,0.95)',
-          border: '1px solid rgba(255,107,43,0.12)',
-          boxShadow: '0 0 80px rgba(255,107,43,0.08), 0 40px 80px rgba(0,0,0,0.6)',
+          background: 'rgba(12,12,12,0.96)',
+          border: '1px solid rgba(255,107,43,0.18)',
+          boxShadow: '0 0 90px rgba(255,107,43,0.1), 0 40px 90px rgba(0,0,0,0.65)',
         }}
       >
         {/* Left - Animated brand panel */}
         <div className="hidden md:flex md:w-[45%] relative overflow-hidden">
           {/* Base gradient */}
           <div className="absolute inset-0"
-            style={{ background: 'linear-gradient(160deg, #1a0800 0%, #0d0d0d 40%, #120600 100%)' }} />
+            style={{ background: 'linear-gradient(160deg, #1c0b03 0%, #0d0d0d 45%, #140802 100%)' }} />
 
           {/* Animated orbs */}
           <div className="absolute top-[-60px] left-[-60px] w-72 h-72 rounded-full animate-float-slow"
             style={{ background: 'radial-gradient(circle, rgba(255,107,43,0.55) 0%, rgba(232,77,14,0.2) 40%, transparent 70%)', filter: 'blur(20px)' }} />
           <div className="absolute bottom-[-40px] right-[-40px] w-56 h-56 rounded-full animate-float-med animation-delay-2000"
-            style={{ background: 'radial-gradient(circle, rgba(200,60,0,0.5) 0%, rgba(255,80,0,0.2) 40%, transparent 70%)', filter: 'blur(15px)' }} />
+            style={{ background: 'radial-gradient(circle, rgba(255,120,60,0.4) 0%, rgba(255,80,0,0.2) 40%, transparent 70%)', filter: 'blur(18px)' }} />
           <div className="absolute top-[40%] left-[30%] w-40 h-40 rounded-full animate-pulse-glow animation-delay-1000"
             style={{ background: 'radial-gradient(circle, rgba(255,140,80,0.3) 0%, transparent 70%)', filter: 'blur(10px)' }} />
           <div className="absolute top-[20%] right-[10%] w-24 h-24 rounded-full animate-float-fast animation-delay-3000"

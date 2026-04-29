@@ -32,16 +32,17 @@ export function ProfileAvatar({
   return (
     <div
       onClick={onClick}
-      className={`relative flex-shrink-0 overflow-hidden flex items-center justify-center font-bold transition-transform ${onClick ? 'cursor-pointer hover:scale-110' : ''} ${className}`}
+      className={`relative flex-shrink-0 overflow-hidden flex items-center justify-center font-bold transition-transform ${onClick ? 'cursor-pointer hover:scale-105' : ''} ${className}`}
       style={{
         width: size,
         height: size,
-        borderRadius: size / 8,
+        borderRadius: size / 5,
         backgroundImage: hasImage ? `url('${user.profile_picture}')` : 'none',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
-        backgroundColor: !hasImage ? 'rgba(255,107,43,0.15)' : 'transparent',
-        border: '1px solid rgba(255,107,43,0.3)',
+        backgroundColor: !hasImage ? 'rgba(255,107,43,0.12)' : 'transparent',
+        border: '1px solid rgba(255,255,255,0.12)',
+        boxShadow: '0 6px 18px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,107,43,0.25)',
         color: ORANGE_LIGHT,
         fontSize: `${Math.max(10, size * 0.35)}px`,
       }}

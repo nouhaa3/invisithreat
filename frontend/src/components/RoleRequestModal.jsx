@@ -43,10 +43,10 @@ export default function RoleRequestModal({ isOpen, onClose, currentRole }) {
   if (success) {
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="rounded-2xl max-w-sm w-full p-8" style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="panel-strong max-w-sm w-full p-8">
           <div className="flex justify-center mb-6">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-              style={{ background: 'rgba(255,107,43,0.08)', border: '1px solid rgba(255,107,43,0.2)' }}>
+              style={{ background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.3)' }}>
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#FF8C5A" strokeWidth="2">
                 <path d="M20 6L9 17l-5-5" />
               </svg>
@@ -63,8 +63,8 @@ export default function RoleRequestModal({ isOpen, onClose, currentRole }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="rounded-2xl max-w-sm w-full" style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.08)' }}>
-        <div className="p-6" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+      <div className="panel-strong max-w-sm w-full">
+        <div className="p-6" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
           <h2 className="text-2xl font-bold text-white">Request Role Upgrade</h2>
           <p className="text-white/40 text-sm mt-1">
             Select the role you'd like to upgrade to
@@ -83,14 +83,14 @@ export default function RoleRequestModal({ isOpen, onClose, currentRole }) {
                   type="button"
                   onClick={() => setSelectedRole(value)}
                   disabled={loading}
-                  className="w-full flex items-start p-3 rounded-xl text-left transition-all"
-                  style={{
-                    background: selectedRole === value ? 'rgba(255,107,43,0.08)' : 'rgba(255,255,255,0.02)',
-                    border: selectedRole === value ? '1px solid rgba(255,107,43,0.3)' : '1px solid rgba(255,255,255,0.06)',
-                  }}
+                  className={`w-full flex items-start p-3 rounded-xl text-left transition-all border ${
+                    selectedRole === value
+                      ? 'border-brand-orange/40 bg-brand-orange/10'
+                      : 'border-white/10 bg-white/5 hover:border-white/20'
+                  }`}
                 >
                   <div className="flex-1">
-                    <div className="text-sm font-semibold" style={{ color: selectedRole === value ? '#FF8C5A' : 'rgba(255,255,255,0.7)' }}>
+                    <div className={`text-sm font-semibold ${selectedRole === value ? 'text-brand-orange-light' : 'text-white/70'}`}>
                       {label}
                     </div>
                     <div className="text-xs text-white/40 mt-0.5">{desc}</div>
@@ -110,15 +110,9 @@ export default function RoleRequestModal({ isOpen, onClose, currentRole }) {
 
             {/* Buttons */}
             <div className="flex gap-3 mt-2 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={loading}
-                className="flex-1 px-4 py-3 rounded-lg font-medium transition-all text-white/60 hover:text-white/80"
-                style={{ border: '1px solid rgba(255,255,255,0.16)', background: 'rgba(255,255,255,0.02)' }}
-              >
+              <Button type="button" onClick={onClose} disabled={loading} variant="secondary" className="flex-1">
                 Cancel
-              </button>
+              </Button>
               <Button type="submit" loading={loading} className="flex-1">
                 Request
               </Button>

@@ -10,14 +10,11 @@ export default function NotificationBell({ collapsed = false, onNavigate }) {
       onClick={onNavigate}
       title={collapsed ? 'Notifications' : undefined}
       className={({ isActive }) =>
-        `flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-          isActive ? 'text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.03]'
+        `flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 border ${
+          isActive
+            ? 'text-white border-brand-orange/30 bg-brand-orange/10'
+            : 'border-transparent text-white/45 hover:text-white/80 hover:border-white/10 hover:bg-white/[0.04]'
         }`
-      }
-      style={({ isActive }) =>
-        isActive
-          ? { background: 'rgba(255,107,43,0.1)', border: '1px solid rgba(255,107,43,0.15)', color: '#FF8C5A' }
-          : {}
       }
     >
       {/* Bell icon with unread badge */}
@@ -28,7 +25,7 @@ export default function NotificationBell({ collapsed = false, onNavigate }) {
         </svg>
         {unreadCount > 0 && (
           <span
-            className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 rounded-full text-[9px] font-bold flex items-center justify-center px-1"
+            className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 rounded-full text-[9px] font-bold flex items-center justify-center px-1 shadow-orange-sm"
             style={{ background: '#FF6B2B', color: 'white', lineHeight: 1 }}
           >
             {unreadCount > 99 ? '99+' : unreadCount}
@@ -40,7 +37,7 @@ export default function NotificationBell({ collapsed = false, onNavigate }) {
 
       {!collapsed && unreadCount > 0 && (
         <span
-          className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0"
+          className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
           style={{ background: 'rgba(255,107,43,0.15)', color: '#FF8C5A' }}
         >
           {unreadCount}

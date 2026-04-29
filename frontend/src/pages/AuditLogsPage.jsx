@@ -1,28 +1,27 @@
-﻿import { useState, useEffect, useCallback } from "react"
-import AppLayout from "../components/AppLayout"
-import { useAuth } from "../context/AuthContext"
-import { useRelativeTime } from "../hooks/useRelativeTime"
-import { getAuditLogs, getAuditLogActions, exportAuditLogs } from "../services/auditLogService"
-import { adminGetUsers } from "../services/adminService"
+﻿import { useState, useEffect, useCallback } from 'react'
+import AppLayout from '../components/AppLayout'
+import { useRelativeTime } from '../hooks/useRelativeTime'
+import { getAuditLogs, getAuditLogActions, exportAuditLogs } from '../services/auditLogService'
+import { adminGetUsers } from '../services/adminService'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const ACTION_ICONS = {
-  login: "[LOGIN]",
-  logout: "[LOGOUT]",
-  register: "[REG]",
-  api_key_created: "[API-KEY]",
-  api_key_revoked: "[REVOKE]",
-  settings_updated: "[SETTINGS]",
-  profile_updated: "[PROFILE]",
-  role_changed: "[ROLE]",
-  role_request: "[REQUEST]",
-  bulk_delete_users: "[DELETE]",
-  user_created: "[CREATE]",
-  user_deleted: "[REMOVE]",
-  user_activated: "[ACTIVE]",
-  user_deactivated: "[INACTIVE]",
-  role_approved: "[APPROVE]",
+  login: 'LOGIN',
+  logout: 'LOGOUT',
+  register: 'REG',
+  api_key_created: 'API-KEY',
+  api_key_revoked: 'REVOKE',
+  settings_updated: 'SETTINGS',
+  profile_updated: 'PROFILE',
+  role_changed: 'ROLE',
+  role_request: 'REQUEST',
+  bulk_delete_users: 'DELETE',
+  user_created: 'CREATE',
+  user_deleted: 'REMOVE',
+  user_activated: 'ACTIVE',
+  user_deactivated: 'INACTIVE',
+  role_approved: 'APPROVE',
 }
 
 const ACTION_COLORS = {
@@ -46,11 +45,10 @@ const ACTION_COLORS = {
 // Real-time timestamp component
 function RelativeTime({ iso }) {
   const relativeTime = useRelativeTime(iso)
-  return <span>{relativeTime || "..."}</span>
+  return <span>{relativeTime || '...'}</span>
 }
 
 export default function AuditLogsPage() {
-  const { user } = useAuth()
   const [logs, setLogs] = useState([])
   const [allUsers, setAllUsers] = useState([])
   const [actions, setActions] = useState([])
@@ -58,10 +56,9 @@ export default function AuditLogsPage() {
   const [exporting, setExporting] = useState(false)
 
   // Filters
-  const [searchText, setSearchText] = useState("")
-  const [selectedAction, setSelectedAction] = useState("")
-  const [selectedUserId, setSelectedUserId] = useState("")
-  const [sortBy, setSortBy] = useState("recent")
+  const [searchText, setSearchText] = useState('')
+  const [selectedAction, setSelectedAction] = useState('')
+  const [selectedUserId, setSelectedUserId] = useState('')
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(0)
@@ -86,7 +83,7 @@ export default function AuditLogsPage() {
       setActions(actionData || [])
       setAllUsers(usersData || [])
     } catch (err) {
-      console.error("Failed to load audit logs:", err)
+      console.error('Failed to load audit logs:', err)
     } finally {
       setLoading(false)
     }
@@ -107,7 +104,7 @@ export default function AuditLogsPage() {
       setLogs(result?.logs || [])
       setTotalLogs(result?.total || 0)
     } catch (err) {
-      console.error("Filter failed:", err)
+      console.error('Filter failed:', err)
     } finally {
       setLoading(false)
     }
@@ -128,7 +125,7 @@ export default function AuditLogsPage() {
         setLogs(result?.logs || [])
         setCurrentPage(page)
       } catch (err) {
-        console.error("Pagination failed:", err)
+        console.error('Pagination failed:', err)
       } finally {
         setLoading(false)
       }
@@ -146,15 +143,15 @@ export default function AuditLogsPage() {
         search: searchText || undefined,
       })
       const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
+      const a = document.createElement('a')
       a.href = url
-      a.download = `audit-logs-${ new Date().toISOString().slice(0, 10) }.csv`
+      a.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch (err) {
-      console.error("Export failed:", err)
+      console.error('Export failed:', err)
     } finally {
       setExporting(false)
     }
@@ -163,7 +160,7 @@ export default function AuditLogsPage() {
   // Get user name by ID
   const getUserName = (userId) => {
     const u = allUsers.find((x) => x.id === userId)
-    return u ? u.nom : "Unknown User"
+    return u ? u.nom : 'Unknown User'
   }
 
   // Debounced search
@@ -181,319 +178,148 @@ export default function AuditLogsPage() {
 
   const totalPages = Math.ceil(totalLogs / LIMIT)
 
+  const chipStyle = (action) => ({
+    color: ACTION_COLORS[action] || 'rgba(255,255,255,0.75)',
+    background: `${ACTION_COLORS[action] || 'rgba(255,255,255,0.2)'}1A`,
+    border: `1px solid ${ACTION_COLORS[action] || 'rgba(255,255,255,0.2)'}55`,
+  })
+
   return (
     <AppLayout>
-      <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "20px" }}>
-        {/* Header */}
-        <div className="mb-8">
-          <h1 style={{ fontSize: "26px", fontWeight: "700", color: "white", marginBottom: "8px" }}>
-            Audit Logs
-          </h1>
-          <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "14px" }}>
-            Complete history of all system activities · Auto-cleaned after 2 weeks
+      <div className="ui-container max-w-[1400px] mx-auto">
+        <div className="ui-hero mb-6">
+          <h1 className="text-3xl font-bold">Audit Logs</h1>
+          <p className="text-sm text-white/50 mt-2">
+            Enterprise activity ledger for authentication, roles, and platform actions.
           </p>
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="ui-chip">Tamper-aware visibility</span>
+            <span className="ui-chip">Fast + collaborative review</span>
+            <span className="ui-chip">Privacy-first operational audit trail</span>
+          </div>
         </div>
 
-        {/* Filters */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr auto auto",
-            gap: "12px",
-            marginBottom: "24px",
-          }}
-        >
-          {/* Search */}
-          <div>
-            <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", display: "block", marginBottom: "6px" }}>
-              Search Details
-            </label>
+        <div className="ui-card p-4 mb-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
             <input
               type="text"
               placeholder="Search by IP, email, or action details..."
-              value={ searchText }
-              onChange={ (e) => setSearchText(e.target.value) }
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: "6px",
-                color: "white",
-                fontSize: "13px",
-              }}
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              className="ui-input xl:col-span-2"
             />
-          </div>
-
-          {/* Action Filter */}
-          <div>
-            <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", display: "block", marginBottom: "6px" }}>
-              Action Type
-            </label>
-            <select
-              value={ selectedAction }
-              onChange={ (e) => setSelectedAction(e.target.value) }
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: "6px",
-                color: "white",
-                fontSize: "13px",
-              }}
-            >
+            <select value={selectedAction} onChange={(e) => setSelectedAction(e.target.value)} className="ui-input">
               <option value="">All Actions</option>
-              { actions.map((act) => (
-                <option key={ act } value={ act }>
-                  { ACTION_ICONS[act] || "•" } { act }
+              {actions.map((act) => (
+                <option key={act} value={act} style={{ background: '#141414' }}>
+                  {ACTION_ICONS[act] || 'EVENT'} {act}
                 </option>
-              )) }
+              ))}
             </select>
-          </div>
-
-          {/* User Filter */}
-          <div>
-            <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", display: "block", marginBottom: "6px" }}>
-              User
-            </label>
-            <select
-              value={ selectedUserId }
-              onChange={ (e) => setSelectedUserId(e.target.value) }
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: "6px",
-                color: "white",
-                fontSize: "13px",
-              }}
-            >
+            <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} className="ui-input">
               <option value="">All Users</option>
-              { allUsers.map((u) => (
-                <option key={ u.id } value={ u.id }>
-                  { u.nom } ({ u.email })
+              {allUsers.map((u) => (
+                <option key={u.id} value={u.id} style={{ background: '#141414' }}>
+                  {u.nom} ({u.email})
                 </option>
-              )) }
+              ))}
             </select>
+            <div className="flex gap-2">
+              <button
+                onClick={handleExport}
+                disabled={exporting || logs.length === 0}
+                className="flex-1 rounded-xl border px-3 py-2 text-xs font-semibold text-brand-orange-light border-brand-orange/35 bg-brand-orange/10 disabled:opacity-40"
+              >
+                {exporting ? 'Exporting...' : 'CSV'}
+              </button>
+              <button
+                onClick={() => {
+                  setSearchText('')
+                  setSelectedAction('')
+                  setSelectedUserId('')
+                }}
+                className="flex-1 rounded-xl border px-3 py-2 text-xs font-semibold text-white/65 border-white/15 bg-white/5"
+              >
+                Clear
+              </button>
+            </div>
           </div>
-
-          {/* Export */}
-          <button
-            onClick={ handleExport }
-            disabled={ exporting || logs.length === 0 }
-            style={{
-              padding: "8px 16px",
-              background: exporting ? "rgba(255,107,43,0.5)" : "rgba(255,107,43,0.15)",
-              border: "1px solid rgba(255,107,43,0.3)",
-              borderRadius: "6px",
-              color: "#FF8C5A",
-              cursor: exporting ? "wait" : "pointer",
-              fontSize: "13px",
-              fontWeight: "600",
-              marginTop: "20px",
-              transition: "all 0.2s",
-            }}
-          >
-            { exporting ? "Exporting..." : "Download CSV" }
-          </button>
-
-          {/* Clear */}
-          <button
-            onClick={ () => {
-              setSearchText("")
-              setSelectedAction("")
-              setSelectedUserId("")
-            } }
-            style={{
-              padding: "8px 16px",
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: "6px",
-              color: "rgba(255,255,255,0.6)",
-              cursor: "pointer",
-              fontSize: "13px",
-              fontWeight: "600",
-              marginTop: "20px",
-              transition: "all 0.2s",
-            }}
-            onMouseEnter={ (e) => {
-              e.target.style.background = "rgba(255,255,255,0.1)"
-              e.target.style.color = "rgba(255,255,255,0.8)"
-            } }
-            onMouseLeave={ (e) => {
-              e.target.style.background = "rgba(255,255,255,0.05)"
-              e.target.style.color = "rgba(255,255,255,0.6)"
-            } }
-          >
-            Clear
-          </button>
         </div>
 
-        {/* Stats */}
-        <div style={{ marginBottom: "20px" }}>
-          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: "12px" }}>
-            Showing { logs.length } of { totalLogs } logs · Page { currentPage + 1 } of { totalPages }
-          </p>
-        </div>
+        <p className="text-xs text-white/35 mb-3">
+          Showing {logs.length} of {totalLogs} logs · Page {currentPage + 1} of {Math.max(totalPages, 1)}
+        </p>
 
-        {/* Logs Table */}
-        { loading ? (
-          <p style={{ textAlign: "center", color: "rgba(255,255,255,0.3)", padding: "40px" }}>
-            Loading audit logs...
-          </p>
-        ) : logs.length === 0 ? (
-          <p style={{ textAlign: "center", color: "rgba(255,255,255,0.3)", padding: "40px" }}>
-            No audit logs found
-          </p>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: "13px",
-              }}
-            >
-              <thead>
-                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-                  <th style={{ padding: "12px", textAlign: "left", color: "rgba(255,255,255,0.4)", fontWeight: "600" }}>
-                    Action
-                  </th>
-                  <th style={{ padding: "12px", textAlign: "left", color: "rgba(255,255,255,0.4)", fontWeight: "600" }}>
-                    User
-                  </th>
-                  <th style={{ padding: "12px", textAlign: "left", color: "rgba(255,255,255,0.4)", fontWeight: "600" }}>
-                    Details
-                  </th>
-                  <th style={{ padding: "12px", textAlign: "left", color: "rgba(255,255,255,0.4)", fontWeight: "600" }}>
-                    IP Address
-                  </th>
-                  <th style={{ padding: "12px", textAlign: "left", color: "rgba(255,255,255,0.4)", fontWeight: "600" }}>
-                    Time
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                { logs.map((log) => (
-                  <tr
-                    key={ log.id }
-                    style={{
-                      borderBottom: "1px solid rgba(255,255,255,0.05)",
-                      transition: "background 0.2s",
-                    }}
-                    onMouseEnter={ (e) => {
-                      e.currentTarget.style.background = "rgba(255,255,255,0.02)"
-                    } }
-                    onMouseLeave={ (e) => {
-                      e.currentTarget.style.background = "transparent"
-                    } }
-                  >
-                    <td style={{ padding: "12px" }}>
-                      <span
-                        style={{
-                          padding: "4px 8px",
-                          borderRadius: "4px",
-                          background: ACTION_COLORS[log.action]
-                            ? `${ ACTION_COLORS[log.action] }15`
-                            : "rgba(255,255,255,0.05)",
-                          color: ACTION_COLORS[log.action] || "rgba(255,255,255,0.7)",
-                          fontSize: "12px",
-                          fontWeight: "600",
-                        }}
-                      >
-                        { ACTION_ICONS[log.action] || "•" } { log.action }
-                      </span>
-                    </td>
-                    <td style={{ padding: "12px", color: "white" }}>
-                      { getUserName(log.user_id) }
-                    </td>
-                    <td style={{ padding: "12px", color: "rgba(255,255,255,0.6)", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      { log.detail || "-" }
-                    </td>
-                    <td style={{ padding: "12px", color: "rgba(255,255,255,0.5)", fontFamily: "monospace", fontSize: "11px" }}>
-                      { log.ip_address || "-" }
-                    </td>
-                    <td style={{ padding: "12px", color: "rgba(255,255,255,0.4)" }}>
-                      <RelativeTime iso={ log.created_at } />
-                    </td>
+        <div className="ui-card overflow-hidden">
+          {loading ? (
+            <div className="py-16 flex justify-center">
+              <div className="w-7 h-7 rounded-full animate-spin border-2 border-white/15 border-t-brand-orange" />
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="py-16 text-center text-white/45 text-sm">No audit logs found</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-white/45 text-xs uppercase tracking-wider">
+                    <th className="text-left px-4 py-3 font-semibold">Action</th>
+                    <th className="text-left px-4 py-3 font-semibold">User</th>
+                    <th className="text-left px-4 py-3 font-semibold">Details</th>
+                    <th className="text-left px-4 py-3 font-semibold">IP Address</th>
+                    <th className="text-left px-4 py-3 font-semibold">Time</th>
                   </tr>
-                )) }
-              </tbody>
-            </table>
-          </div>
-        ) }
+                </thead>
+                <tbody>
+                  {logs.map((log) => (
+                    <tr key={log.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-2 px-2 py-1 rounded-md text-[11px] font-semibold" style={chipStyle(log.action)}>
+                          {ACTION_ICONS[log.action] || 'EVENT'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-white/90">{getUserName(log.user_id)}</td>
+                      <td className="px-4 py-3 text-white/60 max-w-[320px] truncate">{log.detail || '-'}</td>
+                      <td className="px-4 py-3 text-white/50 font-mono text-xs">{log.ip_address || '-'}</td>
+                      <td className="px-4 py-3 text-white/45 text-xs"><RelativeTime iso={log.created_at} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
-        {/* Pagination */}
-        { totalPages > 1 && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              marginTop: "24px",
-            }}
-          >
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-5">
             <button
-              onClick={ () => loadPage(currentPage - 1) }
-              disabled={ currentPage === 0 }
-              style={{
-                padding: "6px 12px",
-                background: currentPage === 0 ? "rgba(255,255,255,0.05)" : "rgba(255,107,43,0.1)",
-                border: "1px solid rgba(255,107,43,0.2)",
-                borderRadius: "4px",
-                color: currentPage === 0 ? "rgba(255,255,255,0.3)" : "#FF8C5A",
-                cursor: currentPage === 0 ? "default" : "pointer",
-                fontSize: "12px",
-                fontWeight: "600",
-              }}
+              onClick={() => loadPage(currentPage - 1)}
+              disabled={currentPage === 0}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/15 bg-white/5 text-white/70 disabled:opacity-35"
             >
-              ← Previous
+              Prev
             </button>
-
-            { Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
-              const pageNum = i
-              return (
-                <button
-                  key={ pageNum }
-                  onClick={ () => loadPage(pageNum) }
-                  style={{
-                    padding: "6px 12px",
-                    background: currentPage === pageNum ? "rgba(255,107,43,0.2)" : "rgba(255,255,255,0.05)",
-                    border:
-                      currentPage === pageNum ? "1px solid rgba(255,107,43,0.5)" : "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "4px",
-                    color: currentPage === pageNum ? "#FF8C5A" : "rgba(255,255,255,0.6)",
-                    cursor: "pointer",
-                    fontSize: "12px",
-                    fontWeight: "600",
-                  }}
-                >
-                  { pageNum + 1 }
-                </button>
-              )
-            }) }
-
+            {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => (
+              <button
+                key={i}
+                onClick={() => loadPage(i)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
+                  currentPage === i
+                    ? 'border-brand-orange/45 bg-brand-orange/15 text-brand-orange-light'
+                    : 'border-white/15 bg-white/5 text-white/65'
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
             <button
-              onClick={ () => loadPage(currentPage + 1) }
-              disabled={ currentPage >= totalPages - 1 }
-              style={{
-                padding: "6px 12px",
-                background: currentPage >= totalPages - 1 ? "rgba(255,255,255,0.05)" : "rgba(255,107,43,0.1)",
-                border: "1px solid rgba(255,107,43,0.2)",
-                borderRadius: "4px",
-                color: currentPage >= totalPages - 1 ? "rgba(255,255,255,0.3)" : "#FF8C5A",
-                cursor: currentPage >= totalPages - 1 ? "default" : "pointer",
-                fontSize: "12px",
-                fontWeight: "600",
-              }}
+              onClick={() => loadPage(currentPage + 1)}
+              disabled={currentPage >= totalPages - 1}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/15 bg-white/5 text-white/70 disabled:opacity-35"
             >
-              Next →
+              Next
             </button>
           </div>
-        ) }
+        )}
       </div>
     </AppLayout>
   )

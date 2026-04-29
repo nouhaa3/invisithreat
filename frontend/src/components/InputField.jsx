@@ -37,7 +37,7 @@ export default function InputField({
   return (
     <div className="flex flex-col gap-1.5">
       {label && (
-        <label className="text-xs font-semibold text-white/40 uppercase tracking-widest">
+        <label className="ui-label">
           {label}
         </label>
       )}
@@ -49,32 +49,7 @@ export default function InputField({
           placeholder={placeholder}
           autoComplete={autoComplete}
           disabled={disabled}
-          className={`
-            w-full py-4 rounded-xl text-base text-white
-            transition-all duration-300 outline-none
-            placeholder:text-white/20
-            disabled:opacity-40 disabled:cursor-not-allowed
-            ${isPassword ? 'pl-5 pr-12' : 'px-5'}
-            ${error
-              ? 'border border-red-500/50 bg-red-500/5'
-              : 'border border-brand-border bg-brand-input hover:border-white/15 focus:border-brand-orange/60'
-            }
-          `}
-          style={!error ? {
-            boxShadow: value ? '0 0 0 0 transparent' : undefined,
-          } : {}}
-          onFocus={(e) => {
-            if (!error) {
-              e.target.style.boxShadow = '0 0 0 3px rgba(255,107,43,0.15), inset 0 1px 0 rgba(255,255,255,0.04)'
-              e.target.style.borderColor = 'rgba(255,107,43,0.5)'
-            }
-          }}
-          onBlur={(e) => {
-            if (!error) {
-              e.target.style.boxShadow = ''
-              e.target.style.borderColor = ''
-            }
-          }}
+          className={`ui-input ${isPassword ? 'pl-5 pr-12' : 'px-5'} ${error ? 'border-red-500/50 bg-red-500/10 focus:border-red-400/80' : ''}`}
         />
         {isPassword && (
           <button

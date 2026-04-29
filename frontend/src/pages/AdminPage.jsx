@@ -295,12 +295,17 @@ export default function AdminPage() {
   return (
     <AppLayout>
       <main className="flex-1 overflow-auto">
-        <div className="px-8 py-8">
+        <div className="ui-container">
 
           {/* Header */}
-          <div className="mb-8 animate-slide-up">
-            <h1 className="text-2xl font-bold text-white">User Management</h1>
-            <p className="text-white/30 text-sm mt-1">Manage roles and access for all platform users</p>
+          <div className="ui-hero mb-8 animate-slide-up">
+            <h1 className="text-3xl font-bold text-white">User Management</h1>
+            <p className="text-white/50 text-sm mt-2">Manage roles, approvals, and access governance for all platform users.</p>
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+              <span className="ui-chip">Enterprise access control</span>
+              <span className="ui-chip">Fast team governance</span>
+              <span className="ui-chip">High-trust admin actions</span>
+            </div>
           </div>
 
           {/* ── Pending approvals ─────────────────────────────────────────────── */}
@@ -388,18 +393,18 @@ export default function AdminPage() {
 
           {/* ── Stats row ─────────────────────────────────────────────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8 animate-slide-up">
-            <div className="rounded-2xl p-4" style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="ui-card p-4">
               <p className="text-xs text-white/30 uppercase tracking-widest mb-1">Total</p>
               <p className="text-2xl font-bold text-white">{stats.total}</p>
             </div>
-            <div className="rounded-2xl p-4" style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="ui-card p-4">
               <p className="text-xs text-white/30 uppercase tracking-widest mb-1">Active</p>
               <p className="text-2xl font-bold text-green-400">{stats.activeCount}</p>
             </div>
             {ROLES.map(r => {
               const cfg = ROLE_COLOR[r]
               return (
-                <div key={r} className="rounded-2xl p-4" style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div key={r} className="ui-card p-4">
                   <p className="text-xs uppercase tracking-widest mb-1" style={{ color: cfg.color }}>{r}</p>
                   <p className="text-2xl font-bold text-white">{stats.byRole[r] || 0}</p>
                 </div>
@@ -410,13 +415,10 @@ export default function AdminPage() {
           {/* ── Filters ───────────────────────────────────────────────────────── */}
           <div className="flex flex-wrap items-center gap-3 mb-6 animate-slide-up">
             <input
-              className="px-4 py-2 rounded-xl text-sm text-white outline-none transition-all flex-1 min-w-48"
-              style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.07)' }}
+              className="ui-input flex-1 min-w-48 py-2.5"
               placeholder="Search by name or email..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              onFocus={e => { e.target.style.borderColor = 'rgba(255,107,43,0.4)' }}
-              onBlur={e =>  { e.target.style.borderColor = 'rgba(255,255,255,0.07)' }}
             />
             <div className="flex gap-2 flex-wrap">
               {['All', ...ROLES].map(r => (
