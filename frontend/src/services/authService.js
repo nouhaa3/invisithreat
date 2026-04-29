@@ -136,3 +136,46 @@ export const updateMyProfile = async ({ nom, email, profile_picture }) => {
 export const changeMyPassword = async (current_password, new_password) => {
   await api.post('/api/auth/me/change-password', { current_password, new_password })
 }
+
+const decodeJwtPayload = (token) => {
+  if (!token || typeof token !== 'string') return null
+  const parts = token.split('.')
+  if (parts.length < 2) return null
+
+  try {
+    const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=')
+    const json = atob(padded)
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
+export const getAccessTokenExpiryMs = () => {
+  const token = localStorage.getItem('access_token')
+  const payload = decodeJwtPayload(token)
+  if (!payload?.exp) return null
+  return Number(payload.exp) * 1000
+}
+
+export const refreshSessionIfNeeded = async (thresholdMs = 5 * 60 * 1000) => {
+  const accessToken = localStorage.getItem('access_token')
+  const storedRefreshToken = localStorage.getItem('refresh_token')
+  if (!accessToken || !storedRefreshToken) return false
+
+  const expiresAtMs = getAccessTokenExpiryMs()
+  if (!expiresAtMs) return false
+
+  const remainingMs = expiresAtMs - Date.now()
+  if (remainingMs > thresholdMs) return false
+
+  const data = await refreshToken(storedRefreshToken)
+  if (data?.access_token) {
+    localStorage.setItem('access_token', data.access_token)
+  }
+  if (data?.refresh_token) {
+    localStorage.setItem('refresh_token', data.refresh_token)
+  }
+  return true
+}
