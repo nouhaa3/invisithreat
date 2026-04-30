@@ -302,7 +302,7 @@ function FooterColumn({ title, links }) {
 
 export default function LandingPage() {
   return (
-    <div className="app-shell font-body scroll-smooth">
+    <div className="app-shell font-body scroll-smooth overflow-x-hidden">
       <div className="relative overflow-hidden">
         <div className="absolute -top-40 -left-32 w-[520px] h-[520px] rounded-full animate-float-slow"
           style={{ background: 'radial-gradient(circle, rgba(255,107,43,0.2) 0%, transparent 70%)' }}
