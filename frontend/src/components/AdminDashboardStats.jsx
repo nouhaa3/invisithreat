@@ -209,14 +209,7 @@ export default function AdminDashboardStats({ stats, loading, user }) {
 
 function KpiCard({ label, value, sub, accent }) {
   return (
-    <div
-      className="rounded-2xl px-5 py-4 flex flex-col gap-1.5"
-      style={{
-        background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))',
-        border: '1px solid rgba(255,255,255,0.06)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 22px rgba(0,0,0,0.22)',
-      }}
-    >
+    <div className="ui-card ui-card-sheen px-5 py-4 flex flex-col gap-1.5">
       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/30">{label}</p>
       <p className="text-3xl font-bold leading-none" style={{ color: accent || '#fff' }}>{value}</p>
       <p className="text-xs text-white/35">{sub}</p>

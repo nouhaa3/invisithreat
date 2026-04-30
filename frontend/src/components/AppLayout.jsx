@@ -105,9 +105,10 @@ export default function AppLayout({ children }) {
         }`}
         style={{
           width: `${mobileOpen ? 272 : sidebarWidth}px`,
-          background: 'rgba(10,10,10,0.92)',
-          borderRight: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+          background: 'rgba(9,9,9,0.9)',
+          borderRight: '1px solid rgba(255,255,255,0.1)',
+          boxShadow: '0 24px 70px rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(18px)',
         }}
       >
         {/* Logo */}
@@ -234,7 +235,7 @@ export default function AppLayout({ children }) {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <div className="md:hidden sticky top-0 z-20 px-3 py-2" style={{ background: 'rgba(10,10,10,0.85)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="md:hidden sticky top-0 z-20 px-3 py-2" style={{ background: 'rgba(8,8,8,0.88)', backdropFilter: 'blur(14px)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
           <button
             onClick={() => setMobileOpen(true)}
             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-white/80"
@@ -247,13 +248,6 @@ export default function AppLayout({ children }) {
             </svg>
             Menu
           </button>
-        </div>
-        <div className="px-3 sm:px-5 pt-3 sm:pt-4">
-          <div className="ui-trust-strip flex flex-wrap items-center gap-2.5 text-[11px]">
-            <span className="ui-chip">Demo mode: safe testing</span>
-            <span className="ui-chip">Platform scan: fast + collaborative</span>
-            <span className="ui-chip">Local-only mode: maximum privacy</span>
-          </div>
         </div>
         {children}
       </div>

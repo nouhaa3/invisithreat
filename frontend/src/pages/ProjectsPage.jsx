@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useUiFeedback } from '../context/UiFeedbackContext'
 import AppLayout from '../components/AppLayout'
 import {
   getDevProjects,
@@ -142,24 +143,8 @@ function ProjectRow({ project, onClick }) {
   return (
     <div
       onClick={onClick}
-      className="group rounded-2xl p-4 sm:p-5 cursor-pointer transition-all relative overflow-hidden"
-      style={{
-        background: 'linear-gradient(180deg, rgba(21,21,21,0.96), rgba(12,12,12,0.95))',
-        border: '1px solid rgba(255,255,255,0.065)',
-        boxShadow: '0 8px 28px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.03)',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'rgba(255,107,43,0.28)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.065)'
-      }}
+      className="group ui-card ui-card-hover ui-card-sheen p-4 sm:p-5 cursor-pointer transition-all relative overflow-hidden"
     >
-      <div
-        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-        style={{ background: 'radial-gradient(circle at 80% 0%, rgba(255,107,43,0.08), transparent 55%)' }}
-      />
-
       <div className="relative flex flex-col min-h-[145px]">
         <div className="flex items-start justify-between gap-2 mb-3">
         <div
@@ -233,14 +218,7 @@ function ProjectRow({ project, onClick }) {
 
 function SummaryCard({ label, value, sub, accent }) {
   return (
-    <div
-      className="rounded-2xl px-5 py-4 flex flex-col gap-1.5"
-      style={{
-        background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))',
-        border: '1px solid rgba(255,255,255,0.06)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 22px rgba(0,0,0,0.22)',
-      }}
-    >
+    <div className="ui-card ui-card-sheen px-5 py-4 flex flex-col gap-1.5">
       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/30">{label}</p>
       <p className="text-3xl font-bold leading-none" style={{ color: accent || '#fff' }}>{value}</p>
       <p className="text-xs text-white/35">{sub}</p>
@@ -289,11 +267,7 @@ function AdminProjectRow({
 
   return (
     <div
-      className="rounded-2xl px-5 py-4 transition-all"
-      style={{
-        background: 'linear-gradient(170deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))',
-        border: '1px solid rgba(255,255,255,0.055)',
-      }}
+      className="ui-row px-5 py-4"
     >
       <div className="flex items-start gap-3">
         <div className="pt-1">
@@ -421,14 +395,7 @@ function AdminProjectCard({
 
   return (
     <div
-      className="rounded-2xl p-4 sm:p-5 flex flex-col gap-4 min-h-[245px]"
-      style={{
-        background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))',
-        border: selected ? '1px solid rgba(255,107,43,0.35)' : '1px solid rgba(255,255,255,0.06)',
-        boxShadow: selected
-          ? 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 25px rgba(0,0,0,0.22), 0 0 22px rgba(255,107,43,0.16)'
-          : 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 25px rgba(0,0,0,0.22)',
-      }}
+      className={`ui-card ui-card-sheen ui-card-hover p-4 sm:p-5 flex flex-col gap-4 min-h-[245px] ${selected ? 'ui-card-selected' : ''}`}
     >
       <div className="flex items-start gap-3">
         <div className="pt-0.5">
@@ -453,7 +420,7 @@ function AdminProjectCard({
             </div>
 
             <div
-              className="w-11 h-11 rounded-none flex items-center justify-center flex-shrink-0 overflow-hidden"
+              className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden"
               style={{
                 background: 'linear-gradient(145deg, rgba(255,107,43,0.2), rgba(255,140,90,0.08))',
                 border: '1px solid rgba(255,107,43,0.35)',
@@ -531,11 +498,7 @@ function ScanStatusBadge({ status }) {
 function SecurityProjectRow({ project, onView }) {
   return (
     <div
-      className="rounded-2xl px-5 py-4 transition-all"
-      style={{
-        background: 'linear-gradient(170deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))',
-        border: '1px solid rgba(255,255,255,0.055)',
-      }}
+      className="ui-row px-5 py-4"
     >
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div className="min-w-0">
@@ -591,12 +554,7 @@ function SecurityProjectCard({ project, onView }) {
 
   return (
     <div
-      className="rounded-2xl p-4 sm:p-5 flex flex-col gap-4 min-h-[245px]"
-      style={{
-        background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))',
-        border: '1px solid rgba(255,255,255,0.06)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 25px rgba(0,0,0,0.22)',
-      }}
+      className="ui-card ui-card-sheen ui-card-hover p-4 sm:p-5 flex flex-col gap-4 min-h-[245px]"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -608,7 +566,7 @@ function SecurityProjectCard({ project, onView }) {
         </div>
 
         <div
-          className="w-11 h-11 rounded-none flex items-center justify-center flex-shrink-0 overflow-hidden"
+          className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden"
           style={{
             background: 'linear-gradient(145deg, rgba(255,107,43,0.2), rgba(255,140,90,0.08))',
             border: '1px solid rgba(255,107,43,0.35)',
@@ -830,6 +788,7 @@ function InfoLine({ label, value }) {
 export default function ProjectsPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const { confirm, toast } = useUiFeedback()
 
   const isAdmin = user?.role_name === 'Admin'
   const isSecurityManager = user?.role_name === 'Security Manager'
@@ -1050,7 +1009,13 @@ export default function ProjectsPage() {
 
   const handleDeleteById = async (id) => {
     if (!isAdmin && !canDeleteProjects) return
-    if (!confirm('Delete this project?')) return
+    const ok = await confirm({
+      title: 'Delete project?',
+      message: 'This will permanently remove the project and its scans. This action cannot be undone.',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    })
+    if (!ok) return
 
     setDeletingId(id)
     try {
@@ -1123,7 +1088,13 @@ export default function ProjectsPage() {
     if (!isAdmin || selectedProjectIds.size === 0) return
 
     const ids = Array.from(selectedProjectIds)
-    if (!window.confirm(`Delete ${ids.length} selected project(s)? This cannot be undone.`)) return
+    const ok = await confirm({
+      title: 'Delete selected projects?',
+      message: `You are about to delete ${ids.length} project(s). This cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    })
+    if (!ok) return
 
     setBulkDeleting(true)
     try {
@@ -1133,9 +1104,9 @@ export default function ProjectsPage() {
 
       const base = `Deleted ${result.success_count} project(s)`
       const details = result.failed_count > 0 ? `. Failed: ${result.failed_count}` : ''
-      alert(`${base}${details}`)
+      toast({ type: 'success', message: `${base}${details}` })
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to delete selected projects')
+      toast({ type: 'error', message: err.response?.data?.detail || 'Failed to delete selected projects' })
     } finally {
       setBulkDeleting(false)
     }

@@ -15,6 +15,7 @@ import {
   addVulnerabilityTaskComment,
 } from '../services/projectService'
 import { useAuth } from '../context/AuthContext'
+import { useUiFeedback } from '../context/UiFeedbackContext'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -798,6 +799,7 @@ export default function ProjectDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { toast } = useUiFeedback()
   const [project, setProject] = useState(null)
   const [scans, setScans] = useState([])
   const [loading, setLoading] = useState(true)
@@ -973,7 +975,7 @@ export default function ProjectDetail() {
       }
     } catch (e) {
       console.error('Rescan error:', e)
-      alert(e.response?.data?.detail || e.message || 'Failed to start rescan')
+      toast({ type: 'error', message: e.response?.data?.detail || e.message || 'Failed to start rescan' })
     } finally {
       setRescanning(false)
     }

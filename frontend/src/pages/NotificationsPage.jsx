@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { useNotifications } from '../context/NotificationContext'
 import { useAuth } from '../context/AuthContext'
+import { useUiFeedback } from '../context/UiFeedbackContext'
 import { useRelativeTime } from '../hooks/useRelativeTime'
 import { adminApproveRoleRequest, adminChangeRole, adminGetUsers } from '../services/adminService'
 
@@ -241,6 +242,7 @@ function NotifCard({
 export default function NotificationsPage() {
   const { user } = useAuth()
   const { notifications, unreadCount, refresh, markRead, markAllRead, removeNotification } = useNotifications()
+  const { toast } = useUiFeedback()
   const [activeFilter, setActiveFilter] = useState('All')
   const [roleRequests, setRoleRequests] = useState([])
   const [selectedRoles, setSelectedRoles] = useState({})
@@ -314,7 +316,7 @@ export default function NotificationsPage() {
       setRoleRequests(prev => prev.filter(u => u.id !== userId))
       await refresh()
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to approve role request')
+      toast({ type: 'error', message: err.response?.data?.detail || 'Failed to approve role request' })
     } finally {
       setApprovingRoleReq(prev => ({ ...prev, [userId]: false }))
     }
@@ -330,7 +332,7 @@ export default function NotificationsPage() {
       setRoleRequests(prev => prev.filter(u => u.id !== userId))
       await refresh()
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to apply selected role')
+      toast({ type: 'error', message: err.response?.data?.detail || 'Failed to apply selected role' })
     } finally {
       setApplyingRoleReq(prev => ({ ...prev, [userId]: false }))
     }
