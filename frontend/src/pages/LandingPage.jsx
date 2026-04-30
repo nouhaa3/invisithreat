@@ -1,5 +1,10 @@
 import { Link } from 'react-router-dom'
 import logo from '../assets/logo_invisithreat.png'
+import {
+  CLISection,
+  ScreenshotShowcase,
+  BenchmarkTable,
+} from '../components/landing'
 
 const navLinks = [
   { label: 'Features', href: '#features' },
@@ -194,7 +199,7 @@ function Badge({ children }) {
   )
 }
 
-function SectionTitle({ eyebrow, title, subtitle, align = 'left' }) {
+function SectionTitle({ eyebrow, title, subtitle, align = 'left', color = 'orange' }) {
   return (
     <div className={align === 'center' ? 'text-center' : ''}>
       {eyebrow && (
@@ -425,6 +430,8 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <CLISection />
+
       <section id="modes" className="py-20">
         <div className="max-w-7xl mx-auto px-6">
           <SectionTitle
@@ -475,6 +482,8 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <ScreenshotShowcase />
+
       <section className="py-16 border-t border-white/5">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
@@ -514,6 +523,8 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      <BenchmarkTable />
 
       <section id="docs" className="py-16 border-t border-white/5">
         <div className="max-w-7xl mx-auto px-6 grid gap-8 md:grid-cols-[1.1fr_0.9fr] items-center">
