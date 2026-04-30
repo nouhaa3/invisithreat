@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../context/AuthContext'
+import { useUiFeedback } from '../context/UiFeedbackContext'
 import { useRelativeTime } from '../hooks/useRelativeTime'
 import { ProfileAvatar } from '../components/ProfileAvatar'
 import { updateMyProfile, changeMyPassword } from '../services/authService'
@@ -721,6 +722,7 @@ function SecurityTab() {
 // ─── API KEYS ─────────────────────────────────────────────────────────────────
 
 function ApiKeysTab() {
+  const { confirm, toast } = useUiFeedback()
   const [keys,     setKeys]     = useState([])
   const [loading,  setLoading]  = useState(true)
   const [name,     setName]     = useState('')
@@ -744,10 +746,23 @@ function ApiKeysTab() {
   }
 
   const handleRevoke = async (id, keyName) => {
-    if (!window.confirm(`Revoke "${keyName}"? Any CLI using it will stop working.`)) return
+    const ok = await confirm({
+      title: 'Revoke API key?',
+      message: `Revoke "${keyName}"? Any CLI using it will stop working.`,
+      confirmLabel: 'Revoke',
+      tone: 'warning',
+    })
+    if (!ok) return
     setRevoking(id)
-    try { await revokeApiKey(id); setKeys(p => p.filter(k => k.id !== id)) }
-    finally { setRevoking(null) }
+    try {
+      await revokeApiKey(id)
+      setKeys(p => p.filter(k => k.id !== id))
+      toast({ type: 'success', message: `Key "${keyName}" revoked.` })
+    } catch (err) {
+      toast({ type: 'error', message: err?.response?.data?.detail || 'Failed to revoke API key.' })
+    } finally {
+      setRevoking(null)
+    }
   }
 
   const activeCount  = keys.filter(k => k.is_active).length
@@ -1199,15 +1214,19 @@ export default function SettingsPage() {
       <div className="flex flex-col ui-page" style={{ flex: 1, minHeight: 0 }}>
 
         {/* Top header */}
-        <div className="flex-shrink-0 px-6 md:px-8 py-6 border-b border-white/10">
-          <h1 className="text-2xl font-bold text-white">Settings</h1>
-          <p className="text-sm mt-1 text-white/45">
-            Manage your account, integrations, and platform preferences.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-            <span className="ui-chip">Secure account controls</span>
-            <span className="ui-chip">Privacy-focused configuration</span>
-            <span className="ui-chip">Enterprise-ready integrations</span>
+        <div className="flex-shrink-0 px-6 md:px-8 pt-6">
+          <div className="ui-hero mb-6 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-white">Settings</h1>
+              <p className="text-sm mt-2 text-white/50">
+                Manage your account, integrations, and platform preferences.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="ui-chip">Secure account controls</span>
+                <span className="ui-chip">Privacy-focused configuration</span>
+                <span className="ui-chip">Enterprise-ready integrations</span>
+              </div>
+            </div>
           </div>
         </div>
 

@@ -4,6 +4,7 @@ import AppLayout from '../components/AppLayout'
 import { ProfileAvatar } from '../components/ProfileAvatar'
 import Select from '../components/Select'
 import { useAuth } from '../context/AuthContext'
+import { useUiFeedback } from '../context/UiFeedbackContext'
 import { useWebSocket } from '../hooks/useWebSocket'
 import {
   adminGetUsers,
@@ -40,6 +41,7 @@ function RoleBadge({ role }) {
 export default function AdminPage() {
   const { user: me } = useAuth()
   const navigate = useNavigate()
+  const { confirm, toast } = useUiFeedback()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -131,33 +133,45 @@ export default function AdminPage() {
       const updated = await adminApproveUser(userId)
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updated } : u))
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to approve user')
+      toast({ type: 'error', message: err.response?.data?.detail || 'Failed to approve user' })
     } finally {
       setApproving(p => ({ ...p, [userId]: false }))
     }
   }
 
   const handleReject = async (userId) => {
-    if (!window.confirm('Reject this user? They will receive an email notification.')) return
+    const ok = await confirm({
+      title: 'Reject user?',
+      message: 'They will receive an email notification and cannot access the platform.',
+      confirmLabel: 'Reject',
+      tone: 'warning',
+    })
+    if (!ok) return
     setRejecting(p => ({ ...p, [userId]: true }))
     try {
       const updated = await adminRejectUser(userId)
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updated } : u))
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to reject user')
+      toast({ type: 'error', message: err.response?.data?.detail || 'Failed to reject user' })
     } finally {
       setRejecting(p => ({ ...p, [userId]: false }))
     }
   }
 
   const handleDelete = async (userId, nom) => {
-    if (!window.confirm(`Permanently delete "${nom}"? This cannot be undone.`)) return
+    const ok = await confirm({
+      title: 'Delete user permanently?',
+      message: `"${nom}" will be removed and this cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    })
+    if (!ok) return
     setDeleting(p => ({ ...p, [userId]: true }))
     try {
       await adminDeleteUser(userId)
       setUsers(prev => prev.filter(u => u.id !== userId))
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to delete user')
+      toast({ type: 'error', message: err.response?.data?.detail || 'Failed to delete user' })
     } finally {
       setDeleting(p => ({ ...p, [userId]: false }))
     }
@@ -169,7 +183,7 @@ export default function AdminPage() {
       const updated = await adminChangeRole(userId, newRole)
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, role_name: updated.role_name } : u))
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to change role')
+      toast({ type: 'error', message: err.response?.data?.detail || 'Failed to change role' })
     } finally {
       setChangingRole(p => ({ ...p, [userId]: false }))
     }
@@ -181,7 +195,7 @@ export default function AdminPage() {
       const updated = await adminToggleActive(userId)
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, is_active: updated.is_active } : u))
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to toggle user')
+      toast({ type: 'error', message: err.response?.data?.detail || 'Failed to toggle user' })
     } finally {
       setTogglingActive(p => ({ ...p, [userId]: false }))
     }
@@ -195,7 +209,7 @@ export default function AdminPage() {
       setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, nom: updated.nom, email: updated.email } : u))
       setEditingUser(null)
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to save changes')
+      toast({ type: 'error', message: err.response?.data?.detail || 'Failed to save changes' })
     } finally {
       setSaving(p => ({ ...p, [editingUser.id]: false }))
     }
@@ -205,16 +219,25 @@ export default function AdminPage() {
   const handleBulkDelete = async () => {
     if (selectedUserIds.size === 0) return
     const count = selectedUserIds.size
-    if (!window.confirm(`Permanently delete ${count} user(s)? This cannot be undone.`)) return
+    const ok = await confirm({
+      title: 'Delete selected users?',
+      message: `You are about to permanently delete ${count} user(s). This cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    })
+    if (!ok) return
     
     setBulkProcessing(true)
     try {
       const result = await adminBulkDeleteUsers(Array.from(selectedUserIds))
       setUsers(prev => prev.filter(u => !selectedUserIds.has(u.id)))
       setSelectedUserIds(new Set())
-      alert(`Successfully deleted ${result.success_count} user(s)${result.failed_count > 0 ? `. Failed: ${result.failed_count}` : ''}`)
+      toast({
+        type: 'success',
+        message: `Deleted ${result.success_count} user(s)${result.failed_count > 0 ? `. Failed: ${result.failed_count}` : ''}`,
+      })
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to delete users')
+      toast({ type: 'error', message: err.response?.data?.detail || 'Failed to delete users' })
     } finally {
       setBulkProcessing(false)
     }
@@ -229,9 +252,12 @@ export default function AdminPage() {
       const result = await adminBulkActivateUsers(Array.from(selectedUserIds))
       setUsers(prev => prev.map(u => selectedUserIds.has(u.id) ? { ...u, is_active: true } : u))
       setSelectedUserIds(new Set())
-      alert(`Successfully activated ${result.success_count} user(s)${result.failed_count > 0 ? `. Failed: ${result.failed_count}` : ''}`)
+      toast({
+        type: 'success',
+        message: `Activated ${result.success_count} user(s)${result.failed_count > 0 ? `. Failed: ${result.failed_count}` : ''}`,
+      })
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to activate users')
+      toast({ type: 'error', message: err.response?.data?.detail || 'Failed to activate users' })
     } finally {
       setBulkProcessing(false)
     }
@@ -240,16 +266,25 @@ export default function AdminPage() {
   const handleBulkDeactivate = async () => {
     if (selectedUserIds.size === 0) return
     const count = selectedUserIds.size
-    if (!window.confirm(`Deactivate ${count} user(s)? They will receive a notification.`)) return
+    const ok = await confirm({
+      title: 'Deactivate selected users?',
+      message: `Deactivate ${count} user(s)? They will receive a notification.`,
+      confirmLabel: 'Deactivate',
+      tone: 'warning',
+    })
+    if (!ok) return
     
     setBulkProcessing(true)
     try {
       const result = await adminBulkDeactivateUsers(Array.from(selectedUserIds))
       setUsers(prev => prev.map(u => selectedUserIds.has(u.id) ? { ...u, is_active: false } : u))
       setSelectedUserIds(new Set())
-      alert(`Successfully deactivated ${result.success_count} user(s)${result.failed_count > 0 ? `. Failed: ${result.failed_count}` : ''}`)
+      toast({
+        type: 'success',
+        message: `Deactivated ${result.success_count} user(s)${result.failed_count > 0 ? `. Failed: ${result.failed_count}` : ''}`,
+      })
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to deactivate users')
+      toast({ type: 'error', message: err.response?.data?.detail || 'Failed to deactivate users' })
     } finally {
       setBulkProcessing(false)
     }
@@ -328,8 +363,11 @@ export default function AdminPage() {
                   const isProcessing = approving[u.id] || rejecting[u.id]
                   return (
                     <div key={u.id}
-                      className="flex items-center gap-4 px-5 py-4 rounded-2xl"
-                      style={{ background: 'rgba(250,204,21,0.04)', border: '1px solid rgba(250,204,21,0.15)' }}>
+                      className="ui-row flex items-center gap-4 px-5 py-4"
+                      style={{
+                        background: 'linear-gradient(160deg, rgba(250,204,21,0.08), rgba(15,15,15,0.92))',
+                        borderColor: 'rgba(250,204,21,0.22)',
+                      }}>
 
                       {/* Avatar */}
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0"
@@ -540,16 +578,9 @@ export default function AdminPage() {
                 return (
                   <div
                     key={u.id}
-                    className={`group relative rounded-2xl p-5 transition-all duration-200 ${
-                      isSelected ? '' : 'hover:border-orange-500/20 hover:shadow-lg hover:shadow-orange-500/10'
-                    }`}
-                    style={{
-                      background: 'linear-gradient(170deg, rgba(255,255,255,0.025), rgba(255,255,255,0.008))',
-                      border: isSelected
-                        ? '1.5px solid rgba(255,107,43,0.35)'
-                        : '1px solid rgba(255,255,255,0.055)',
-                      boxShadow: isSelected ? '0 0 20px rgba(255,107,43,0.15)' : 'none',
-                    }}>
+                    className={`group relative ui-card ui-card-sheen ui-card-hover p-5 transition-all duration-200 ${
+                      isSelected ? 'ui-card-selected' : ''
+                    }`}>
 
                     {/* Checkbox at top-right */}
                     <div className="absolute top-4 right-4">

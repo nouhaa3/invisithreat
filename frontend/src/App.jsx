@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { NotificationProvider } from './context/NotificationContext'
+import { UiFeedbackProvider } from './context/UiFeedbackContext'
 import { can, PERMISSIONS } from './utils/permissions'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
@@ -44,27 +45,29 @@ export default function App() {
   return (
     <AuthProvider>
       <NotificationProvider>
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <Routes>
-          <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
-          <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-          <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
-          <Route path="/verify-email" element={<PublicRoute><VerifyEmailPage /></PublicRoute>} />
-          <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
-          <Route path="/auth/github/callback" element={<GitHubOAuthCallbackPage />} />
-          <Route path="/dashboard" element={<PermissionRoute permission={PERMISSIONS.VIEW_DASHBOARD}><Dashboard /></PermissionRoute>} />
-          <Route path="/projects" element={<PermissionRoute permission={PERMISSIONS.VIEW_DASHBOARD}><ProjectsPage /></PermissionRoute>} />
-          <Route path="/scans/new" element={<PermissionRoute permission={PERMISSIONS.RUN_SCAN}><NewScanPage /></PermissionRoute>} />
-          <Route path="/projects/:id" element={<PermissionRoute permission={PERMISSIONS.VIEW_SCAN_RESULTS}><ProjectDetail /></PermissionRoute>} />
-          <Route path="/projects/:id/edit" element={<PermissionRoute permission={PERMISSIONS.MANAGE_OWN_PROJECTS}><EditProjectPage /></PermissionRoute>} />
-          <Route path="/projects/:id/members" element={<PermissionRoute permission={PERMISSIONS.MANAGE_PROJECT_MEMBERS}><ProjectMembersPage /></PermissionRoute>} />
-          <Route path="/admin" element={<PermissionRoute permission={PERMISSIONS.MANAGE_USERS}><AdminPage /></PermissionRoute>} />
-          <Route path="/audit-logs" element={<PermissionRoute permission={PERMISSIONS.VIEW_AUDIT_LOGS}><AuditLogsPage /></PermissionRoute>} />
-          <Route path="/settings" element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
-          <Route path="/notifications" element={<PrivateRoute><NotificationsPage /></PrivateRoute>} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-        </BrowserRouter>
+        <UiFeedbackProvider>
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <Routes>
+            <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
+            <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+            <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
+            <Route path="/verify-email" element={<PublicRoute><VerifyEmailPage /></PublicRoute>} />
+            <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
+            <Route path="/auth/github/callback" element={<GitHubOAuthCallbackPage />} />
+            <Route path="/dashboard" element={<PermissionRoute permission={PERMISSIONS.VIEW_DASHBOARD}><Dashboard /></PermissionRoute>} />
+            <Route path="/projects" element={<PermissionRoute permission={PERMISSIONS.VIEW_DASHBOARD}><ProjectsPage /></PermissionRoute>} />
+            <Route path="/scans/new" element={<PermissionRoute permission={PERMISSIONS.RUN_SCAN}><NewScanPage /></PermissionRoute>} />
+            <Route path="/projects/:id" element={<PermissionRoute permission={PERMISSIONS.VIEW_SCAN_RESULTS}><ProjectDetail /></PermissionRoute>} />
+            <Route path="/projects/:id/edit" element={<PermissionRoute permission={PERMISSIONS.MANAGE_OWN_PROJECTS}><EditProjectPage /></PermissionRoute>} />
+            <Route path="/projects/:id/members" element={<PermissionRoute permission={PERMISSIONS.MANAGE_PROJECT_MEMBERS}><ProjectMembersPage /></PermissionRoute>} />
+            <Route path="/admin" element={<PermissionRoute permission={PERMISSIONS.MANAGE_USERS}><AdminPage /></PermissionRoute>} />
+            <Route path="/audit-logs" element={<PermissionRoute permission={PERMISSIONS.VIEW_AUDIT_LOGS}><AuditLogsPage /></PermissionRoute>} />
+            <Route path="/settings" element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
+            <Route path="/notifications" element={<PrivateRoute><NotificationsPage /></PrivateRoute>} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+          </BrowserRouter>
+        </UiFeedbackProvider>
       </NotificationProvider>
     </AuthProvider>
   )

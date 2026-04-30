@@ -17,16 +17,16 @@ export default function AuthLayout({ children, imageContent }) {
       {/* Main card */}
       <div className="w-full max-w-6xl rounded-[32px] overflow-hidden flex shadow-elevated min-h-[720px] relative z-10"
         style={{
-          background: 'rgba(12,12,12,0.96)',
-          border: '1px solid rgba(255,107,43,0.18)',
-          boxShadow: '0 0 90px rgba(255,107,43,0.1), 0 40px 90px rgba(0,0,0,0.65)',
+          background: 'rgba(10,10,10,0.96)',
+          border: '1px solid rgba(255,107,43,0.22)',
+          boxShadow: '0 0 120px rgba(255,107,43,0.12), 0 50px 110px rgba(0,0,0,0.7)',
         }}
       >
         {/* Left - Animated brand panel */}
         <div className="hidden md:flex md:w-[45%] relative overflow-hidden">
           {/* Base gradient */}
           <div className="absolute inset-0"
-            style={{ background: 'linear-gradient(160deg, #1c0b03 0%, #0d0d0d 45%, #140802 100%)' }} />
+            style={{ background: 'linear-gradient(160deg, #190a04 0%, #0c0c0c 45%, #120702 100%)' }} />
 
           {/* Animated orbs */}
           <div className="absolute top-[-60px] left-[-60px] w-72 h-72 rounded-full animate-float-slow"
@@ -39,8 +39,8 @@ export default function AuthLayout({ children, imageContent }) {
             style={{ background: 'radial-gradient(circle, rgba(255,60,0,0.4) 0%, transparent 70%)', filter: 'blur(8px)' }} />
 
           {/* Grid overlay subtle */}
-          <div className="absolute inset-0 opacity-[0.03]"
-            style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+          <div className="absolute inset-0 opacity-[0.04]"
+            style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.4) 1px, transparent 1px)', backgroundSize: '42px 42px' }} />
 
           {/* Logo */}
           <div className="absolute top-7 left-7 z-10">

@@ -36,7 +36,7 @@ const getApiBase = () => {
 
 function StepIndicator({ current, steps }) {
   return (
-    <div className="flex items-center gap-5 mb-8 overflow-x-auto pb-2">
+    <div className="flex flex-wrap items-center gap-4 mb-6">
       {steps.map((label, i) => {
         const isComplete = i < current
         const isActive = i === current

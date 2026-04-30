@@ -4,6 +4,7 @@ import AppLayout from '../components/AppLayout'
 import Select from '../components/Select'
 import { getProject } from '../services/projectService'
 import { getMembers, inviteMember, updateMemberRole, removeMember } from '../services/projectService'
+import { useUiFeedback } from '../context/UiFeedbackContext'
 
 const ROLES = ['Viewer', 'Editor']
 
@@ -39,6 +40,7 @@ function RoleBadge({ role }) {
 export default function ProjectMembersPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { confirm, toast } = useUiFeedback()
 
   const [project, setProject] = useState(null)
   const [members, setMembers] = useState([])
@@ -110,14 +112,22 @@ export default function ProjectMembersPage() {
   }
 
   const handleRemove = async (userId, nom) => {
-    if (!confirm(`Remove ${nom} from the project?`)) return
+    const ok = await confirm({
+      title: 'Remove member?',
+      message: `Remove ${nom} from the project?`,
+      confirmLabel: 'Remove',
+      tone: 'warning',
+    })
+    if (!ok) return
     setRemovingId(userId)
     try {
       await removeMember(id, userId)
       setMembers(prev => prev.filter(m => m.user_id !== userId))
+      toast({ type: 'success', message: `${nom} has been removed.` })
     } catch {
       setFeedback({ type: 'error', msg: 'Failed to remove member.' })
       clearFeedback()
+      toast({ type: 'error', message: 'Failed to remove member.' })
     } finally {
       setRemovingId(null)
     }
@@ -165,8 +175,7 @@ export default function ProjectMembersPage() {
           </div>
 
           {/* Invite form */}
-          <div className="rounded-2xl p-6 mb-6"
-            style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="ui-card ui-card-sheen p-6 mb-6">
             <h2 className="text-white font-semibold mb-4 text-sm">Invite a member</h2>
             <form onSubmit={handleInvite} className="flex gap-3 flex-wrap">
               <input
@@ -216,8 +225,7 @@ export default function ProjectMembersPage() {
           </div>
 
           {/* Members list */}
-          <div className="rounded-2xl overflow-hidden"
-            style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="ui-card ui-card-sheen overflow-hidden">
             <div className="px-6 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
               <span className="text-white/40 text-xs font-medium uppercase tracking-wide">
                 {members.length} member{members.length !== 1 ? 's' : ''}
