@@ -19,6 +19,10 @@ import NotificationsPage from './pages/NotificationsPage'
 import AuditLogsPage from './pages/AuditLogsPage'
 import GitHubOAuthCallbackPage from './pages/GitHubOAuthCallbackPage'
 import LandingPage from './pages/LandingPage'
+import TrustCenterPage from './pages/TrustCenterPage'
+import PublicFeaturesPage from './pages/PublicFeaturesPage'
+import HowItWorksPage from './pages/HowItWorksPage'
+import DocsPage from './pages/DocsPage'
 
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth()
@@ -49,11 +53,16 @@ export default function App() {
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
             <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
+            <Route path="/features" element={<PublicFeaturesPage />} />
+            <Route path="/trust" element={<TrustCenterPage />} />
+            <Route path="/how" element={<HowItWorksPage />} />
+            <Route path="/docs" element={<DocsPage />} />
             <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
             <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
             <Route path="/verify-email" element={<PublicRoute><VerifyEmailPage /></PublicRoute>} />
             <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
             <Route path="/auth/github/callback" element={<GitHubOAuthCallbackPage />} />
+            <Route path="/trust-center" element={<Navigate to="/trust" replace />} />
             <Route path="/dashboard" element={<PermissionRoute permission={PERMISSIONS.VIEW_DASHBOARD}><Dashboard /></PermissionRoute>} />
             <Route path="/projects" element={<PermissionRoute permission={PERMISSIONS.VIEW_DASHBOARD}><ProjectsPage /></PermissionRoute>} />
             <Route path="/scans/new" element={<PermissionRoute permission={PERMISSIONS.RUN_SCAN}><NewScanPage /></PermissionRoute>} />

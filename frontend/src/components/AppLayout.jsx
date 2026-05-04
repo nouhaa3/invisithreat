@@ -201,6 +201,7 @@ export default function AppLayout({ children }) {
             Settings
           </NavItem>
 
+
           {/* Spacer pushes user card to bottom */}
           <div className="flex-1" />
         </nav>
