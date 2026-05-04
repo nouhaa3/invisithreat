@@ -78,13 +78,13 @@ export const initializeWebSocket = (userId, userRole, userEmail) => {
 
   socket = io(socketBaseUrl, {
     path: '/socket.io',
-    transports: ['polling', 'websocket'],
-    upgrade: true,
+    transports: ['websocket'],
+    upgrade: false,
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     reconnectionAttempts: Infinity,
-    timeout: 30000,
+    timeout: 20000,
   })
 
   socket.on('connect', () => {
