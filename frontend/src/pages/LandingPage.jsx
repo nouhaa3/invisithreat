@@ -303,6 +303,27 @@ function FooterColumn({ title, links }) {
 export default function LandingPage() {
   return (
     <div className="app-shell font-body scroll-smooth overflow-x-hidden">
+      <nav className="fixed top-0 left-0 right-0 !z-[9999] border-b border-white/5 bg-black">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex items-center justify-between h-16">
+            <Link to="/" className="flex items-center gap-2">
+              <img src={logo} alt="InvisiThreat" className="h-9 w-auto" />
+              <span className="text-sm font-heading tracking-[0.2em] text-white/70">InvisiThreat</span>
+            </Link>
+            <div className="hidden md:flex items-center gap-6 text-sm text-white/60">
+              {navLinks.map((link) => (
+                <a key={link.label} href={link.href} className="hover:text-white transition-colors">
+                  {link.label}
+                </a>
+              ))}
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <Link to="/login" className="text-white/70 hover:text-white transition-colors">Login</Link>
+              <PrimaryButton to="/signup" className="px-4 py-2 text-xs">Create account</PrimaryButton>
+            </div>
+          </div>
+        </div>
+      </nav>
       <div className="relative overflow-hidden">
         <div className="absolute -top-40 -left-32 w-[520px] h-[520px] rounded-full animate-float-slow"
           style={{ background: 'radial-gradient(circle, rgba(255,107,43,0.2) 0%, transparent 70%)' }}
@@ -313,28 +334,6 @@ export default function LandingPage() {
         <div className="absolute inset-0 opacity-[0.04]"
           style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)', backgroundSize: '80px 80px' }}
         />
-
-        <nav className="sticky top-0 z-50 backdrop-blur-xl border-b border-white/5 bg-black/50">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="flex items-center justify-between h-16">
-              <Link to="/" className="flex items-center gap-2">
-                <img src={logo} alt="InvisiThreat" className="h-9 w-auto" />
-                <span className="text-sm font-heading tracking-[0.2em] text-white/70">InvisiThreat</span>
-              </Link>
-              <div className="hidden md:flex items-center gap-6 text-sm text-white/60">
-                {navLinks.map((link) => (
-                  <a key={link.label} href={link.href} className="hover:text-white transition-colors">
-                    {link.label}
-                  </a>
-                ))}
-              </div>
-              <div className="flex items-center gap-3 text-sm">
-                <Link to="/login" className="text-white/70 hover:text-white transition-colors">Login</Link>
-                <PrimaryButton to="/signup" className="px-4 py-2 text-xs">Create account</PrimaryButton>
-              </div>
-            </div>
-          </div>
-        </nav>
 
         <section className="pt-20 pb-24">
           <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-[1.1fr_0.9fr] gap-12 items-center">

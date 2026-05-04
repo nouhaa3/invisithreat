@@ -5,6 +5,10 @@
 
 import { useState } from 'react';
 import { BarChart3, Search, ZapIcon, TerminalIcon } from '../icons/LandingIcons';
+import dashboardImg from '../../assets/images/dashboard.png';
+import vulListImg from '../../assets/images/vul_list.png';
+import vulDetailImg from '../../assets/images/vul_detail.png';
+import cliImg from '../../assets/images/cli.png';
 
 export default function ScreenshotShowcase() {
   const [activeScreenshot, setActiveScreenshot] = useState(0);
@@ -14,6 +18,7 @@ export default function ScreenshotShowcase() {
       title: 'Dashboard',
       description: 'Real-time security metrics and project overview at a glance',
       icon: BarChart3,
+      image: dashboardImg,
       features: ['Risk scoring', 'Vulnerability trends', 'Recent activity'],
       color: 'from-blue-500/20 to-blue-500/5',
       borderColor: 'border-blue-500/30',
@@ -22,6 +27,7 @@ export default function ScreenshotShowcase() {
       title: 'Vulnerabilities List',
       description: 'Comprehensive view of all detected security issues with severity levels',
       icon: Search,
+      image: vulListImg,
       features: ['SAST findings', 'Dependency vulnerabilities', 'Severity filtering'],
       color: 'from-orange-500/20 to-orange-500/5',
       borderColor: 'border-orange-500/30',
@@ -30,6 +36,7 @@ export default function ScreenshotShowcase() {
       title: 'Vulnerability Details',
       description: 'Deep dive into each vulnerability with recommendations and fix guidance',
       icon: ZapIcon,
+      image: vulDetailImg,
       features: ['Code snippet', 'Remediation steps', 'CWE references'],
       color: 'from-red-500/20 to-red-500/5',
       borderColor: 'border-red-500/30',
@@ -38,6 +45,7 @@ export default function ScreenshotShowcase() {
       title: 'CLI Output',
       description: 'Real-time scanning progress and results in your terminal',
       icon: TerminalIcon,
+      image: cliImg,
       features: ['Live progress', 'File analysis', 'Result summary'],
       color: 'from-green-500/20 to-green-500/5',
       borderColor: 'border-green-500/30',
@@ -73,29 +81,21 @@ export default function ScreenshotShowcase() {
           {/* Main Screenshot Display */}
           <div className="lg:col-span-2 animate-scale-in">
             <div className={`rounded-2xl border ${current.borderColor} backdrop-blur-xl overflow-hidden bg-gradient-to-br ${current.color}`}>
-              {/* Mock Screenshot */}
-              <div className="aspect-video bg-gradient-to-br from-white/5 to-white/0 flex items-center justify-center relative overflow-hidden">
-                {/* Decorative grid */}
+              {/* Screenshot */}
+              <div className="aspect-video relative overflow-hidden bg-black/60">
                 <div
-                  className="absolute inset-0 opacity-10"
-                  style={{
-                    backgroundImage:
-                      'linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px)',
-                    backgroundSize: '2rem 2rem',
-                  }}
+                  className="absolute inset-0 bg-center bg-cover blur-sm scale-105 opacity-60"
+                  style={{ backgroundImage: `url(${current.image})` }}
                 />
-
-                {/* Content */}
-                <div className="relative text-center">
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/10 mb-4">
-                    <current.icon size={32} className="text-white" />
-                  </div>
-                  <p className="text-white/60 text-sm">{current.title}</p>
-                </div>
-
-                {/* Accent elements */}
-                <div className="absolute top-0 right-0 w-96 h-96 rounded-full bg-white/5 blur-2xl -z-10" />
-                <div className="absolute bottom-0 left-0 w-96 h-96 rounded-full bg-white/5 blur-2xl -z-10" />
+                <div className="absolute inset-0 bg-black/35" />
+                <img
+                  src={current.image}
+                  alt={current.title}
+                  className="relative z-10 w-full h-full object-contain"
+                  loading="lazy"
+                  decoding="async"
+                />
+                <div className="absolute inset-0 ring-1 ring-inset ring-white/5" />
               </div>
 
               {/* Info Bar */}
