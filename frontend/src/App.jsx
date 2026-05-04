@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { NotificationProvider } from './context/NotificationContext'
 import { UiFeedbackProvider } from './context/UiFeedbackContext'
@@ -45,12 +46,23 @@ const PublicRoute = ({ children }) => {
   return isAuthenticated ? <Navigate to="/dashboard" replace /> : children
 }
 
+const ScrollToTop = () => {
+  const { pathname } = useLocation()
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
+
+  return null
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <NotificationProvider>
         <UiFeedbackProvider>
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <ScrollToTop />
           <Routes>
             <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
             <Route path="/features" element={<PublicFeaturesPage />} />
