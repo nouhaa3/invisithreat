@@ -173,7 +173,7 @@ export default function LandingPage() {
         <section className="pt-20 pb-24">
           <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-[1.1fr_0.9fr] gap-12 items-center">
             <div className="animate-slide-up">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/5 text-xs text-white/60 uppercase tracking-[0.2em]">
+              <div className="mt-[70px] inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/5 text-xs text-white/60 uppercase tracking-[0.2em]">
                 Trust-first DevSecOps
               </div>
               <h1 className="mt-5 text-4xl md:text-6xl font-heading leading-tight">
