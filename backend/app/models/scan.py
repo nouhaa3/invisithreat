@@ -21,6 +21,15 @@ class ScanStatus(str, enum.Enum):
     failed = "failed"
 
 
+class JobState(str, enum.Enum):
+    pending = "PENDING"
+    queued = "QUEUED"
+    running = "RUNNING"
+    retrying = "RETRYING"
+    success = "SUCCESS"
+    failed = "FAILED"
+
+
 class ProjectLanguage(str, enum.Enum):
     python = "Python"
     javascript = "JavaScript"
@@ -90,6 +99,12 @@ class Scan(Base):
     # Results stored as JSON text
     results_json = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
+
+    # Distributed job tracking (Celery)
+    job_id = Column(String, nullable=True, index=True)
+    job_state = Column(String, nullable=True, index=True)
+    job_attempts = Column(String, nullable=True, default="0")
+    job_updated_at = Column(DateTime, nullable=True)
 
     started_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     completed_at = Column(DateTime, nullable=True)

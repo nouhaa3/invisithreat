@@ -16,6 +16,7 @@ import {
 } from '../services/projectService'
 import { useAuth } from '../context/AuthContext'
 import { useUiFeedback } from '../context/UiFeedbackContext'
+import { onScanStateChange, onScanProgressUpdate, isWebSocketConnected } from '../services/websocketService'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -97,6 +98,15 @@ const STATUS_CONFIG = {
   running:   { label: 'Running',   bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.2)', color: '#60a5fa' },
   pending:   { label: 'Pending',   bg: 'rgba(234,179,8,0.1)',  border: 'rgba(234,179,8,0.2)',  color: '#eab308' },
   failed:    { label: 'Failed',    bg: 'rgba(239,68,68,0.1)',  border: 'rgba(239,68,68,0.2)',  color: '#f87171' },
+}
+
+const JOB_STATUS_CONFIG = {
+  PENDING:  { label: 'Pending',  color: '#eab308' },
+  QUEUED:   { label: 'Queued',   color: '#eab308' },
+  RUNNING:  { label: 'Running',  color: '#60a5fa' },
+  RETRYING: { label: 'Retrying', color: '#a78bfa' },
+  SUCCESS:  { label: 'Success',  color: '#22c55e' },
+  FAILED:   { label: 'Failed',   color: '#f87171' },
 }
 
 const RECOMMENDATIONS = {
@@ -907,7 +917,12 @@ export default function ProjectDetail() {
 
   // Polling: refresh scans every 5s while any scan is pending/running
   useEffect(() => {
-    const hasActive = scans.some(s => s.status === 'pending' || s.status === 'running')
+    const hasActive = scans.some(
+      (s) =>
+        s.status === 'pending' ||
+        s.status === 'running' ||
+        ['PENDING', 'QUEUED', 'RUNNING', 'RETRYING'].includes(String(s.job_state || ''))
+    )
     if (hasActive && !pollRef.current) {
       pollRef.current = setInterval(async () => {
         const list = await loadScans()
@@ -915,7 +930,7 @@ export default function ProjectDetail() {
         if (syncedDast) {
           await loadScans()
         }
-      }, 5000)
+      }, isWebSocketConnected() ? 20000 : 5000)
     }
     if (!hasActive && pollRef.current) {
       clearInterval(pollRef.current)
@@ -925,6 +940,23 @@ export default function ProjectDetail() {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     }
   }, [scans, loadScans, syncActiveDastStatuses])
+
+  // Realtime scan lifecycle (socket events) — reduce polling load
+  useEffect(() => {
+    const cleanupState = onScanStateChange((evt) => {
+      if (!evt || String(evt.project_id) !== String(id)) return
+      loadScans()
+    })
+    const cleanupProgress = onScanProgressUpdate((evt) => {
+      if (!evt || String(evt.project_id) !== String(id)) return
+      // Keep lightweight: refresh list, UI derives status from job_state/scan.status
+      loadScans()
+    })
+    return () => {
+      cleanupState?.()
+      cleanupProgress?.()
+    }
+  }, [id, loadScans])
 
   useEffect(() => {
     if (!vulnerabilityPollRef.current) {

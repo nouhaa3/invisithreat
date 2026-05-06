@@ -25,5 +25,6 @@ python-socketio
 python-engineio
 aioredis
 redis
+celery[redis]
 
 APScheduler==3.10.4

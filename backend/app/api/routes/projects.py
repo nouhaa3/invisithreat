@@ -48,6 +48,9 @@ from app.schemas.vulnerability_workflow import (
     VulnerabilityTaskCommentResponse,
 )
 from app.core.scan_sanitizer import sanitize_scan_results
+from app.models.scan import JobState
+from app.workers.scan_worker import run_github_scan_job
+from app.core.observability import request_id_var, user_id_var
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -999,13 +1002,15 @@ async def create_new_scan(
         db.commit()
 
         background_tasks.add_task(
-            run_github_scan,
-            scan_id=str(scan.id),
-            repo_url=data.repo_url,
-            branch=data.repo_branch or "main",
-            db_url=settings.DATABASE_URL,
-            github_token=None,
+            lambda: None
         )
+        # Propagate tracing context into worker
+        headers = {"request_id": request_id_var.get(), "user_id": str(current_user.id)}
+        job = run_github_scan_job.apply_async(args=[str(scan.id)], headers=headers)
+        scan.job_id = job.id
+        scan.job_state = JobState.queued.value
+        scan.job_updated_at = datetime.now(UTC)
+        db.commit()
 
     return scan
 

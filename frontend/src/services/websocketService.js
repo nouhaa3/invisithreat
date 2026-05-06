@@ -2,6 +2,8 @@
 
 let socket = null
 const notificationListeners = new Map() // Track listeners to clean them up properly
+const scanStateListeners = new Map()
+const scanProgressListeners = new Map()
 
 const sanitizePayload = (payload) => {
   if (payload == null) return payload
@@ -93,6 +95,16 @@ export const initializeWebSocket = () => {
     })
   })
 
+  socket.on('scan_state_change', (data) => {
+    const safeData = sanitizePayload(data)
+    scanStateListeners.forEach((handler) => handler(safeData))
+  })
+
+  socket.on('scan_progress_update', (data) => {
+    const safeData = sanitizePayload(data)
+    scanProgressListeners.forEach((handler) => handler(safeData))
+  })
+
   socket.on('disconnect', () => {})
   socket.on('connect_error', () => {})
   socket.on('error', () => {})
@@ -112,6 +124,8 @@ export const closeWebSocket = () => {
   }
   // Clear all listeners when closing
   notificationListeners.clear()
+  scanStateListeners.clear()
+  scanProgressListeners.clear()
 }
 
 export const isWebSocketConnected = () => {
@@ -136,6 +150,18 @@ export const onNotification = (callback) => {
   return () => {
     notificationListeners.delete(callbackId)
   }
+}
+
+export const onScanStateChange = (callback) => {
+  const callbackId = Math.random().toString(36).slice(2)
+  scanStateListeners.set(callbackId, callback)
+  return () => scanStateListeners.delete(callbackId)
+}
+
+export const onScanProgressUpdate = (callback) => {
+  const callbackId = Math.random().toString(36).slice(2)
+  scanProgressListeners.set(callbackId, callback)
+  return () => scanProgressListeners.delete(callbackId)
 }
 
 /**

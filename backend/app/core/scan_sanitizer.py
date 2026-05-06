@@ -1,12 +1,13 @@
 import hashlib
 from typing import Any
+from uuid import UUID
 
 from app.core.masking import mask_secret
 
 
 def sanitize_finding(raw: dict[str, Any]) -> dict[str, Any]:
-    file_path = (raw.get("file") or raw.get("path") or "").strip()
-    line_number = raw.get("line") or 0
+    file_path = (raw.get("file_path") or raw.get("file") or raw.get("path") or "").strip()
+    line_number = raw.get("line_number") if raw.get("line_number") is not None else raw.get("line") or 0
     try:
         line_number = int(line_number)
     except (TypeError, ValueError):
@@ -17,11 +18,31 @@ def sanitize_finding(raw: dict[str, Any]) -> dict[str, Any]:
     masked = mask_secret(raw.get("secret") or raw.get("code") or raw.get("snippet") or "")
 
     return {
+        # AI-ready normalized schema
         "id": raw.get("id"),
+        "scan_id": raw.get("scan_id"),
+        "project_id": raw.get("project_id"),
         "rule_id": raw.get("rule_id") or "",
-        "title": raw.get("title") or "Security finding",
         "severity": (raw.get("severity") or "info").lower(),
-        "category": raw.get("category") or "security",
+        "category": (raw.get("category") or "security").lower(),
+        "file_path": file_path,
+        "line_number": line_number,
+        "metadata": {
+            "title": raw.get("title") or "Security finding",
+            "description": raw.get("description") or "",
+            "recommendation": raw.get("recommendation") or raw.get("fix") or "",
+            "source_tool": raw.get("source_tool"),
+            "source_hash": source_hash,
+        },
+        "masked_context": masked or None,
+        # AI placeholders (disabled by default; no AI logic here)
+        "vulnerability_summary": raw.get("vulnerability_summary") or None,
+        "remediation_hint": raw.get("remediation_hint") or None,
+        "ai_classification": raw.get("ai_classification"),
+        "ai_confidence_score": raw.get("ai_confidence_score"),
+
+        # Backward-compatible fields for existing UI
+        "title": raw.get("title") or "Security finding",
         "description": raw.get("description") or "",
         "recommendation": raw.get("recommendation") or raw.get("fix") or "",
         "file": file_path,

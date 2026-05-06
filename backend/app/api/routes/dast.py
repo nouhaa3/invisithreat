@@ -8,15 +8,17 @@ from typing import Dict
 from urllib.parse import urlparse, urlunparse
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.permissions import P, require_permission
 from app.db.session import SessionLocal, get_db
 from app.models.scan import Scan, ScanMethod, ScanStatus
 from app.models.user import User
-from app.services.dast_scanner import run_dast_scan_async
-from app.services.zap_client import ZapApiException, ZapClient
+from app.core.queue import get_scan_progress, set_scan_progress
+from app.models.scan import JobState
+from app.workers.scan_worker import run_dast_scan_job
+from app.core.observability import request_id_var
 from app.services.project import get_project_accessible
 from app.services.risk_score import get_or_create_scan_risk_score
 from app.core.scan_sanitizer import sanitize_scan_results
@@ -24,7 +26,6 @@ from app.core.scan_sanitizer import sanitize_scan_results
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-_progress_cache: Dict[str, dict] = {}
 
 
 def _utc_now_iso() -> str:
@@ -271,52 +272,13 @@ def run_dast_scan_background(scan_id: str, target_url: str) -> None:
         scan.started_at = datetime.now(UTC)
         db.commit()
 
-        def progress_cb(payload: dict) -> None:
-            _progress_cache[scan_id] = _stamp_progress(payload)
-
-        result = asyncio.run(run_dast_scan_async(target_url, progress_callback=progress_cb))
-
-        findings = result.get("vulnerabilities", [])
-        scan.results_json = json.dumps(sanitize_scan_results(_build_results_payload(findings)))
-        scan.error_message = result.get("error")
-        scan.completed_at = datetime.now(UTC)
-        scan.status = ScanStatus.completed if result.get("completed") else ScanStatus.failed
-        db.commit()
-
-        if scan.status == ScanStatus.completed:
-            get_or_create_scan_risk_score(db, scan)
-
-        _progress_cache[scan_id] = _stamp_progress({
-            "stage": "completed" if result.get("completed") else "failed",
-            "spider_progress": result.get("progress", {}).get("spider_progress", 0),
-            "active_scan_progress": result.get("progress", {}).get("active_scan_progress", 0),
-            "alerts_found": len(findings),
-            "error": result.get("error"),
-        })
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.exception("Background DAST scan failed: %s", scan_id)
-        scan = db.query(Scan).filter(Scan.id == UUID(scan_id), Scan.method == ScanMethod.dast).first()
-        if scan:
-            scan.status = ScanStatus.failed
-            scan.error_message = str(exc)
-            scan.completed_at = datetime.now(UTC)
-            db.commit()
-        _progress_cache[scan_id] = _stamp_progress({
-            "stage": "failed",
-            "spider_progress": 0,
-            "active_scan_progress": 0,
-            "alerts_found": 0,
-            "error": str(exc),
-        })
-    finally:
-        db.close()
+        raise RuntimeError("Legacy background executor should not be used in Phase 2.")
 
 
 @router.post("/scan/start")
 async def start_dast_scan(
     target_url: str,
     project_id: str,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(P.RUN_SCAN)),
 ) -> dict:
@@ -343,23 +305,29 @@ async def start_dast_scan(
     db.commit()
     db.refresh(scan)
 
-    _progress_cache[str(scan.id)] = _stamp_progress({
+    set_scan_progress(str(scan.id), {
         "stage": "pending",
         "spider_progress": 0,
         "active_scan_progress": 0,
         "alerts_found": 0,
         "error": None,
-    })
+    }, ttl_seconds=7200)
 
-    background_tasks.add_task(run_dast_scan_background, str(scan.id), effective_target_url)
+    headers = {"request_id": request_id_var.get(), "user_id": str(current_user.id)}
+    job = run_dast_scan_job.apply_async(args=[str(scan.id), effective_target_url], headers=headers)
+    scan.job_id = job.id
+    scan.job_state = JobState.queued.value
+    scan.job_updated_at = datetime.now(UTC)
+    db.commit()
 
     return {
         "status": "initiated",
         "scan_id": str(scan.id),
+        "job_id": job.id,
         "project_id": str(project.id),
         "target_url": target_url,
         "effective_target_url": effective_target_url,
-        "message": "DAST scan started in background",
+        "message": "DAST scan enqueued",
     }
 
 
@@ -375,9 +343,7 @@ async def get_dast_scan_status(
 
     get_project_accessible(db, scan.project_id, current_user)
 
-    progress = _progress_cache.get(scan_id, {})
-    progress = _recover_running_scan_from_zap(db, scan, progress)
-    progress = _finalize_if_stale_running_scan(db, scan, progress)
+    progress = get_scan_progress(scan_id)
     results = None
     if scan.results_json:
         try:

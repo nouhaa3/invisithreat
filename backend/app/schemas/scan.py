@@ -202,6 +202,8 @@ class ScanResponse(BaseModel):
     project_id: uuid.UUID
     method: Optional[str] = None
     status: str
+    job_id: Optional[str] = None
+    job_state: Optional[str] = None
     repo_url: Optional[str] = None
     repo_branch: Optional[str] = None
     results_json: Optional[str] = None

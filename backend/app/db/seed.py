@@ -3,6 +3,7 @@ Seed script - Creates default roles and users.
 Run: python -m app.db.seed
 """
 import sys, os
+import logging
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from app.db.session import SessionLocal
@@ -31,9 +32,10 @@ USERS = [
 ]
 
 def seed():
+    logger = logging.getLogger(__name__)
     db = SessionLocal()
     try:
-        print("Seeding roles...")
+        logger.info("Seeding roles...")
         role_map = {}
         for r in ROLES:
             obj = db.query(Role).filter(Role.name == r["name"]).first()
@@ -41,13 +43,13 @@ def seed():
                 obj = Role(id=uuid.uuid4(), name=r["name"], description=r["description"])
                 db.add(obj)
                 db.flush()
-                print(f"  + Role: {r['name']}")
+                logger.info("Role created: %s", r["name"])
             else:
-                print(f"  = Role exists: {r['name']}")
+                logger.info("Role exists: %s", r["name"])
             role_map[r["name"]] = obj
         db.commit()
 
-        print("\nSeeding users...")
+        logger.info("Seeding users...")
         for u in USERS:
             obj = db.query(User).filter(User.email == u["email"]).first()
             if not obj:
@@ -63,14 +65,14 @@ def seed():
                     trial_scans_remaining=2
                 )
                 db.add(obj)
-                print(f"  + User: {u['email']}")
+                logger.info("User created: %s", u["email"])
             else:
-                print(f"  = User exists: {u['email']}")
+                logger.info("User exists: %s", u["email"])
         db.commit()
-        print("\nSeed complete!")
+        logger.info("Seed complete!")
     except Exception as e:
         db.rollback()
-        print(f"Seed failed: {e}")
+        logger.exception("Seed failed: %s", e)
         raise
     finally:
         db.close()

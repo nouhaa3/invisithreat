@@ -21,9 +21,12 @@ from app.core.jobs import cleanup_old_audit_logs, cleanup_expired_scans
 from app.core.encryption import validate_encryption_configuration
 from app.core.logging_security import RedactingLogFilter
 from app.core.security_middleware import SecurityHardeningMiddleware
+from app.core.middleware import RequestTracingMiddleware
+from app.core.observability import configure_json_logging, request_id_var
 from app.services.socketio_service import sio
 
 logger = logging.getLogger(__name__)
+configure_json_logging(level="INFO")
 _root_logger = logging.getLogger()
 _root_logger.addFilter(RedactingLogFilter())
 for _handler in _root_logger.handlers:
@@ -96,6 +99,7 @@ app_fastapi.state.limiter = limiter
 app_fastapi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app_fastapi.add_middleware(SlowAPIMiddleware)
 app_fastapi.add_middleware(SecurityHardeningMiddleware)
+app_fastapi.add_middleware(RequestTracingMiddleware)
 
 # CORS middleware - restricted configuration for security (add last to apply first)
 # Applied on app_fastapi only; Socket.IO manages its own CORS via cors_allowed_origins.
@@ -113,9 +117,11 @@ app_fastapi.include_router(api_router, prefix="/api")
 
 @app_fastapi.exception_handler(Exception)
 async def global_exception_handler(_request: Request, _exc: Exception):
+    req_id = request_id_var.get()
+    logger.exception("unhandled_exception", extra={"extra": {"request_id": req_id}})
     if settings.ENVIRONMENT.lower() == "production":
-        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
-    return JSONResponse(status_code=500, content={"detail": "Unexpected server error"})
+        return JSONResponse(status_code=500, content={"detail": "Internal server error", "request_id": req_id})
+    return JSONResponse(status_code=500, content={"detail": "Unexpected server error", "request_id": req_id})
 
 @app_fastapi.get("/")
 async def root():

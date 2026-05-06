@@ -15,6 +15,9 @@ from app.core.auth_cookies import ACCESS_COOKIE
 from app.core.jwt import decode_token
 from app.db.session import SessionLocal
 from app.models.user import User
+from app.models.member import ProjectMember
+from app.models.scan import Scan
+from app.core.observability import request_id_var
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +210,47 @@ class SocketIOManager:
             )
         except Exception as e:
             logger.error(f'[ERROR] Failed to schedule notification emission: {e}')
+
+    @classmethod
+    def _emit_to_user(cls, user_id: str, event: str, payload: dict):
+        connected = cls.connected_users.get(str(user_id))
+        if not connected:
+            return
+        sid = connected.get("sid")
+        if not sid:
+            return
+        sio.start_background_task(sio.emit, event, payload, room=sid)
+
+    @classmethod
+    def emit_scan_state_change(cls, scan_id: str, project_id: str, user_ids: list[str], job_id: str | None, job_state: str, scan_status: str):
+        req_id = request_id_var.get()
+        payload = {
+            "type": "scan_state_change",
+            "scan_id": scan_id,
+            "project_id": project_id,
+            "job_id": job_id,
+            "job_state": job_state,
+            "scan_status": scan_status,
+            "request_id": req_id,
+            "ts": datetime.utcnow().isoformat(),
+        }
+        for uid in user_ids:
+            cls._emit_to_user(uid, "scan_state_change", payload)
+
+    @classmethod
+    def emit_scan_progress_update(cls, scan_id: str, project_id: str, user_ids: list[str], job_id: str | None, progress: dict):
+        req_id = request_id_var.get()
+        payload = {
+            "type": "scan_progress_update",
+            "scan_id": scan_id,
+            "project_id": project_id,
+            "job_id": job_id,
+            "progress": progress,
+            "request_id": req_id,
+            "ts": datetime.utcnow().isoformat(),
+        }
+        for uid in user_ids:
+            cls._emit_to_user(uid, "scan_progress_update", payload)
 
 # Socket.IO event handlers
 @sio.event

@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     GITHUB_WEBHOOK_SECRET: str = ""
     GITHUB_DEFAULT_TOKEN: str = ""
 
+    # Redis / Queue (Celery)
+    REDIS_URL: str = "redis://redis:6379/0"
+    CELERY_BROKER_URL: str = ""
+    CELERY_RESULT_BACKEND: str = ""
+
+    # Feature flags (AI-ready)
+    FEATURE_AI_ENABLED: bool = False
+    FEATURE_AI_TRIAGE: bool = False
+    FEATURE_AI_REPORTING: bool = False
+
     @property
     def DATABASE_URL(self) -> str:
         """Return DB URL from DATABASE_URL when set, otherwise build from POSTGRES_* values."""
@@ -76,6 +86,14 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         extra = "ignore"
+
+    @property
+    def CELERY_BROKER(self) -> str:
+        return (self.CELERY_BROKER_URL or "").strip() or self.REDIS_URL
+
+    @property
+    def CELERY_BACKEND(self) -> str:
+        return (self.CELERY_RESULT_BACKEND or "").strip() or self.REDIS_URL
 
 
 settings = Settings()

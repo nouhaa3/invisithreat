@@ -16,6 +16,9 @@ from app.models.scan import Project, Scan, ScanMethod, ScanStatus
 from app.models.member import ProjectMember
 from app.services.notification import create_notification
 from app.core.scan_sanitizer import sanitize_scan_results
+from app.models.scan import JobState
+from app.workers.scan_worker import process_cli_scan_job
+from app.core.observability import request_id_var
 
 router = APIRouter(prefix="/cli", tags=["CLI"])
 
@@ -172,34 +175,22 @@ async def cli_upload_scan(
         id=uuid.uuid4(),
         project_id=project.id,
         method=ScanMethod.cli,
-        status=ScanStatus.completed,
-        results_json=json.dumps(sanitize_scan_results(results_for_db)),
+        status=ScanStatus.pending,
+        results_json=None,
         started_at=datetime.now(UTC),
-        completed_at=datetime.now(UTC),
+        completed_at=None,
     )
     db.add(scan)
     db.commit()
     db.refresh(scan)
 
-    # In-app notification for the project owner
-    total = len(payload.findings)
-    critical_count = by_sev.get("critical", 0)
-    high_count = by_sev.get("high", 0)
-    if total == 0:
-        sev_msg = "No vulnerabilities found."
-    else:
-        parts = []
-        if critical_count: parts.append(f"{critical_count} critical")
-        if high_count: parts.append(f"{high_count} high")
-        sev_msg = ", ".join(parts) + "." if parts else f"{total} finding(s)."
-    create_notification(
-        db,
-        user_id=project.owner_id,
-        type="scan_complete",
-        title=f'Scan completed — {project.name}',
-        message=f'{total} finding{"s" if total != 1 else ""} detected. {sev_msg}',
-        link=f'/projects/{project.id}',
-    )
+    # Enqueue post-processing (sanitize/normalize/persist/notify)
+    headers = {"request_id": request_id_var.get(), "user_id": str(current_user.id)}
+    job = process_cli_scan_job.apply_async(args=[str(scan.id), results_for_db], headers=headers)
+    scan.job_id = job.id
+    scan.job_state = JobState.queued.value
+    scan.job_updated_at = datetime.now(UTC)
+    db.commit()
 
     return CLIScanResponse(
         scan_id=scan.id,
