@@ -15,7 +15,6 @@ class GitHubRepository(Base):
     name = Column(String(200), nullable=False)
     url = Column(String(500), nullable=False)
     default_branch = Column(String(120), nullable=False, default="main")
-    access_token = Column(String(500), nullable=True)
     access_token_encrypted = Column(String(2000), nullable=True)
 
     project = relationship("Project", back_populates="github_repositories")

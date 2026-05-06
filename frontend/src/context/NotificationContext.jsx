@@ -15,7 +15,6 @@ export function NotificationProvider({ children }) {
 
   const userId = user?.id
   const userRole = user?.role_name
-  const userEmail = user?.email
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) return
@@ -71,7 +70,7 @@ export function NotificationProvider({ children }) {
       return
     }
 
-    initializeWebSocket(userId, userRole, userEmail)
+    initializeWebSocket()
 
     // Listen for real-time notifications from Socket.IO for all roles.
     const cleanup = onNotification((socketNotif) => {
@@ -87,7 +86,7 @@ export function NotificationProvider({ children }) {
     return () => {
       cleanup?.()
     }
-  }, [isAuthenticated, isLoading, userId, userRole, userEmail])
+  }, [isAuthenticated, isLoading, userId, userRole])
 
   useEffect(() => {
     if (isLoading) return

@@ -1,7 +1,6 @@
 ﻿import io from 'socket.io-client'
 
 let socket = null
-let currentIdentity = null
 const notificationListeners = new Map() // Track listeners to clean them up properly
 
 const sanitizePayload = (payload) => {
@@ -57,23 +56,11 @@ const getSocketBaseUrl = () => {
   return window.location.origin
 }
 
-const emitIdentify = () => {
-  if (!socket || !socket.connected || !currentIdentity?.user_id) return
-  socket.emit('identify', currentIdentity)
-}
-
-export const initializeWebSocket = (userId, userRole, userEmail) => {
-  currentIdentity = {
-    user_id: userId,
-    email: userEmail,
-    role: userRole,
-  }
+export const initializeWebSocket = () => {
 
   // Reuse existing socket instead of creating duplicates (important with React StrictMode).
   if (socket !== null) {
-    if (socket.connected) {
-      emitIdentify()
-    } else if (socket.active) {
+    if (socket.active) {
     } else {
       socket.connect()
     }
@@ -94,7 +81,6 @@ export const initializeWebSocket = (userId, userRole, userEmail) => {
   })
 
   socket.on('connect', () => {
-    emitIdentify()
   })
 
   socket.on('connected', () => {})
@@ -112,9 +98,7 @@ export const initializeWebSocket = (userId, userRole, userEmail) => {
   socket.on('error', () => {})
   socket.io.on('reconnect_attempt', () => {})
 
-  socket.io.on('reconnect', () => {
-    emitIdentify()
-  })
+  socket.io.on('reconnect', () => {})
 
   socket.io.on('reconnect_error', () => {})
 
@@ -126,7 +110,6 @@ export const closeWebSocket = () => {
     socket.disconnect()
     socket = null
   }
-  currentIdentity = null
   // Clear all listeners when closing
   notificationListeners.clear()
 }

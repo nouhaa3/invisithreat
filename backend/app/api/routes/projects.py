@@ -1004,7 +1004,7 @@ async def create_new_scan(
             repo_url=data.repo_url,
             branch=data.repo_branch or "main",
             db_url=settings.DATABASE_URL,
-            github_token=data.repo_token,
+            github_token=None,
         )
 
     return scan

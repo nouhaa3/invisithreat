@@ -12,7 +12,7 @@ from app.models.user import User
 from app.core.permissions import require_permission, P
 from app.schemas.audit_log import AuditLogOut
 
-router = APIRouter(prefix="/api/admin/audit-logs", tags=["admin-audit-logs"])
+router = APIRouter(prefix="/admin/audit-logs", tags=["admin-audit-logs"])
 
 # ─── GET: List audit logs with filters ─────────────────────────────────────
 @router.get("", response_model=dict)

@@ -8,6 +8,7 @@ from app.core.rate_limit import limiter
 from app.models.user import User
 from app.services.totp import generate_secret, get_totp_uri, generate_qr_base64, verify_totp
 from app.core.auth_cookies import set_auth_cookies
+from app.services.session_manager import create_refresh_session, revoke_all_user_sessions
 
 router = APIRouter(prefix="/auth/2fa", tags=["Two-Factor Auth"])
 
@@ -77,6 +78,7 @@ async def enable_2fa(
         raise HTTPException(status_code=400, detail="Invalid code. Please try again.")
     current_user.totp_enabled = True
     db.commit()
+    revoke_all_user_sessions(db, current_user.id)
     return {"message": "2FA has been enabled."}
 
 
@@ -97,6 +99,7 @@ async def disable_2fa(
     current_user.totp_enabled = False
     current_user.totp_secret = None
     db.commit()
+    revoke_all_user_sessions(db, current_user.id)
     return {"message": "2FA has been disabled."}
 
 
@@ -132,6 +135,7 @@ async def verify_login_totp(
     user_with_role = get_user_with_role(db, user)
     access_token = create_access_token(data={"sub": str(user.id), "role": user_with_role["role_name"]})
     refresh_tok = create_refresh_token(data={"sub": str(user.id)})
+    create_refresh_session(db, user.id, refresh_tok)
 
     set_auth_cookies(response, access_token, refresh_tok)
     return LoginResponse(

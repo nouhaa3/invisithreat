@@ -206,7 +206,13 @@ async def github_oauth_exchange(
 
         db.commit()
 
-    return token_data
+    return {
+        "connected": True,
+        "provider": "github",
+        "scope": token_data.get("scope") or "",
+        "repo_url": (payload.repo_url or "").strip() or None,
+        "repo_branch": (payload.repo_branch or "main").strip() or "main",
+    }
 
 
 @router.get("/github/oauth/callback")
@@ -290,7 +296,7 @@ async def github_webhook(
             repo_url=scan.repo_url,
             branch=scan.repo_branch,
             db_url=settings.DATABASE_URL,
-            github_token=decrypt_token(repo.access_token_encrypted or repo.access_token),
+            github_token=decrypt_token(repo.access_token_encrypted),
         )
         created_scan_ids.append(str(scan.id))
 

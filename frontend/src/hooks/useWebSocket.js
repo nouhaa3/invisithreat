@@ -8,8 +8,8 @@ export const useWebSocket = (onNotification_callback) => {
   useEffect(() => {
     if (!user) return
 
-    // Initialize WebSocket connection (only once per app, re-identifies on subsequent calls)
-    initializeWebSocket(user.id, user.role_name, user.email)
+    // Initialize WebSocket connection (server derives user from auth cookie)
+    initializeWebSocket()
 
     // Register notification listener - gets cleanup function back
     let cleanup = null

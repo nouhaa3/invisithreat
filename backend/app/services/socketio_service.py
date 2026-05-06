@@ -6,8 +6,15 @@ import logging
 from datetime import datetime
 from typing import Dict
 import socketio
+from http.cookies import SimpleCookie
+import uuid
+from sqlalchemy.orm import joinedload
 
 from app.core.config import settings
+from app.core.auth_cookies import ACCESS_COOKIE
+from app.core.jwt import decode_token
+from app.db.session import SessionLocal
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -204,28 +211,57 @@ class SocketIOManager:
 # Socket.IO event handlers
 @sio.event
 async def connect(sid, environ):
-    """Handle client connection"""
-    logger.info(f'[WS] New WebSocket connection: {sid}')
+    """Authenticate websocket connection with HttpOnly access cookie JWT."""
+    raw_cookie = (environ.get("HTTP_COOKIE") or "").strip()
+    if not raw_cookie:
+        logger.warning("[WS] Rejecting sid %s: missing auth cookie", sid)
+        return False
 
-@sio.event
-async def identify(sid, data):
-    """Identify the user after connection"""
-    user_id = data.get('user_id')
-    email = data.get('email')
-    role = data.get('role')
-    
-    logger.info(f'[SECURE] [IDENTIFY] SID {sid} - user_id: {user_id}, role: {role}')
-    
-    if user_id:
-        logger.info(f'[SECURE] [IDENTIFY] Registering user {user_id} as {role}')
-        SocketIOManager.register_user(user_id, sid, email, role)
-        await sio.emit('connected', {
-            'status': 'success',
-            'message': 'Identified successfully',
-            'user_id': user_id,
-        }, room=sid)
-    else:
-        logger.warning(f'[WARN] [IDENTIFY] No user_id provided by {sid}')
+    cookie = SimpleCookie()
+    cookie.load(raw_cookie)
+    morsel = cookie.get(ACCESS_COOKIE)
+    if morsel is None:
+        logger.warning("[WS] Rejecting sid %s: access cookie not found", sid)
+        return False
+
+    try:
+        payload = decode_token(morsel.value)
+    except Exception:
+        logger.warning("[WS] Rejecting sid %s: invalid access token", sid)
+        return False
+
+    if payload.get("type") != "access" or not payload.get("sub"):
+        logger.warning("[WS] Rejecting sid %s: invalid token payload", sid)
+        return False
+    try:
+        user_uuid = uuid.UUID(str(payload["sub"]))
+    except (TypeError, ValueError):
+        logger.warning("[WS] Rejecting sid %s: malformed user id in token", sid)
+        return False
+
+    db = SessionLocal()
+    try:
+        user = (
+            db.query(User)
+            .options(joinedload(User.role))
+            .filter(User.id == user_uuid, User.is_active == True)  # noqa: E712
+            .first()
+        )
+        if not user:
+            logger.warning("[WS] Rejecting sid %s: user not found or inactive", sid)
+            return False
+
+        role_name = user.role.name if user.role else None
+        SocketIOManager.register_user(str(user.id), sid, user.email, role_name)
+        await sio.emit(
+            "connected",
+            {"status": "success", "message": "Authenticated websocket connection"},
+            room=sid,
+        )
+        logger.info("[WS] Authenticated connection %s for user %s", sid, user.id)
+        return True
+    finally:
+        db.close()
 
 @sio.event
 async def disconnect(sid):

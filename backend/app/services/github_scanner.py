@@ -506,7 +506,7 @@ def _resolve_github_token(db: Session, scan: Scan, explicit_token: str | None) -
         .first()
     )
     if repo:
-        resolved = decrypt_token(repo.access_token_encrypted or repo.access_token)
+        resolved = decrypt_token(repo.access_token_encrypted)
         if resolved:
             return resolved.strip()
     fallback = (settings.GITHUB_DEFAULT_TOKEN or "").strip()

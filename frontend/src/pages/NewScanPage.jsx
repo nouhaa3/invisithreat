@@ -300,14 +300,13 @@ export default function NewScanPage() {
         repo_branch: repoBranch.trim() || 'main',
       }
       const data = await exchangeGitHubOAuthCode(payload)
-      if (!data?.access_token) {
-        throw new Error('No access token returned by GitHub exchange')
+      if (!data?.connected) {
+        throw new Error('OAuth exchange did not complete successfully')
       }
-      setGithubToken(data.access_token)
       setGitHubAuthCode('')
       setGitHubOAuthState('')
       try { window.localStorage.removeItem('ivt_github_oauth_state') } catch {}
-      setGitHubInfo('OAuth token received. Private repository scan is now enabled.')
+      setGitHubInfo('GitHub integration connected successfully.')
     } catch (err) {
       setConfigError(err.response?.data?.detail || err.message || 'Unable to exchange GitHub OAuth code')
     } finally {
@@ -1184,7 +1183,7 @@ export default function NewScanPage() {
                         </button>
                       </div>
                       <p className="text-xs text-white/35">
-                        OAuth flow opens GitHub in a new tab. After approval, copy the returned access token and paste it below for private repository scans.
+                        OAuth flow opens GitHub in a new tab and securely links the repository server-side.
                       </p>
                       <div>
                         <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">
@@ -1211,7 +1210,7 @@ export default function NewScanPage() {
                           </button>
                         </div>
                         <p className="text-xs text-white/30 mt-2">
-                          Alternative: use the access token returned by the callback endpoint directly.
+                          Paste the callback URL or code from the popup to complete secure server-side exchange.
                         </p>
                       </div>
                       <div>

@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, UTC
 from typing import Optional
+import uuid
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -44,8 +45,7 @@ def create_refresh_token(data: dict) -> str:
     """
     to_encode = data.copy()
     expire = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    
-    to_encode.update({"exp": expire, "type": "refresh"})
+    to_encode.update({"exp": expire, "type": "refresh", "jti": str(uuid.uuid4())})
     
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt

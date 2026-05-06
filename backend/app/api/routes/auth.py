@@ -31,13 +31,21 @@ from app.services.notification import create_notification
 from app.services.audit_log import create_audit_log
 from app.services.socketio_service import SocketIOManager
 from app.core.auth_cookies import clear_auth_cookies, get_refresh_cookie, set_auth_cookies
+from app.services.session_manager import (
+    create_refresh_session,
+    revoke_all_user_sessions,
+    rotate_refresh_session,
+    validate_refresh_session,
+)
 import uuid as _uuid
 import random
 import string
 from datetime import datetime, UTC
 from passlib.context import CryptContext as _CryptContext
+import logging
 
 _pwd_ctx = _CryptContext(schemes=["bcrypt"], deprecated="auto")
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 PRIMARY_ADMIN_EMAIL = (settings.PRIMARY_ADMIN_EMAIL or "invisithreat@gmail.com").strip().lower()
@@ -76,18 +84,16 @@ async def register(
     email_sent = notify_user_verify_email(user.nom, user.email, verification_token, settings.FRONTEND_URL)
 
     # Create database notifications for all active admins
-    print(f"[SEARCH] [REGISTER] Creating notifications for new user: {user.nom} ({user.email})")
     admin_users = (
         db.query(User)
         .join(Role, User.role_id == Role.id)
         .filter(Role.name == "Admin", User.is_active == True)
         .all()
     )
-    print(f"[SEARCH] [REGISTER] Found {len(admin_users)} active admins")
+    logger.info("Creating registration notifications for %s admin users", len(admin_users))
     
     for admin_user in admin_users:
-        print(f"[SEARCH] [REGISTER] Creating notification for admin {admin_user.id}")
-        notif = create_notification(
+        create_notification(
             db,
             admin_user.id,
             "system",
@@ -95,10 +101,8 @@ async def register(
             f"{user.nom} ({user.email}) has registered and is pending verification.",
             "/admin",
         )
-        print(f"[OK] [REGISTER] Notification created: {notif.id}")
 
     # Emit WebSocket notification to admins that a new user registered
-    print(f"[SEARCH] [REGISTER] Emitting Socket.IO event for new user")
     try:
         await SocketIOManager.notify_user_created({
             'id': user.id,
@@ -108,11 +112,8 @@ async def register(
             'is_pending': user.is_pending,
             'date_creation': user.date_creation,
         })
-        print(f"[OK] [REGISTER] Socket.IO event sent successfully")
     except Exception as e:
-        print(f"[ERROR] [REGISTER] Error sending WebSocket notification: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.warning("Error sending registration websocket notification: %s", e)
 
     return {
         "status": "email_verification_required",
@@ -189,6 +190,7 @@ async def login(
 
     ip = request.client.host if request.client else None
     create_audit_log(db, user.id, "login", f"Login from {ip or 'unknown'}", ip)
+    create_refresh_session(db, user.id, refresh_tok)
 
     set_auth_cookies(response, access_token, refresh_tok)
     return LoginResponse(
@@ -245,6 +247,13 @@ async def refresh_token(
                 detail="User not found or inactive"
             )
         
+        active_session = validate_refresh_session(db, user.id, refresh_token_value)
+        if not active_session:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh session is invalid or revoked",
+            )
+
         # Get role for new access token
         user_with_role = get_user_with_role(db, user)
         
@@ -255,6 +264,7 @@ async def refresh_token(
         new_refresh_token = create_refresh_token(
             data={"sub": str(user.id)}
         )
+        rotate_refresh_session(db, active_session, new_refresh_token)
         
         set_auth_cookies(response, new_access_token, new_refresh_token)
         return Token(
@@ -284,6 +294,7 @@ async def logout(
     Note: JWT tokens are stateless, so logout is handled client-side
     by deleting the tokens. This endpoint confirms the token is valid.
     """
+    revoke_all_user_sessions(db, current_user.id)
     create_audit_log(db, current_user.id, "logout", "User logged out")
     clear_auth_cookies(response)
     return {
@@ -368,6 +379,7 @@ async def change_my_password(
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     current_user.hashed_password = _pwd_ctx.hash(payload.new_password)
     db.commit()
+    revoke_all_user_sessions(db, current_user.id)
     create_audit_log(db, current_user.id, "password_changed", "Password changed via settings")
 
 
@@ -429,7 +441,7 @@ async def verify_reset_code(
     reset_token = _jose_jwt.encode(
         {"sub": str(user.id), "type": "admin_action", "action": "reset_password",
          "exp": datetime.now(UTC) + timedelta(minutes=10)},
-        settings.SECRET_KEY, algorithm="HS256"
+        settings.SECRET_KEY, algorithm=settings.ALGORITHM
     )
     # Invalidate the code immediately
     user.reset_code = None
@@ -453,6 +465,7 @@ async def reset_password(
         raise HTTPException(status_code=404, detail="User not found")
     user.hashed_password = _pwd_ctx.hash(payload.new_password)
     db.commit()
+    revoke_all_user_sessions(db, user.id)
     return {"message": "Password updated successfully"}
 
 
@@ -700,7 +713,7 @@ async def admin_toggle_active(
     try:
         await SocketIOManager.notify_user_status_changed(str(user.id), user.is_active)
     except Exception as e:
-        print(f"Error sending WebSocket notification: {e}")
+        logger.warning("Error sending user status websocket notification: %s", e)
     
     return UserAdminResponse(**get_user_with_role(db, user))
 
@@ -841,7 +854,7 @@ async def admin_delete_user(
     try:
         await SocketIOManager.notify_user_deleted(deleted_user_id)
     except Exception as e:
-        print(f"Error sending WebSocket notification: {e}")
+        logger.warning("Error sending user deletion websocket notification: %s", e)
 
 
 # ─── Bulk user operations ─────────────────────────────────────────────────────
@@ -894,7 +907,7 @@ async def admin_bulk_delete_users(
             if str(user_id) not in [k for k in errors.keys()]:
                 await SocketIOManager.notify_user_deleted(str(user_id))
     except Exception as e:
-        print(f"Error sending WebSocket notification: {e}")
+        logger.warning("Error sending bulk deletion websocket notification: %s", e)
     
     # Create audit log for bulk deletion
     if success_count > 0:
@@ -960,7 +973,7 @@ async def admin_bulk_activate_users(
             if str(user_id) not in [k for k in errors.keys()]:
                 await SocketIOManager.notify_user_status_changed(str(user_id), True)
     except Exception as e:
-        print(f"Error sending WebSocket notification: {e}")
+        logger.warning("Error sending bulk activation websocket notification: %s", e)
     
     # Create audit log for bulk activation
     if success_count > 0:
@@ -1025,7 +1038,7 @@ async def admin_bulk_deactivate_users(
             if str(user_id) not in [k for k in errors.keys()]:
                 await SocketIOManager.notify_user_status_changed(str(user_id), False)
     except Exception as e:
-        print(f"Error sending WebSocket notification: {e}")
+        logger.warning("Error sending bulk deactivation websocket notification: %s", e)
     
     # Create audit log for bulk deactivation
     if success_count > 0:
