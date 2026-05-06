@@ -19,6 +19,7 @@ from app.models.scan import Scan, ScanMethod, ScanStatus
 from app.models.user import User
 from app.services.project import get_project_accessible
 from app.services.github_scanner import run_github_scan
+from app.core.encryption import decrypt_token, encrypt_token
 
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
 
@@ -107,7 +108,7 @@ def _exchange_github_code_for_token(code: str) -> dict:
             timeout=20,
         )
     except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail=f"GitHub OAuth exchange failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail="GitHub OAuth exchange failed") from exc
 
     if response.status_code >= 400:
         raise HTTPException(status_code=502, detail="GitHub OAuth endpoint rejected the request")
@@ -193,7 +194,7 @@ async def github_oauth_exchange(
                 name=(payload.repo_url or "repository").strip().rstrip("/").split("/")[-1] or "repository",
                 url=(payload.repo_url or "").strip(),
                 default_branch=(payload.repo_branch or "main").strip() or "main",
-                access_token=token,
+                access_token_encrypted=encrypt_token(token),
             )
             db.add(repo_record)
         else:
@@ -201,7 +202,7 @@ async def github_oauth_exchange(
                 repo_record.url = payload.repo_url.strip()
                 repo_record.name = payload.repo_url.strip().rstrip("/").split("/")[-1] or repo_record.name
             repo_record.default_branch = (payload.repo_branch or repo_record.default_branch or "main").strip() or "main"
-            repo_record.access_token = token
+            repo_record.access_token_encrypted = encrypt_token(token)
 
         db.commit()
 
@@ -289,7 +290,7 @@ async def github_webhook(
             repo_url=scan.repo_url,
             branch=scan.repo_branch,
             db_url=settings.DATABASE_URL,
-            github_token=repo.access_token,
+            github_token=decrypt_token(repo.access_token_encrypted or repo.access_token),
         )
         created_scan_ids.append(str(scan.id))
 

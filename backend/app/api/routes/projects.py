@@ -31,6 +31,7 @@ from app.models.member import ProjectMember as MemberModel
 from app.models.scan import Scan as ScanModel, ScanStatus
 from app.models.role import Role
 from app.models.github_repository import GitHubRepository
+from app.core.encryption import encrypt_token
 from app.models.vulnerability_workflow import (
     VulnerabilityTask,
     VulnerabilityTaskComment,
@@ -38,6 +39,7 @@ from app.models.vulnerability_workflow import (
 )
 from app.services.risk_score import get_or_create_scan_risk_score
 from app.services.notification import create_notification
+from app.services.audit_log import create_audit_log
 from app.schemas.vulnerability_workflow import (
     VulnerabilityWorkflowSnapshotResponse,
     VulnerabilityTaskResponse,
@@ -45,6 +47,7 @@ from app.schemas.vulnerability_workflow import (
     VulnerabilityTaskCommentCreate,
     VulnerabilityTaskCommentResponse,
 )
+from app.core.scan_sanitizer import sanitize_scan_results
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -936,6 +939,7 @@ async def delete_one_project(
     current_user: User = Depends(require_permission(P.MANAGE_OWN_PROJECTS)),
 ):
     delete_project(db, project_id, current_user)
+    create_audit_log(db, current_user.id, "project_deleted", f"Deleted project {project_id}")
 
 
 # ─── Scans ───────────────────────────────────────────────────────────────────
@@ -966,6 +970,7 @@ async def create_new_scan(
         db.commit()
     
     scan = create_scan(db, project, data.method, data.repo_url, data.repo_branch)
+    create_audit_log(db, current_user.id, "scan_created", f"Created {data.method} scan for project {project.id}")
 
     if data.method == "github":
         if not data.repo_url:
@@ -982,7 +987,7 @@ async def create_new_scan(
                 name=_guess_repo_name(data.repo_url),
                 url=data.repo_url.strip(),
                 default_branch=(data.repo_branch or "main").strip() or "main",
-                access_token=(data.repo_token or None),
+                access_token_encrypted=(encrypt_token(data.repo_token) if data.repo_token else None),
             )
             db.add(repo_record)
         else:
@@ -990,7 +995,7 @@ async def create_new_scan(
             repo_record.url = data.repo_url.strip()
             repo_record.default_branch = (data.repo_branch or "main").strip() or "main"
             if data.repo_token is not None:
-                repo_record.access_token = data.repo_token
+                repo_record.access_token_encrypted = encrypt_token(data.repo_token) if data.repo_token else None
         db.commit()
 
         background_tasks.add_task(
@@ -1012,6 +1017,7 @@ async def list_project_scans(
     current_user: User = Depends(require_permission(P.VIEW_SCAN_RESULTS)),
 ):
     get_project_accessible(db, project_id, current_user)
+    create_audit_log(db, current_user.id, "scan_viewed", f"Viewed scans for project {project_id}")
     return get_scans_for_project(db, project_id)
 
 
@@ -1117,7 +1123,11 @@ async def cli_upload_results(
     ).first()
     if not scan:
         raise HTTPException(status_code=401, detail="Invalid or expired upload token")
-    scan.results_json = payload.results_json
+    try:
+        parsed_payload = json.loads(payload.results_json)
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid scan results payload") from exc
+    scan.results_json = json.dumps(sanitize_scan_results(parsed_payload))
     scan.status = ScanStatus.completed if payload.status == "completed" else ScanStatus.failed
     scan.error_message = payload.error_message
     scan.completed_at = datetime.now(UTC)

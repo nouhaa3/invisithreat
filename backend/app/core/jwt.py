@@ -1,15 +1,12 @@
 from datetime import datetime, timedelta, UTC
 from typing import Optional
 from jose import JWTError, jwt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import User
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
-
+from app.core.auth_cookies import get_access_cookie
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
@@ -102,6 +99,8 @@ def decode_token(token: str) -> dict:
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    if not token:
+        raise credentials_exception
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
@@ -110,7 +109,7 @@ def decode_token(token: str) -> dict:
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    request: Request,
     db: Session = Depends(get_db)
 ) -> User:
     """
@@ -132,7 +131,8 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    payload = decode_token(token)
+    cookie_token = get_access_cookie(request)
+    payload = decode_token(cookie_token)
     
     user_id: str = payload.get("sub")
     token_type: str = payload.get("type")

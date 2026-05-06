@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -7,6 +7,7 @@ from app.core.jwt import get_current_user, create_access_token, create_refresh_t
 from app.core.rate_limit import limiter
 from app.models.user import User
 from app.services.totp import generate_secret, get_totp_uri, generate_qr_base64, verify_totp
+from app.core.auth_cookies import set_auth_cookies
 
 router = APIRouter(prefix="/auth/2fa", tags=["Two-Factor Auth"])
 
@@ -104,6 +105,7 @@ async def disable_2fa(
 async def verify_login_totp(
     body: VerifyLoginRequest,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
 ):
     """Complete a login that required 2FA: verify code and return full tokens."""
@@ -131,6 +133,7 @@ async def verify_login_totp(
     access_token = create_access_token(data={"sub": str(user.id), "role": user_with_role["role_name"]})
     refresh_tok = create_refresh_token(data={"sub": str(user.id)})
 
+    set_auth_cookies(response, access_token, refresh_tok)
     return LoginResponse(
         access_token=access_token,
         refresh_token=refresh_tok,

@@ -25,6 +25,8 @@ from app.models.github_repository import GitHubRepository
 from app.models.scan_tool import ScanTool
 from app.models.tool_execution import ToolExecution
 from app.services.risk_score import upsert_scan_risk_score
+from app.core.encryption import decrypt_token
+from app.core.scan_sanitizer import sanitize_scan_results
 
 # Try to import new modular rules system, fall back to legacy rules if unavailable
 try:
@@ -503,8 +505,10 @@ def _resolve_github_token(db: Session, scan: Scan, explicit_token: str | None) -
         .filter(GitHubRepository.project_id == scan.project_id)
         .first()
     )
-    if repo and repo.access_token:
-        return repo.access_token.strip()
+    if repo:
+        resolved = decrypt_token(repo.access_token_encrypted or repo.access_token)
+        if resolved:
+            return resolved.strip()
     fallback = (settings.GITHUB_DEFAULT_TOKEN or "").strip()
     return fallback or None
 
@@ -777,7 +781,7 @@ def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str, githu
 
         # ── 4. Save results ─────────────────────────────────────────────────
         scan.status = ScanStatus.completed
-        scan.results_json = json.dumps(results)
+        scan.results_json = json.dumps(sanitize_scan_results(results))
         scan.completed_at = datetime.now(timezone.utc)
         db.commit()
         _upsert_pipeline_execution(db, scan, "completed")
@@ -788,7 +792,9 @@ def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str, githu
             scan = db.query(Scan).filter(Scan.id == scan_id).first()
             if scan:
                 scan.status = ScanStatus.failed
-                scan.results_json = json.dumps({"error": str(exc), "findings": [], "summary": {"total_findings": 0, "scanned_files": 0}})
+                scan.results_json = json.dumps(
+                    {"error": "Scan failed due to internal execution error", "findings": [], "summary": {"total_findings": 0, "scanned_files": 0}}
+                )
                 scan.completed_at = datetime.now(timezone.utc)
                 db.commit()
                 _upsert_pipeline_execution(db, scan, "failed")

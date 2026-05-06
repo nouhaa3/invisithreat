@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.models.audit_log import AuditLog
+from app.models.scan import Scan
 import logging
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,20 @@ async def cleanup_old_audit_logs():
         
     except Exception as e:
         logger.error(f"[ERROR] Failed to cleanup audit logs: { str(e) }")
+        db.rollback()
+    finally:
+        db.close()
+
+
+async def cleanup_expired_scans():
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        deleted = db.query(Scan).filter(Scan.expires_at < now).delete(synchronize_session=False)
+        db.commit()
+        logger.info("Expired scan cleanup deleted %s rows", deleted)
+    except Exception as exc:
+        logger.error("Failed to cleanup expired scans: %s", exc)
         db.rollback()
     finally:
         db.close()

@@ -6,7 +6,8 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -16,10 +17,17 @@ from socketio import ASGIApp
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.core.jobs import cleanup_old_audit_logs
+from app.core.jobs import cleanup_old_audit_logs, cleanup_expired_scans
+from app.core.encryption import validate_encryption_configuration
+from app.core.logging_security import RedactingLogFilter
+from app.core.security_middleware import SecurityHardeningMiddleware
 from app.services.socketio_service import sio
 
 logger = logging.getLogger(__name__)
+_root_logger = logging.getLogger()
+_root_logger.addFilter(RedactingLogFilter())
+for _handler in _root_logger.handlers:
+    _handler.addFilter(RedactingLogFilter())
 
 ALLOWED_ORIGINS = list(
     dict.fromkeys(
@@ -40,6 +48,7 @@ scheduler = AsyncIOScheduler()
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Manage app startup and shutdown"""
+    validate_encryption_configuration()
     # Startup
     scheduler.start()
     logger.info("[OK] Background job scheduler started")
@@ -54,6 +63,15 @@ async def lifespan(_app: FastAPI):
         name="Clean old audit logs (> 2 weeks)",
     )
     logger.info("Scheduled cleanup_old_audit_logs to run daily at 02:00")
+
+    scheduler.add_job(
+        cleanup_expired_scans,
+        "cron",
+        hour=3,
+        minute=0,
+        id="cleanup_expired_scans",
+        name="Clean expired scans",
+    )
 
     yield
 
@@ -77,6 +95,7 @@ app_fastapi = FastAPI(
 app_fastapi.state.limiter = limiter
 app_fastapi.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app_fastapi.add_middleware(SlowAPIMiddleware)
+app_fastapi.add_middleware(SecurityHardeningMiddleware)
 
 # CORS middleware - restricted configuration for security (add last to apply first)
 # Applied on app_fastapi only; Socket.IO manages its own CORS via cors_allowed_origins.
@@ -90,6 +109,13 @@ app_fastapi.add_middleware(
 
 # Include API router
 app_fastapi.include_router(api_router, prefix="/api")
+
+
+@app_fastapi.exception_handler(Exception)
+async def global_exception_handler(_request: Request, _exc: Exception):
+    if settings.ENVIRONMENT.lower() == "production":
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    return JSONResponse(status_code=500, content={"detail": "Unexpected server error"})
 
 @app_fastapi.get("/")
 async def root():

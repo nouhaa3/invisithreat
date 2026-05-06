@@ -19,6 +19,7 @@ from app.services.dast_scanner import run_dast_scan_async
 from app.services.zap_client import ZapApiException, ZapClient
 from app.services.project import get_project_accessible
 from app.services.risk_score import get_or_create_scan_risk_score
+from app.core.scan_sanitizer import sanitize_scan_results
 
 logger = logging.getLogger(__name__)
 
@@ -231,7 +232,7 @@ def _recover_running_scan_from_zap(db: Session, scan: Scan, progress: dict) -> d
             findings = _fetch_zap_findings_for_target(scan.repo_url)
             now = datetime.now(UTC)
 
-            scan.results_json = json.dumps(_build_results_payload(findings))
+            scan.results_json = json.dumps(sanitize_scan_results(_build_results_payload(findings)))
             scan.status = ScanStatus.completed
             scan.completed_at = now
 
@@ -276,7 +277,7 @@ def run_dast_scan_background(scan_id: str, target_url: str) -> None:
         result = asyncio.run(run_dast_scan_async(target_url, progress_callback=progress_cb))
 
         findings = result.get("vulnerabilities", [])
-        scan.results_json = json.dumps(_build_results_payload(findings))
+        scan.results_json = json.dumps(sanitize_scan_results(_build_results_payload(findings)))
         scan.error_message = result.get("error")
         scan.completed_at = datetime.now(UTC)
         scan.status = ScanStatus.completed if result.get("completed") else ScanStatus.failed

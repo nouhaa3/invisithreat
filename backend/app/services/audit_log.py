@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from app.models.audit_log import AuditLog
+from app.core.masking import redact_text
 
 
 def create_audit_log(
@@ -13,7 +14,7 @@ def create_audit_log(
     entry = AuditLog(
         user_id=user_id,
         action=action,
-        detail=detail,
+        detail=redact_text(detail),
         ip_address=ip_address,
     )
     db.add(entry)

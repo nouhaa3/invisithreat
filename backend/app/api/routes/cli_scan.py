@@ -15,6 +15,7 @@ from app.models.user import User
 from app.models.scan import Project, Scan, ScanMethod, ScanStatus
 from app.models.member import ProjectMember
 from app.services.notification import create_notification
+from app.core.scan_sanitizer import sanitize_scan_results
 
 router = APIRouter(prefix="/cli", tags=["CLI"])
 
@@ -152,7 +153,7 @@ async def cli_upload_scan(
             "fix":         f.fix or "",
             "file":        f.file,
             "line":        f.line,
-            "code":        f.snippet or "",
+            "snippet":     f.snippet or "",
         }
         for f in payload.findings
     ]
@@ -172,7 +173,7 @@ async def cli_upload_scan(
         project_id=project.id,
         method=ScanMethod.cli,
         status=ScanStatus.completed,
-        results_json=json.dumps(results_for_db),
+        results_json=json.dumps(sanitize_scan_results(results_for_db)),
         started_at=datetime.now(UTC),
         completed_at=datetime.now(UTC),
     )

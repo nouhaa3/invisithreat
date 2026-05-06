@@ -1,14 +1,12 @@
-﻿import { useEffect, useCallback } from 'react'
+﻿import { useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { initializeWebSocket, closeWebSocket, onNotification } from '../services/websocketService'
+import { initializeWebSocket, onNotification } from '../services/websocketService'
 
 export const useWebSocket = (onNotification_callback) => {
   const { user } = useAuth()
 
   useEffect(() => {
     if (!user) return
-
-    console.log(`[WS-MOUNT] Mounting useWebSocket for user: ${user.email}`)
 
     // Initialize WebSocket connection (only once per app, re-identifies on subsequent calls)
     initializeWebSocket(user.id, user.role_name, user.email)
@@ -21,7 +19,6 @@ export const useWebSocket = (onNotification_callback) => {
 
     // Cleanup on unmount
     return () => {
-      console.log(`[WS-UNMOUNT] Unmounting useWebSocket for user: ${user.email}`)
       if (cleanup) {
         cleanup() // Call cleanup function to unregister listener
       }

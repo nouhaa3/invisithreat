@@ -300,13 +300,15 @@ function FindingRow({ finding, cfg }) {
           <p className="text-[11px] font-semibold uppercase tracking-widest text-white/20 mt-3 mb-1">Vulnerability</p>
           <p className="text-xs text-white/45 leading-relaxed">{finding.description}</p>
 
-          {finding.code && (
+          {(finding.masked_value || finding.source_hash) && (
             <div className="rounded-lg px-3 py-2.5 mt-2.5"
               style={{ background: '#0d0d0d', border: '1px solid rgba(255,255,255,0.06)' }}>
               <p className="text-xs text-white/20 mb-1 font-semibold uppercase tracking-widest">
                 {finding.rule_id} — Line {finding.line}
               </p>
-              <code className="text-xs font-mono text-amber-400/70 break-all">{finding.code}</code>
+              <code className="text-xs font-mono text-amber-400/70 break-all">
+                {finding.masked_value || `hash:${finding.source_hash}`}
+              </code>
             </div>
           )}
 
@@ -479,13 +481,15 @@ function CurrentFindingRow({
         <div className="px-4 pb-4 pt-0" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
           <p className="text-[11px] font-semibold uppercase tracking-widest text-white/20 mt-3 mb-1">Vulnerability</p>
           <p className="text-xs text-white/45 leading-relaxed">{finding.description}</p>
-          {finding.code && (
+          {(finding.masked_value || finding.source_hash) && (
             <div className="rounded-lg px-3 py-2.5 mt-2.5"
               style={{ background: '#0d0d0d', border: '1px solid rgba(255,255,255,0.06)' }}>
               <p className="text-xs text-white/20 mb-1 font-semibold uppercase tracking-widest">
                 {finding.rule_id} — Line {finding.line}
               </p>
-              <code className="text-xs font-mono text-amber-400/70 break-all">{finding.code}</code>
+              <code className="text-xs font-mono text-amber-400/70 break-all">
+                {finding.masked_value || `hash:${finding.source_hash}`}
+              </code>
             </div>
           )}
           {recommendation && (

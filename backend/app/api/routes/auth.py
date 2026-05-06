@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session, joinedload
@@ -30,6 +30,7 @@ from app.models.role import Role
 from app.services.notification import create_notification
 from app.services.audit_log import create_audit_log
 from app.services.socketio_service import SocketIOManager
+from app.core.auth_cookies import clear_auth_cookies, get_refresh_cookie, set_auth_cookies
 import uuid as _uuid
 import random
 import string
@@ -159,6 +160,7 @@ async def resend_verification_email(
 @limiter.limit("10/minute")
 async def login(
     request: Request,
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -188,6 +190,7 @@ async def login(
     ip = request.client.host if request.client else None
     create_audit_log(db, user.id, "login", f"Login from {ip or 'unknown'}", ip)
 
+    set_auth_cookies(response, access_token, refresh_tok)
     return LoginResponse(
         access_token=access_token,
         refresh_token=refresh_tok,
@@ -199,8 +202,9 @@ async def login(
 @router.post("/refresh", response_model=Token)
 @limiter.limit("30/minute")
 async def refresh_token(
-    refresh_request: RefreshTokenRequest,
+    refresh_request: RefreshTokenRequest | None = None,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db)
 ):
     """
@@ -211,7 +215,13 @@ async def refresh_token(
     _ = request
     try:
         # Decode refresh token
-        payload = decode_token(refresh_request.refresh_token)
+        refresh_token_value = ""
+        if refresh_request and refresh_request.refresh_token:
+            refresh_token_value = refresh_request.refresh_token.strip()
+        refresh_token_value = refresh_token_value or (get_refresh_cookie(request) or "").strip()
+        if not refresh_token_value:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token is required")
+        payload = decode_token(refresh_token_value)
         
         # Verify it's a refresh token
         if payload.get("type") != "refresh":
@@ -246,6 +256,7 @@ async def refresh_token(
             data={"sub": str(user.id)}
         )
         
+        set_auth_cookies(response, new_access_token, new_refresh_token)
         return Token(
             access_token=new_access_token,
             refresh_token=new_refresh_token,
@@ -263,6 +274,7 @@ async def refresh_token(
 
 @router.post("/logout")
 async def logout(
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -273,9 +285,10 @@ async def logout(
     by deleting the tokens. This endpoint confirms the token is valid.
     """
     create_audit_log(db, current_user.id, "logout", "User logged out")
+    clear_auth_cookies(response)
     return {
         "message": "Successfully logged out",
-        "detail": "Please delete tokens from client storage"
+        "detail": "Session cookies cleared"
     }
 
 

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { saveAuthData, clearAuthData, getStoredUser, getMe, refreshSessionIfNeeded } from '../services/authService'
+import api from '../services/api'
 
 const AuthContext = createContext(null)
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000
@@ -21,28 +22,28 @@ export const AuthProvider = ({ children }) => {
 
   const logout = useCallback(() => {
     clearIdleTimer()
+    api.post('/api/auth/logout').catch(() => {})
     clearAuthData()
     localStorage.removeItem(IDLE_STORAGE_KEY)
     setUser(null)
   }, [clearIdleTimer])
 
   const recordActivity = useCallback(() => {
-    if (!localStorage.getItem('access_token')) return
+    if (!user) return
 
     localStorage.setItem(IDLE_STORAGE_KEY, String(Date.now()))
     clearIdleTimer()
     idleTimerRef.current = setTimeout(() => {
       logout()
     }, IDLE_TIMEOUT_MS)
-  }, [clearIdleTimer, logout])
+  }, [clearIdleTimer, logout, user])
 
   const startIdleTracking = useCallback(() => {
     recordActivity()
   }, [recordActivity])
 
   const checkIdleState = useCallback(() => {
-    const token = localStorage.getItem('access_token')
-    if (!token) {
+    if (!user) {
       clearIdleTimer()
       return
     }
@@ -68,10 +69,7 @@ export const AuthProvider = ({ children }) => {
 
   const refreshSession = useCallback(async () => {
     if (refreshInFlightRef.current) return
-
-    const hasAccessToken = !!localStorage.getItem('access_token')
-    const hasRefreshToken = !!localStorage.getItem('refresh_token')
-    if (!hasAccessToken || !hasRefreshToken) return
+    if (!user) return
 
     refreshInFlightRef.current = true
     try {
@@ -81,35 +79,26 @@ export const AuthProvider = ({ children }) => {
     } finally {
       refreshInFlightRef.current = false
     }
-  }, [logout])
+  }, [logout, user])
 
   // Restore session on app load and sync with server
   useEffect(() => {
     const initAuth = async () => {
       const storedUser = getStoredUser()
-      const token = localStorage.getItem('access_token')
-      if (storedUser && token) {
-        // Set stored user immediately for better UX
+      if (storedUser) {
         setUser(storedUser)
         startIdleTracking()
+      }
 
-        try {
-          await refreshSessionIfNeeded()
-        } catch {
-          logout()
-          setIsLoading(false)
-          return
-        }
-        
-        // Sync with server to get latest data (profile picture, etc)
-        try {
-          const freshUser = await getMe()
-          setUser(freshUser)
-          // Update localStorage with fresh data
-          localStorage.setItem('user', JSON.stringify(freshUser))
-        } catch (error) {
-          // If sync fails, keep the stored user
-          console.debug('Failed to sync user data from server:', error)
+      try {
+        await refreshSessionIfNeeded()
+        const freshUser = await getMe()
+        setUser(freshUser)
+        localStorage.setItem('user', JSON.stringify(freshUser))
+      } catch {
+        if (!storedUser) {
+          clearAuthData()
+          setUser(null)
         }
       }
       setIsLoading(false)

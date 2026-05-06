@@ -1,7 +1,7 @@
 ﻿from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
 import uuid
 import enum
 from app.db.base import Base
@@ -93,6 +93,7 @@ class Scan(Base):
 
     started_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     completed_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC).replace(microsecond=0) + timedelta(days=90))
 
     project = relationship("Project", back_populates="scans")
     risk_score = relationship("RiskScore", back_populates="scan", uselist=False, cascade="all, delete-orphan")

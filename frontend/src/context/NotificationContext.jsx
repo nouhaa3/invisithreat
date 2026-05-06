@@ -68,22 +68,16 @@ export function NotificationProvider({ children }) {
 
     if (!isAuthenticated || !userId) {
       closeWebSocket()
-      console.debug('[NOTIF-CONTEXT] Not initializing - not authenticated or no user')
       return
     }
 
-    console.log('[NOTIF-CONTEXT] Initializing WebSocket for user:', userId, userRole)
     initializeWebSocket(userId, userRole, userEmail)
 
     // Listen for real-time notifications from Socket.IO for all roles.
     const cleanup = onNotification((socketNotif) => {
       if (!socketNotif || !socketNotif.type) {
-        console.warn('[WARN] [NOTIF-CONTEXT] Received invalid notification:', socketNotif)
         return
       }
-
-      console.log('[NOTIF-CONTEXT] Socket.IO event received:', socketNotif.type)
-      console.log('   Full data:', socketNotif)
 
       // Show badge quickly, then reconcile with backend source of truth.
       setUnreadCount(prev => prev + 1)
@@ -91,7 +85,6 @@ export function NotificationProvider({ children }) {
     })
 
     return () => {
-      console.log('[NOTIF-CONTEXT] Cleaning up notification listener')
       cleanup?.()
     }
   }, [isAuthenticated, isLoading, userId, userRole, userEmail])

@@ -8,9 +8,12 @@ class Settings(BaseSettings):
     ENVIRONMENT: str
 
     SECRET_KEY: str
+    ENCRYPTION_KEY: str = ""
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    AUTH_COOKIE_SECURE: bool = True
+    AUTH_COOKIE_SAMESITE: str = "strict"
 
     # Optional full DB URL (recommended for Supabase/shared cloud DB)
     DATABASE_URL_OVERRIDE: str = Field(default="", validation_alias="DATABASE_URL")
