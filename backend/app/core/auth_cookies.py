@@ -14,7 +14,7 @@ def _cookie_secure() -> bool:
 
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
     secure = _cookie_secure()
-    samesite = "strict"
+    samesite = getattr(settings, "AUTH_COOKIE_SAMESITE", "lax")
     response.set_cookie(
         key=ACCESS_COOKIE,
         value=access_token,

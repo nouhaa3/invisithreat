@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+﻿import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { saveAuthData, clearAuthData, getStoredUser, getMe, refreshSessionIfNeeded } from '../services/authService'
 import api from '../services/api'
 
@@ -62,53 +62,47 @@ export const AuthProvider = ({ children }) => {
     }
   }, [logout, user])
 
-  // ✅ Restore session au démarrage
   useEffect(() => {
     const initAuth = async () => {
       const storedUser = getStoredUser()
-
       if (!storedUser) {
-        // ✅ Pas d'user en localStorage → pas connecté
         setIsLoading(false)
         return
       }
-
-      // Restaurer l'user immédiatement pour éviter le flash
       setUser(storedUser)
       startIdleTracking()
-
       try {
-        // ✅ Le cookie refresh est envoyé automatiquement
-        await refreshSessionIfNeeded()
         const freshUser = await getMe()
         setUser(freshUser)
         localStorage.setItem('user', JSON.stringify(freshUser))
       } catch {
-        // Cookie expiré ou invalide → déconnecter
-        clearAuthData()
-        setUser(null)
+        try {
+          await refreshSessionIfNeeded()
+          const freshUser = await getMe()
+          setUser(freshUser)
+          localStorage.setItem('user', JSON.stringify(freshUser))
+        } catch {
+          clearAuthData()
+          setUser(null)
+        }
       } finally {
         setIsLoading(false)
       }
     }
-
     initAuth()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Idle tracking
   useEffect(() => {
     if (isLoading || !user) return
     const onActivity = () => recordActivity()
     const onVisibilityChange = () => { if (!document.hidden) recordActivity() }
     const onStorageChange = (e) => { if (e.key === IDLE_STORAGE_KEY && e.newValue) checkIdleState() }
-
     ACTIVITY_EVENTS.forEach(e => window.addEventListener(e, onActivity, { passive: true }))
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('storage', onStorageChange)
     checkIdleState()
     const intervalId = setInterval(checkIdleState, 60_000)
-
     return () => {
       clearInterval(intervalId)
       ACTIVITY_EVENTS.forEach(e => window.removeEventListener(e, onActivity))
@@ -117,7 +111,6 @@ export const AuthProvider = ({ children }) => {
     }
   }, [checkIdleState, isLoading, recordActivity, user])
 
-  // ✅ Refresh périodique — seulement si connecté, pas immédiat
   useEffect(() => {
     if (isLoading || !user) return
     const intervalId = setInterval(refreshSession, 60_000)
@@ -125,7 +118,6 @@ export const AuthProvider = ({ children }) => {
   }, [isLoading, refreshSession, user])
 
   const loginSuccess = (data) => {
-    // ✅ Sauvegarder seulement l'user — les cookies sont gérés par le backend
     saveAuthData(data)
     setUser(data.user)
     startIdleTracking()

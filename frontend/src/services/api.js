@@ -1,11 +1,11 @@
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? ''
 const REFRESH_ENDPOINT = '/api/auth/refresh'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true, // ✅ envoie les cookies automatiquement
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -13,15 +13,13 @@ const api = axios.create({
 
 const refreshApi = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true, // ✅ envoie les cookies automatiquement
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
 let refreshPromise = null
-
-// ✅ PAS d'intercepteur request — le cookie est envoyé automatiquement par le navigateur
 
 // Intercepteur RESPONSE — gère le 401
 api.interceptors.response.use(
@@ -32,18 +30,19 @@ api.interceptors.response.use(
     const isAuthEndpoint =
       url.includes('/auth/login') || url.includes('/auth/register')
     const isRefreshEndpoint = url.includes(REFRESH_ENDPOINT)
+    const isMeEndpoint = url.includes('/auth/me')
 
     if (
       error.response?.status === 401 &&
       !isAuthEndpoint &&
       !isRefreshEndpoint &&
+      !isMeEndpoint &&
       !config._retry
     ) {
       config._retry = true
 
       try {
         if (!refreshPromise) {
-          // ✅ Payload vide — le cookie refresh est envoyé automatiquement
           refreshPromise = refreshApi
             .post(REFRESH_ENDPOINT, {})
             .finally(() => {
@@ -52,10 +51,8 @@ api.interceptors.response.use(
         }
 
         await refreshPromise
-        // ✅ Rejouer la requête — le nouveau cookie access est envoyé automatiquement
         return api(config)
       } catch {
-        // Refresh échoué → vraiment déconnecté
         localStorage.removeItem('user')
         window.location.href = '/login'
         return Promise.reject(error)

@@ -4,13 +4,13 @@ from pydantic import Field
 
 class Settings(BaseSettings):
     APP_NAME: str = "InvisiThreat"
-    APP_VERSION: str
-    ENVIRONMENT: str
+    APP_VERSION: str = "0.1.0"        # valeur par défaut ajoutée
+    ENVIRONMENT: str = "development"   # valeur par défaut ajoutée
 
     SECRET_KEY: str
     ENCRYPTION_KEY: str = ""
-    ALGORITHM: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     AUTH_COOKIE_SECURE: bool = True
     AUTH_COOKIE_SAMESITE: str = "strict"
@@ -26,15 +26,15 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
     POSTGRES_SSLMODE: str = ""
 
-    FRONTEND_URL: str
+    FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_URL: str = "http://localhost:8000"
 
     # Email — Brevo
     BREVO_API_KEY: str = ""
     ADMIN_EMAIL: str = ""
-    PRIMARY_ADMIN_EMAIL: str = "invisithreat@gmail.com"
+    PRIMARY_ADMIN_EMAIL: str = ""
 
-    # Email — SMTP fallback (Gmail/Outlook/custom SMTP)
+    # Email — SMTP fallback
     EMAIL_FROM: str = ""
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
@@ -70,7 +70,6 @@ class Settings(BaseSettings):
                 f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
             )
 
-        # Supabase and many managed Postgres providers require SSL.
         sslmode = self.POSTGRES_SSLMODE.strip()
         if sslmode and "sslmode=" not in db_url:
             separator = "&" if "?" in db_url else "?"
@@ -83,10 +82,6 @@ class Settings(BaseSettings):
         """Central admin inbox for platform approval/access emails."""
         return (self.PRIMARY_ADMIN_EMAIL or self.ADMIN_EMAIL or "").strip()
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
-
     @property
     def CELERY_BROKER(self) -> str:
         return (self.CELERY_BROKER_URL or "").strip() or self.REDIS_URL
@@ -94,6 +89,10 @@ class Settings(BaseSettings):
     @property
     def CELERY_BACKEND(self) -> str:
         return (self.CELERY_RESULT_BACKEND or "").strip() or self.REDIS_URL
+
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
 
 
 settings = Settings()
