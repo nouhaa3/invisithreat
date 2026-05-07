@@ -15,6 +15,7 @@ class RequestTracingMiddleware(BaseHTTPMiddleware):
         request_id = request.headers.get("X-Request-ID") or new_request_id()
         endpoint = f"{request.method} {request.url.path}"
         set_request_context(request_id=request_id, endpoint=endpoint, service="api")
+        response = None
 
         with Timer() as t:
             try:
@@ -22,13 +23,13 @@ class RequestTracingMiddleware(BaseHTTPMiddleware):
             except Exception:
                 logger.exception("Unhandled request error", extra={"extra": {"endpoint": endpoint}})
                 raise
-            finally:
-                # Log request completion
-                logger.info(
-                    "request_complete",
-                    extra={"extra": {"status_code": getattr(response, "status_code", None), "duration_ms": t.duration_ms}},
-                )
-                clear_request_context()
+
+        # Log request completion after Timer context closes so duration_ms is available.
+        logger.info(
+            "request_complete",
+            extra={"extra": {"status_code": getattr(response, "status_code", 500), "duration_ms": t.duration_ms}},
+        )
+        clear_request_context()
 
         response.headers["X-Request-ID"] = request_id
         return response

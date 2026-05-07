@@ -26,6 +26,10 @@ def _column_exists(inspector, table_name: str, column_name: str) -> bool:
     return any(col["name"] == column_name for col in inspector.get_columns(table_name))
 
 
+def _index_exists(inspector, table_name: str, index_name: str) -> bool:
+    return any(idx["name"] == index_name for idx in inspector.get_indexes(table_name))
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = inspect(bind)
@@ -47,6 +51,44 @@ def upgrade() -> None:
         )
         op.create_index("ix_auth_tokens_user_id", "auth_tokens", ["user_id"], unique=False)
         op.create_index("ix_auth_tokens_token_jti", "auth_tokens", ["token_jti"], unique=True)
+    else:
+        if not _column_exists(inspector, "auth_tokens", "token_jti"):
+            op.add_column("auth_tokens", sa.Column("token_jti", sa.String(length=64), nullable=True))
+            bind.execute(text("UPDATE auth_tokens SET token_jti = id::text WHERE token_jti IS NULL"))
+            op.alter_column("auth_tokens", "token_jti", nullable=False)
+        if not _column_exists(inspector, "auth_tokens", "refresh_token_hash"):
+            op.add_column("auth_tokens", sa.Column("refresh_token_hash", sa.String(length=128), nullable=True))
+            bind.execute(text("UPDATE auth_tokens SET refresh_token_hash = '' WHERE refresh_token_hash IS NULL"))
+            op.alter_column("auth_tokens", "refresh_token_hash", nullable=False)
+        if not _column_exists(inspector, "auth_tokens", "session_type"):
+            op.add_column("auth_tokens", sa.Column("session_type", sa.String(length=32), nullable=True))
+            bind.execute(text("UPDATE auth_tokens SET session_type = 'refresh' WHERE session_type IS NULL"))
+            op.alter_column("auth_tokens", "session_type", nullable=False)
+        if not _column_exists(inspector, "auth_tokens", "expires_at"):
+            op.add_column("auth_tokens", sa.Column("expires_at", sa.DateTime(), nullable=True))
+            bind.execute(
+                text(
+                    "UPDATE auth_tokens SET expires_at = NOW() + INTERVAL '7 days' "
+                    "WHERE expires_at IS NULL"
+                )
+            )
+            op.alter_column("auth_tokens", "expires_at", nullable=False)
+        if not _column_exists(inspector, "auth_tokens", "revoked_at"):
+            op.add_column("auth_tokens", sa.Column("revoked_at", sa.DateTime(), nullable=True))
+        if not _column_exists(inspector, "auth_tokens", "is_active"):
+            op.add_column("auth_tokens", sa.Column("is_active", sa.Boolean(), nullable=True, server_default=sa.text("true")))
+            bind.execute(text("UPDATE auth_tokens SET is_active = true WHERE is_active IS NULL"))
+            op.alter_column("auth_tokens", "is_active", nullable=False)
+        if not _column_exists(inspector, "auth_tokens", "created_at"):
+            op.add_column("auth_tokens", sa.Column("created_at", sa.DateTime(), nullable=True))
+            bind.execute(text("UPDATE auth_tokens SET created_at = NOW() WHERE created_at IS NULL"))
+            op.alter_column("auth_tokens", "created_at", nullable=False)
+
+        inspector = inspect(bind)
+        if not _index_exists(inspector, "auth_tokens", "ix_auth_tokens_user_id"):
+            op.create_index("ix_auth_tokens_user_id", "auth_tokens", ["user_id"], unique=False)
+        if not _index_exists(inspector, "auth_tokens", "ix_auth_tokens_token_jti"):
+            op.create_index("ix_auth_tokens_token_jti", "auth_tokens", ["token_jti"], unique=True)
 
     if _table_exists(inspector, "github_repositories") and _column_exists(inspector, "github_repositories", "access_token"):
         rows = bind.execute(

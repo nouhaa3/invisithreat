@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 # revision identifiers
 revision = "20260506_encrypt_github_tokens"
-down_revision = "20260416_0004_add_project_performance_indexes"
+down_revision = "20260416_0004"
 branch_labels = None
 depends_on = None
 

@@ -2,7 +2,6 @@ import api from './api'
 
 /**
  * Login - uses OAuth2PasswordRequestForm (form data, not JSON)
- * Backend expects: username (email), password as form fields
  */
 export const login = async (email, password) => {
   const formData = new URLSearchParams()
@@ -12,11 +11,12 @@ export const login = async (email, password) => {
   const response = await api.post('/api/auth/login', formData, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   })
+
   return response.data
 }
 
 /**
- * Register - JSON body with nom, email, password, password_confirm
+ * Register
  */
 export const register = async ({ nom, email, password, confirmPassword }) => {
   const response = await api.post('/api/auth/register', {
@@ -28,43 +28,45 @@ export const register = async ({ nom, email, password, confirmPassword }) => {
   return response.data
 }
 
-/**
- * Verify email with token
- */
 export const verifyEmail = async (token) => {
   const response = await api.get(`/api/auth/action/verify-email/${token}`)
   return response.data
 }
 
-/**
- * Resend verification email
- */
 export const resendVerificationEmail = async (email) => {
   const response = await api.post('/api/auth/resend-verification', { email })
   return response.data
 }
 
-/**
- * Request role upgrade
- */
 export const requestRole = async (role_name) => {
   const response = await api.post('/api/auth/request-role', { role_name })
   return response.data
 }
 
-/**
- * Fetch current authenticated user profile
- */
 export const getMe = async () => {
   const response = await api.get('/api/auth/me')
   return response.data
 }
 
 /**
- * Refresh access token
+ * Refresh access token using stored refresh_token
  */
-export const refreshToken = async (refresh_token) => {
-  const response = await api.post('/api/auth/refresh', { refresh_token: refresh_token || null })
+export const refreshToken = async () => {
+  const token = localStorage.getItem('refresh_token')
+
+  if (!token) {
+    throw new Error('No refresh token available')
+  }
+
+  const response = await api.post('/api/auth/refresh', { refresh_token: token })
+
+  if (response.data.access_token) {
+    localStorage.setItem('access_token', response.data.access_token)
+  }
+  if (response.data.refresh_token) {
+    localStorage.setItem('refresh_token', response.data.refresh_token)
+  }
+
   return response.data
 }
 
@@ -72,19 +74,20 @@ export const refreshToken = async (refresh_token) => {
  * Persist auth data in localStorage
  */
 export const saveAuthData = (data) => {
-  localStorage.setItem('user', JSON.stringify(data.user))
+  if (data.access_token)  localStorage.setItem('access_token', data.access_token)
+  if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token)
+  if (data.user)          localStorage.setItem('user', JSON.stringify(data.user))
 }
 
 /**
- * Clear auth data from localStorage
+ * Clear all auth data from localStorage
  */
 export const clearAuthData = () => {
   localStorage.removeItem('user')
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
 }
 
-/**
- * Get stored user
- */
 export const getStoredUser = () => {
   try {
     const user = localStorage.getItem('user')
@@ -94,50 +97,43 @@ export const getStoredUser = () => {
   }
 }
 
+export const getAccessToken = () => localStorage.getItem('access_token')
+
+export const getStoredRefreshToken = () => localStorage.getItem('refresh_token')
+
+export const isAuthenticated = () => {
+  return !!(localStorage.getItem('access_token') && localStorage.getItem('user'))
+}
+
 /**
- * Step 1 — request a reset code (admin will receive it by email)
+ * Refresh session only if a refresh token exists
  */
+export const refreshSessionIfNeeded = async () => {
+  const token = localStorage.getItem('refresh_token')
+  if (!token) return // ← ne rien faire si pas connecté
+  await refreshToken()
+}
+
 export const forgotPassword = async (email) => {
   const response = await api.post('/api/auth/forgot-password', { email })
   return response.data
 }
 
-/**
- * Step 2 — verify the 6-digit code; returns { reset_token }
- */
 export const verifyResetCode = async (email, code) => {
   const response = await api.post('/api/auth/verify-reset-code', { email, code })
   return response.data
 }
 
-/**
- * Step 3 — set a new password using the reset token
- */
 export const resetPassword = async (reset_token, new_password) => {
   const response = await api.post('/api/auth/reset-password', { reset_token, new_password })
   return response.data
 }
 
-/**
- * Update own profile (name, email, and/or profile picture)
- */
 export const updateMyProfile = async ({ nom, email, profile_picture }) => {
   const response = await api.patch('/api/auth/me', { nom, email, profile_picture })
-  return response.data  // UserWithRole
+  return response.data
 }
 
-/**
- * Change own password
- */
 export const changeMyPassword = async (current_password, new_password) => {
   await api.post('/api/auth/me/change-password', { current_password, new_password })
-}
-
-export const getAccessTokenExpiryMs = () => {
-  return null
-}
-
-export const refreshSessionIfNeeded = async () => {
-  await refreshToken(null)
-  return true
 }

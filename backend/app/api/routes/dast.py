@@ -262,17 +262,9 @@ def _recover_running_scan_from_zap(db: Session, scan: Scan, progress: dict) -> d
 
 
 def run_dast_scan_background(scan_id: str, target_url: str) -> None:
-    db = SessionLocal()
-    try:
-        scan = db.query(Scan).filter(Scan.id == UUID(scan_id), Scan.method == ScanMethod.dast).first()
-        if not scan:
-            return
-
-        scan.status = ScanStatus.running
-        scan.started_at = datetime.now(UTC)
-        db.commit()
-
-        raise RuntimeError("Legacy background executor should not be used in Phase 2.")
+    _ = scan_id
+    _ = target_url
+    raise RuntimeError("Legacy background executor should not be used in Phase 2.")
 
 
 @router.post("/scan/start")
