@@ -204,9 +204,9 @@ async def login(
 @router.post("/refresh", response_model=Token)
 @limiter.limit("30/minute")
 async def refresh_token(
-    refresh_request: RefreshTokenRequest | None = None,
     request: Request,
     response: Response,
+    refresh_request: RefreshTokenRequest | None = None,
     db: Session = Depends(get_db)
 ):
     """
