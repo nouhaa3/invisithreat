@@ -32,9 +32,7 @@ export const AuthProvider = ({ children }) => {
     if (!user) return
     localStorage.setItem(IDLE_STORAGE_KEY, String(Date.now()))
     clearIdleTimer()
-    idleTimerRef.current = setTimeout(() => {
-      logout()
-    }, IDLE_TIMEOUT_MS)
+    idleTimerRef.current = setTimeout(logout, IDLE_TIMEOUT_MS)
   }, [clearIdleTimer, logout, user])
 
   const startIdleTracking = useCallback(() => {
@@ -42,33 +40,18 @@ export const AuthProvider = ({ children }) => {
   }, [recordActivity])
 
   const checkIdleState = useCallback(() => {
-    if (!user) {
-      clearIdleTimer()
-      return
-    }
-    const lastActivityRaw = localStorage.getItem(IDLE_STORAGE_KEY)
-    const lastActivityAt = Number(lastActivityRaw || 0)
-    if (!lastActivityAt) {
-      recordActivity()
-      return
-    }
+    if (!user) { clearIdleTimer(); return }
+    const lastActivityAt = Number(localStorage.getItem(IDLE_STORAGE_KEY) || 0)
+    if (!lastActivityAt) { recordActivity(); return }
     const elapsed = Date.now() - lastActivityAt
-    if (elapsed >= IDLE_TIMEOUT_MS) {
-      logout()
-      return
-    }
+    if (elapsed >= IDLE_TIMEOUT_MS) { logout(); return }
     clearIdleTimer()
-    idleTimerRef.current = setTimeout(() => {
-      logout()
-    }, IDLE_TIMEOUT_MS - elapsed)
+    idleTimerRef.current = setTimeout(logout, IDLE_TIMEOUT_MS - elapsed)
   }, [clearIdleTimer, logout, recordActivity, user])
 
   const refreshSession = useCallback(async () => {
     if (refreshInFlightRef.current) return
     if (!user) return
-    // ✅ Ne pas refresh si pas de refresh token
-    if (!localStorage.getItem('refresh_token')) return
-
     refreshInFlightRef.current = true
     try {
       await refreshSessionIfNeeded()
@@ -83,28 +66,25 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       const storedUser = getStoredUser()
-      const hasRefreshToken = !!localStorage.getItem('refresh_token')
 
-      // ✅ Si pas de tokens stockés → pas connecté, on arrête là
-      if (!storedUser || !hasRefreshToken) {
-        clearAuthData()
-        setUser(null)
+      if (!storedUser) {
+        // ✅ Pas d'user en localStorage → pas connecté
         setIsLoading(false)
         return
       }
 
-      // Restaurer l'user stocké immédiatement pour éviter le flash
+      // Restaurer l'user immédiatement pour éviter le flash
       setUser(storedUser)
       startIdleTracking()
 
       try {
-        // ✅ Refresh le token puis récupérer le profil frais
+        // ✅ Le cookie refresh est envoyé automatiquement
         await refreshSessionIfNeeded()
         const freshUser = await getMe()
         setUser(freshUser)
         localStorage.setItem('user', JSON.stringify(freshUser))
       } catch {
-        // Refresh échoué → vraiment déconnecté
+        // Cookie expiré ou invalide → déconnecter
         clearAuthData()
         setUser(null)
       } finally {
@@ -116,21 +96,16 @@ export const AuthProvider = ({ children }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Idle tracking
   useEffect(() => {
     if (isLoading || !user) return
-
     const onActivity = () => recordActivity()
-    const onVisibilityChange = () => {
-      if (!document.hidden) recordActivity()
-    }
-    const onStorageChange = (event) => {
-      if (event.key === IDLE_STORAGE_KEY && event.newValue) checkIdleState()
-    }
+    const onVisibilityChange = () => { if (!document.hidden) recordActivity() }
+    const onStorageChange = (e) => { if (e.key === IDLE_STORAGE_KEY && e.newValue) checkIdleState() }
 
     ACTIVITY_EVENTS.forEach(e => window.addEventListener(e, onActivity, { passive: true }))
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('storage', onStorageChange)
-
     checkIdleState()
     const intervalId = setInterval(checkIdleState, 60_000)
 
@@ -142,19 +117,16 @@ export const AuthProvider = ({ children }) => {
     }
   }, [checkIdleState, isLoading, recordActivity, user])
 
-  // ✅ Refresh périodique toutes les 60s — seulement si connecté
+  // ✅ Refresh périodique — seulement si connecté, pas immédiat
   useEffect(() => {
     if (isLoading || !user) return
-    if (!localStorage.getItem('refresh_token')) return
-
-    // ✅ Délai de 60s avant le premier refresh périodique (pas immédiat)
     const intervalId = setInterval(refreshSession, 60_000)
-
     return () => clearInterval(intervalId)
   }, [isLoading, refreshSession, user])
 
   const loginSuccess = (data) => {
-    saveAuthData(data)       // ✅ tokens sauvegardés en premier
+    // ✅ Sauvegarder seulement l'user — les cookies sont gérés par le backend
+    saveAuthData(data)
     setUser(data.user)
     startIdleTracking()
   }

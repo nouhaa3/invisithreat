@@ -1,8 +1,5 @@
 import api from './api'
 
-/**
- * Login - uses OAuth2PasswordRequestForm (form data, not JSON)
- */
 export const login = async (email, password) => {
   const formData = new URLSearchParams()
   formData.append('username', email)
@@ -15,9 +12,6 @@ export const login = async (email, password) => {
   return response.data
 }
 
-/**
- * Register
- */
 export const register = async ({ nom, email, password, confirmPassword }) => {
   const response = await api.post('/api/auth/register', {
     nom,
@@ -48,44 +42,22 @@ export const getMe = async () => {
   return response.data
 }
 
-/**
- * Refresh access token using stored refresh_token
- */
+// ✅ Refresh — payload vide, le cookie est envoyé automatiquement
 export const refreshToken = async () => {
-  const token = localStorage.getItem('refresh_token')
-
-  if (!token) {
-    throw new Error('No refresh token available')
-  }
-
-  const response = await api.post('/api/auth/refresh', { refresh_token: token })
-
-  if (response.data.access_token) {
-    localStorage.setItem('access_token', response.data.access_token)
-  }
-  if (response.data.refresh_token) {
-    localStorage.setItem('refresh_token', response.data.refresh_token)
-  }
-
+  const response = await api.post('/api/auth/refresh', {})
   return response.data
 }
 
-/**
- * Persist auth data in localStorage
- */
+// ✅ Seulement l'user dans localStorage — PAS les tokens
 export const saveAuthData = (data) => {
-  if (data.access_token)  localStorage.setItem('access_token', data.access_token)
-  if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token)
-  if (data.user)          localStorage.setItem('user', JSON.stringify(data.user))
+  if (data.user) {
+    localStorage.setItem('user', JSON.stringify(data.user))
+  }
 }
 
-/**
- * Clear all auth data from localStorage
- */
 export const clearAuthData = () => {
   localStorage.removeItem('user')
-  localStorage.removeItem('access_token')
-  localStorage.removeItem('refresh_token')
+  // ✅ Les cookies sont supprimés par le backend via /logout
 }
 
 export const getStoredUser = () => {
@@ -97,20 +69,8 @@ export const getStoredUser = () => {
   }
 }
 
-export const getAccessToken = () => localStorage.getItem('access_token')
-
-export const getStoredRefreshToken = () => localStorage.getItem('refresh_token')
-
-export const isAuthenticated = () => {
-  return !!(localStorage.getItem('access_token') && localStorage.getItem('user'))
-}
-
-/**
- * Refresh session only if a refresh token exists
- */
+// ✅ Refresh session — le cookie est géré automatiquement
 export const refreshSessionIfNeeded = async () => {
-  const token = localStorage.getItem('refresh_token')
-  if (!token) return // ← ne rien faire si pas connecté
   await refreshToken()
 }
 
@@ -136,4 +96,8 @@ export const updateMyProfile = async ({ nom, email, profile_picture }) => {
 
 export const changeMyPassword = async (current_password, new_password) => {
   await api.post('/api/auth/me/change-password', { current_password, new_password })
+}
+
+export const isAuthenticated = () => {
+  return !!localStorage.getItem('user')
 }

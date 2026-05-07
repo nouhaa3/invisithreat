@@ -81,8 +81,12 @@ async def register(
     verification_token = create_action_token(str(user.id), "verify_email")
 
     # Send verification email to user (not admin notification)
-    email_sent = notify_user_verify_email(user.nom, user.email, verification_token, settings.FRONTEND_URL)
-
+    try:
+        email_sent = notify_user_verify_email(user.nom, user.email, verification_token, settings.FRONTEND_URL)
+    except Exception as e:
+        logger.warning("Email sending failed (non-fatal): %s", e)
+        email_sent = False
+        
     # Create database notifications for all active admins
     admin_users = (
         db.query(User)

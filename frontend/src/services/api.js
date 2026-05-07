@@ -5,7 +5,7 @@ const REFRESH_ENDPOINT = '/api/auth/refresh'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true,
+  withCredentials: true, // ✅ envoie les cookies automatiquement
   headers: {
     'Content-Type': 'application/json',
   },
@@ -13,7 +13,7 @@ const api = axios.create({
 
 const refreshApi = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true,
+  withCredentials: true, // ✅ envoie les cookies automatiquement
   headers: {
     'Content-Type': 'application/json',
   },
@@ -21,22 +21,16 @@ const refreshApi = axios.create({
 
 let refreshPromise = null
 
-// ✅ Attache le Bearer token à chaque requête
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
+// ✅ PAS d'intercepteur request — le cookie est envoyé automatiquement par le navigateur
 
-// ✅ Gère le 401 — tente un refresh puis rejoue la requête
+// Intercepteur RESPONSE — gère le 401
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const config = error.config || {}
     const url = config.url || ''
-    const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register')
+    const isAuthEndpoint =
+      url.includes('/auth/login') || url.includes('/auth/register')
     const isRefreshEndpoint = url.includes(REFRESH_ENDPOINT)
 
     if (
@@ -47,46 +41,22 @@ api.interceptors.response.use(
     ) {
       config._retry = true
 
-      const storedRefreshToken = localStorage.getItem('refresh_token')
-
-      // ✅ Si pas de refresh token → ne pas tenter, rediriger directement
-      if (!storedRefreshToken) {
-        localStorage.removeItem('user')
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
-        window.location.href = '/login'
-        return Promise.reject(error)
-      }
-
       try {
         if (!refreshPromise) {
+          // ✅ Payload vide — le cookie refresh est envoyé automatiquement
           refreshPromise = refreshApi
-            .post(REFRESH_ENDPOINT, { refresh_token: storedRefreshToken })
-            .then((res) => {
-              if (res.data.access_token) {
-                localStorage.setItem('access_token', res.data.access_token)
-              }
-              if (res.data.refresh_token) {
-                localStorage.setItem('refresh_token', res.data.refresh_token)
-              }
-              return res
-            })
+            .post(REFRESH_ENDPOINT, {})
             .finally(() => {
               refreshPromise = null
             })
         }
 
         await refreshPromise
-
-        // Rejouer la requête originale avec le nouveau token
-        const newToken = localStorage.getItem('access_token')
-        config.headers.Authorization = `Bearer ${newToken}`
+        // ✅ Rejouer la requête — le nouveau cookie access est envoyé automatiquement
         return api(config)
-
       } catch {
+        // Refresh échoué → vraiment déconnecté
         localStorage.removeItem('user')
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
         window.location.href = '/login'
         return Promise.reject(error)
       }
