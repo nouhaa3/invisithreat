@@ -52,10 +52,15 @@ api.interceptors.response.use(
 
         await refreshPromise
         return api(config)
-      } catch {
+      } catch (refreshError) {
+        // ✅ Only logout if refresh truly failed
+        // Don't immediately clear user — let AuthContext handle it naturally
+        console.debug('Token refresh failed:', refreshError.message || refreshError)
+        
+        // Clear auth data and redirect to login on refresh failure
         localStorage.removeItem('user')
         window.location.href = '/login'
-        return Promise.reject(error)
+        return Promise.reject(refreshError)
       }
     }
 

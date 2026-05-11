@@ -4,14 +4,18 @@ import api from '../services/api'
 
 const AuthContext = createContext(null)
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000
+const IDLE_WARNING_MS = 29 * 60 * 1000  // Warn 1 minute before logout
 const IDLE_STORAGE_KEY = 'ivt:last-activity-at'
 const ACTIVITY_EVENTS = ['click', 'keydown', 'mousemove', 'mousedown', 'scroll', 'touchstart']
+const SESSION_INIT_FLAG = 'ivt:session-initialized'  // Track if we've already initialized
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [inactivityWarning, setInactivityWarning] = useState(false)
   const idleTimerRef = useRef(null)
   const refreshInFlightRef = useRef(false)
+  const initializeRef = useRef(false)
 
   const clearIdleTimer = useCallback(() => {
     if (idleTimerRef.current) {
@@ -31,6 +35,7 @@ export const AuthProvider = ({ children }) => {
   const recordActivity = useCallback(() => {
     if (!user) return
     localStorage.setItem(IDLE_STORAGE_KEY, String(Date.now()))
+    setInactivityWarning(false)  // Clear warning when user is active
     clearIdleTimer()
     idleTimerRef.current = setTimeout(logout, IDLE_TIMEOUT_MS)
   }, [clearIdleTimer, logout, user])
@@ -40,14 +45,27 @@ export const AuthProvider = ({ children }) => {
   }, [recordActivity])
 
   const checkIdleState = useCallback(() => {
-    if (!user) { clearIdleTimer(); return }
+    if (!user) { clearIdleTimer(); setInactivityWarning(false); return }
     const lastActivityAt = Number(localStorage.getItem(IDLE_STORAGE_KEY) || 0)
     if (!lastActivityAt) { recordActivity(); return }
     const elapsed = Date.now() - lastActivityAt
-    if (elapsed >= IDLE_TIMEOUT_MS) { logout(); return }
+    
+    // User has been inactive too long → logout
+    if (elapsed >= IDLE_TIMEOUT_MS) { 
+      logout()
+      return 
+    }
+    
+    // Warn user 1 minute before logout
+    if (elapsed >= IDLE_WARNING_MS && !inactivityWarning) {
+      setInactivityWarning(true)
+    } else if (elapsed < IDLE_WARNING_MS && inactivityWarning) {
+      setInactivityWarning(false)
+    }
+    
     clearIdleTimer()
     idleTimerRef.current = setTimeout(logout, IDLE_TIMEOUT_MS - elapsed)
-  }, [clearIdleTimer, logout, recordActivity, user])
+  }, [clearIdleTimer, logout, recordActivity, user, inactivityWarning])
 
   const refreshSession = useCallback(async () => {
     if (refreshInFlightRef.current) return
@@ -64,6 +82,10 @@ export const AuthProvider = ({ children }) => {
 
   // Restore session au démarrage
   useEffect(() => {
+    // Only run initialization once
+    if (initializeRef.current) return
+    initializeRef.current = true
+
     const initAuth = async () => {
       const storedUser = getStoredUser()
 
@@ -72,6 +94,15 @@ export const AuthProvider = ({ children }) => {
         setIsLoading(false)
         return
       }
+
+      // ✅ IMPORTANT: Don't reset activity time on initialization
+      // Check if we already have a recorded activity time
+      const existingActivity = localStorage.getItem(IDLE_STORAGE_KEY)
+      if (!existingActivity) {
+        // First time loading → set activity to now
+        localStorage.setItem(IDLE_STORAGE_KEY, String(Date.now()))
+      }
+      // Otherwise keep existing activity time (preserve across page reloads)
 
       // Restore user immediately to avoid flash
       setUser(storedUser)
@@ -82,15 +113,16 @@ export const AuthProvider = ({ children }) => {
         const freshUser = await getMe()
         setUser(freshUser)
         localStorage.setItem('user', JSON.stringify(freshUser))
-      } catch {
+      } catch (getmeError) {
         // Access cookie expired → try refresh once
         try {
           await refreshSessionIfNeeded()
           const freshUser = await getMe()
           setUser(freshUser)
           localStorage.setItem('user', JSON.stringify(freshUser))
-        } catch {
+        } catch (refreshError) {
           // Refresh also failed → truly logged out
+          console.warn('Auth initialization failed:', refreshError.message || refreshError)
           clearAuthData()
           setUser(null)
         }
@@ -124,10 +156,19 @@ export const AuthProvider = ({ children }) => {
     }
   }, [checkIdleState, isLoading, recordActivity, user])
 
-  // Refresh périodique — seulement si connecté, pas immédiat
+  // ✅ Token refresh: separate from inactivity timeout
+  // Refresh at 25 minutes (before 30-min access token expiry)
+  // This prevents token from expiring during normal use
   useEffect(() => {
     if (isLoading || !user) return
-    const intervalId = setInterval(refreshSession, 30 * 60 * 1000)
+    
+    const intervalId = setInterval(() => {
+      refreshSession().catch((err) => {
+        console.debug('Periodic session refresh failed:', err.message || err)
+        // Don't logout on refresh failure — let normal auth flow handle it
+      })
+    }, 25 * 60 * 1000)
+    
     return () => clearInterval(intervalId)
   }, [isLoading, refreshSession, user])
 
@@ -145,7 +186,7 @@ export const AuthProvider = ({ children }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, loginSuccess, logout, updateUser, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, isLoading, loginSuccess, logout, updateUser, isAuthenticated: !!user, inactivityWarning }}>
       {children}
     </AuthContext.Provider>
   )
