@@ -7,7 +7,6 @@ const IDLE_TIMEOUT_MS = 30 * 60 * 1000
 const IDLE_WARNING_MS = 29 * 60 * 1000  // Warn 1 minute before logout
 const IDLE_STORAGE_KEY = 'ivt:last-activity-at'
 const ACTIVITY_EVENTS = ['click', 'keydown', 'mousemove', 'mousedown', 'scroll', 'touchstart']
-const SESSION_INIT_FLAG = 'ivt:session-initialized'  // Track if we've already initialized
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
@@ -15,7 +14,6 @@ export const AuthProvider = ({ children }) => {
   const [inactivityWarning, setInactivityWarning] = useState(false)
   const idleTimerRef = useRef(null)
   const refreshInFlightRef = useRef(false)
-  const initializeRef = useRef(false)
 
   const clearIdleTimer = useCallback(() => {
     if (idleTimerRef.current) {
@@ -82,10 +80,6 @@ export const AuthProvider = ({ children }) => {
 
   // Restore session au démarrage
   useEffect(() => {
-    // Only run initialization once
-    if (initializeRef.current) return
-    initializeRef.current = true
-
     const initAuth = async () => {
       const storedUser = getStoredUser()
 
