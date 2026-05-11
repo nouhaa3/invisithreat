@@ -62,13 +62,13 @@ export const AuthProvider = ({ children }) => {
     }
   }, [logout, user])
 
-  // ✅ Restore session au démarrage
+  // Restore session au démarrage
   useEffect(() => {
     const initAuth = async () => {
       const storedUser = getStoredUser()
 
       if (!storedUser) {
-        // ✅ Pas d'user en localStorage → pas connecté
+        // Pas d'user en localStorage → pas connecté
         setIsLoading(false)
         return
       }
@@ -124,15 +124,15 @@ export const AuthProvider = ({ children }) => {
     }
   }, [checkIdleState, isLoading, recordActivity, user])
 
-  // ✅ Refresh périodique — seulement si connecté, pas immédiat
+  // Refresh périodique — seulement si connecté, pas immédiat
   useEffect(() => {
     if (isLoading || !user) return
-    const intervalId = setInterval(refreshSession, 60_000)
+    const intervalId = setInterval(refreshSession, 30 * 60 * 1000)
     return () => clearInterval(intervalId)
   }, [isLoading, refreshSession, user])
 
   const loginSuccess = (data) => {
-    // ✅ Sauvegarder seulement l'user — les cookies sont gérés par le backend
+    // Sauvegarder seulement l'user — les cookies sont gérés par le backend
     saveAuthData(data)
     setUser(data.user)
     startIdleTracking()
