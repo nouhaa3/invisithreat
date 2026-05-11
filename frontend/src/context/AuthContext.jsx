@@ -95,7 +95,7 @@ export const AuthProvider = ({ children }) => {
         return
       }
 
-      // ✅ IMPORTANT: Don't reset activity time on initialization
+      // IMPORTANT: Don't reset activity time on initialization
       // Check if we already have a recorded activity time
       const existingActivity = localStorage.getItem(IDLE_STORAGE_KEY)
       if (!existingActivity) {
@@ -156,7 +156,7 @@ export const AuthProvider = ({ children }) => {
     }
   }, [checkIdleState, isLoading, recordActivity, user])
 
-  // ✅ Token refresh: separate from inactivity timeout
+  // Token refresh: separate from inactivity timeout
   // Refresh at 25 minutes (before 30-min access token expiry)
   // This prevents token from expiring during normal use
   useEffect(() => {
