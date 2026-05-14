@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback, useMemo } from 'react'
 import AppLayout from '../components/AppLayout'
 import { useRelativeTime } from '../hooks/useRelativeTime'
 import { getAuditLogs, getAuditLogActions, exportAuditLogs } from '../services/auditLogService'
@@ -157,11 +157,18 @@ export default function AuditLogsPage() {
     }
   }
 
+  const userNameById = useMemo(() => {
+    const map = new Map()
+    allUsers.forEach((u) => {
+      map.set(u.id, u.nom)
+    })
+    return map
+  }, [allUsers])
+
   // Get user name by ID
-  const getUserName = (userId) => {
-    const u = allUsers.find((x) => x.id === userId)
-    return u ? u.nom : 'Unknown User'
-  }
+  const getUserName = useCallback((userId) => {
+    return userNameById.get(userId) || 'Unknown User'
+  }, [userNameById])
 
   // Debounced search
   useEffect(() => {

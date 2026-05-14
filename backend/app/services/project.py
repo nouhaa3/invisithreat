@@ -7,6 +7,7 @@ from app.models.scan import Project, Scan, ScanStatus
 from app.models.user import User
 from app.models.member import ProjectMember
 from app.schemas.scan import ProjectCreate, ProjectUpdate
+from app.services.scan_summary_cache import get_scan_summary
 import uuid
 import json
 
@@ -362,19 +363,11 @@ def get_security_projects_overview(db: Session, user: User) -> dict:
             risk_score = round(float(latest_completed_scan.risk_score.score), 2)
             risk_scores.append(risk_score)
 
-        findings = _parse_findings(latest_completed_scan.results_json) if latest_completed_scan else []
-        critical = high = medium = low = 0
-
-        for finding in findings:
-            sev = (finding.get("severity") or "info").lower()
-            if sev == "critical":
-                critical += 1
-            elif sev == "high":
-                high += 1
-            elif sev == "medium":
-                medium += 1
-            elif sev == "low":
-                low += 1
+        summary = get_scan_summary(latest_completed_scan) if latest_completed_scan else None
+        critical = summary["critical"] if summary else 0
+        high = summary["high"] if summary else 0
+        medium = summary["medium"] if summary else 0
+        low = summary["low"] if summary else 0
 
         if (critical + high + medium + low) > 0:
             summary["projects_with_findings"] += 1

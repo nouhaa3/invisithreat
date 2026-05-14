@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { saveAuthData, clearAuthData, getStoredUser, getMe, refreshSessionIfNeeded } from '../services/authService'
 import api from '../services/api'
 
@@ -7,6 +7,7 @@ const IDLE_TIMEOUT_MS = 30 * 60 * 1000
 const IDLE_WARNING_MS = 29 * 60 * 1000  // Warn 1 minute before logout
 const IDLE_STORAGE_KEY = 'ivt:last-activity-at'
 const ACTIVITY_EVENTS = ['click', 'keydown', 'mousemove', 'mousedown', 'scroll', 'touchstart']
+const ACTIVITY_WRITE_THROTTLE_MS = 10 * 1000
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
@@ -14,6 +15,7 @@ export const AuthProvider = ({ children }) => {
   const [inactivityWarning, setInactivityWarning] = useState(false)
   const idleTimerRef = useRef(null)
   const refreshInFlightRef = useRef(false)
+  const lastActivityWriteRef = useRef(0)
 
   const clearIdleTimer = useCallback(() => {
     if (idleTimerRef.current) {
@@ -32,7 +34,11 @@ export const AuthProvider = ({ children }) => {
 
   const recordActivity = useCallback(() => {
     if (!user) return
-    localStorage.setItem(IDLE_STORAGE_KEY, String(Date.now()))
+    const now = Date.now()
+    if (now - lastActivityWriteRef.current >= ACTIVITY_WRITE_THROTTLE_MS) {
+      localStorage.setItem(IDLE_STORAGE_KEY, String(now))
+      lastActivityWriteRef.current = now
+    }
     setInactivityWarning(false)  // Clear warning when user is active
     clearIdleTimer()
     idleTimerRef.current = setTimeout(logout, IDLE_TIMEOUT_MS)
@@ -51,11 +57,20 @@ export const AuthProvider = ({ children }) => {
     // User has been inactive too long → logout
     if (elapsed >= IDLE_TIMEOUT_MS) { 
       logout()
-      return 
-    }
-    
-    // Warn user 1 minute before logout
-    if (elapsed >= IDLE_WARNING_MS && !inactivityWarning) {
+      const value = useMemo(() => ({
+        user,
+        isLoading,
+        loginSuccess,
+        logout,
+        updateUser,
+        isAuthenticated: !!user,
+      }), [isLoading, loginSuccess, logout, updateUser, user])
+
+      return (
+        <AuthContext.Provider value={value}>
+          {children}
+        </AuthContext.Provider>
+      )
       setInactivityWarning(true)
     } else if (elapsed < IDLE_WARNING_MS && inactivityWarning) {
       setInactivityWarning(false)

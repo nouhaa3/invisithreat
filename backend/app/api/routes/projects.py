@@ -1,7 +1,8 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Query, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
-from typing import List
+from sqlalchemy.orm.attributes import set_committed_value
+from typing import List, Literal
 from app.db.session import get_db
 from app.core.jwt import require_admin
 from app.core.permissions import require_permission, P
@@ -38,8 +39,11 @@ from app.models.vulnerability_workflow import (
     VulnerabilityTaskStatus,
 )
 from app.services.risk_score import get_or_create_scan_risk_score
+from app.services.risk_score import get_existing_scan_risk_score
 from app.services.notification import create_notification
 from app.services.audit_log import create_audit_log
+from app.services.scan_summary_cache import get_scan_summary
+from app.services.vulnerability_workflow import sync_vulnerability_tasks_for_scan
 from app.schemas.vulnerability_workflow import (
     VulnerabilityWorkflowSnapshotResponse,
     VulnerabilityTaskResponse,
@@ -329,6 +333,15 @@ def _sync_current_vulnerability_tasks(
 
     db.commit()
     return touched_ids
+
+
+def _get_existing_task_ids_for_scan(db: Session, project_id: uuid.UUID, scan_id: uuid.UUID) -> list[uuid.UUID]:
+    return [
+        task_id
+        for (task_id,) in db.query(VulnerabilityTask.id)
+        .filter(VulnerabilityTask.project_id == project_id, VulnerabilityTask.scan_id == scan_id)
+        .all()
+    ]
 
 
 def _deadline_state(task: VulnerabilityTask) -> tuple[bool, bool]:
@@ -630,12 +643,26 @@ async def trigger_security_workflow_action(
 )
 async def get_vulnerability_workflow_snapshot(
     project_id: uuid.UUID,
+    sync: Literal["auto", "force", "off"] = Query("auto"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(P.VIEW_VULNERABILITIES)),
 ):
     project, _user_role = get_project_accessible(db, project_id, current_user)
     latest_scan, findings = _latest_completed_scan_with_findings(db, project_id)
-    touched_ids = _sync_current_vulnerability_tasks(db, project, latest_scan, findings)
+    touched_ids: list[uuid.UUID] = []
+    if latest_scan and findings and sync != "off":
+        should_sync = sync == "force"
+        if sync == "auto":
+            existing_ids = _get_existing_task_ids_for_scan(db, project.id, latest_scan.id)
+            should_sync = len(existing_ids) == 0
+            if existing_ids:
+                touched_ids = existing_ids
+
+        if should_sync:
+            touched_ids = sync_vulnerability_tasks_for_scan(db, project, latest_scan, findings)
+
+    if latest_scan and not touched_ids:
+        touched_ids = _get_existing_task_ids_for_scan(db, project.id, latest_scan.id)
 
     assignees = _project_assignable_users(db, project)
     if not touched_ids:
@@ -1018,12 +1045,45 @@ async def create_new_scan(
 @router.get("/{project_id}/scans", response_model=List[ScanResponse])
 async def list_project_scans(
     project_id: uuid.UUID,
+    include_results: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(P.VIEW_SCAN_RESULTS)),
 ):
     get_project_accessible(db, project_id, current_user)
     create_audit_log(db, current_user.id, "scan_viewed", f"Viewed scans for project {project_id}")
-    return get_scans_for_project(db, project_id)
+    scans = get_scans_for_project(db, project_id)
+
+    for scan in scans:
+        if scan.status == ScanStatus.completed:
+            scan.results_summary = get_scan_summary(scan)
+        else:
+            scan.results_summary = None
+        if not include_results:
+            set_committed_value(scan, "results_json", None)
+
+    return scans
+
+
+@router.get("/{project_id}/scans/{scan_id}/results")
+async def get_scan_results(
+    project_id: uuid.UUID,
+    scan_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(P.VIEW_SCAN_RESULTS)),
+):
+    get_project_accessible(db, project_id, current_user)
+    scan = db.query(ScanModel).filter(ScanModel.id == scan_id, ScanModel.project_id == project_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    return {
+        "scan_id": str(scan.id),
+        "project_id": str(project_id),
+        "status": scan.status.value if hasattr(scan.status, "value") else str(scan.status),
+        "results_json": scan.results_json,
+        "error_message": scan.error_message,
+        "completed_at": scan.completed_at,
+    }
 
 
 @router.get("/{project_id}/risk-score")
@@ -1048,7 +1108,7 @@ async def get_project_risk_score(
             "business_impact": 0.0,
         }
 
-    risk = get_or_create_scan_risk_score(db, latest_scan)
+    risk = get_existing_scan_risk_score(db, latest_scan)
     return {
         "project_id": str(project_id),
         "scan_id": str(latest_scan.id),
@@ -1069,7 +1129,7 @@ async def get_scan_risk_score(
     scan = db.query(ScanModel).filter(ScanModel.id == scan_id, ScanModel.project_id == project_id).first()
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
-    risk = get_or_create_scan_risk_score(db, scan)
+    risk = get_existing_scan_risk_score(db, scan)
     if not risk:
         return {
             "project_id": str(project_id),
@@ -1139,4 +1199,5 @@ async def cli_upload_results(
     db.commit()
     if scan.status == ScanStatus.completed:
         get_or_create_scan_risk_score(db, scan)
+        sync_vulnerability_tasks_for_scan(db, scan.project, scan)
     return {"message": "Results uploaded successfully", "scan_id": str(scan.id)}

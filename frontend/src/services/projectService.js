@@ -69,8 +69,17 @@ export const setAdminProjectStatus = async (id, status) => {
 
 // ─── Scans ───────────────────────────────────────────────────────────────────
 
-export const getScans = async (projectId) => {
-  const res = await api.get(`/api/projects/${projectId}/scans`)
+export const getScans = async (projectId, options = {}) => {
+  const params = {}
+  if (typeof options.includeResults === 'boolean') {
+    params.include_results = options.includeResults
+  }
+  const res = await api.get(`/api/projects/${projectId}/scans`, { params })
+  return res.data
+}
+
+export const getScanResults = async (projectId, scanId) => {
+  const res = await api.get(`/api/projects/${projectId}/scans/${scanId}/results`)
   return res.data
 }
 

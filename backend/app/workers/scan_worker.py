@@ -19,6 +19,7 @@ from app.core.scan_sanitizer import sanitize_scan_results
 from app.services.github_scanner import run_github_scan
 from app.services.notification import create_notification
 from app.services.risk_score import get_or_create_scan_risk_score
+from app.services.vulnerability_workflow import sync_vulnerability_tasks_for_scan
 from app.services.socketio_service import SocketIOManager
 from app.models.member import ProjectMember
 
@@ -153,6 +154,7 @@ def run_dast_scan_job(self, scan_id: str, target_url: str) -> dict:
 
         if scan.status == ScanStatus.completed:
             get_or_create_scan_risk_score(db, scan)
+            sync_vulnerability_tasks_for_scan(db, scan.project, scan)
 
         set_scan_progress(
             scan_id,
@@ -214,6 +216,7 @@ def process_cli_scan_job(self, scan_id: str, results_payload: dict) -> dict:
         scan.status = ScanStatus.completed
         scan.completed_at = datetime.now(UTC)
         db.commit()
+        sync_vulnerability_tasks_for_scan(db, scan.project, scan, results_payload.get("findings"))
 
         # Notify owner (lightweight, consistent)
         project = scan.project

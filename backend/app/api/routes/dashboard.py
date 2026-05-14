@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, UTC, timedelta
 from collections import defaultdict
-import json
 
 from app.db.session import get_db
 from app.core.permissions import require_permission, P
@@ -15,19 +14,10 @@ from app.models.role import Role
 from app.models.scan import Project, Scan, ScanStatus
 from app.models.security_report import SecurityReport
 from app.models.member import ProjectMember
-from app.services.risk_score import get_or_create_scan_risk_score
+from app.models.risk_score import RiskScore
+from app.services.scan_summary_cache import get_scan_summary
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
-
-
-def _parse_findings(results_json: str) -> list:
-    if not results_json or results_json.startswith("__pending_token:"):
-        return []
-    try:
-        data = json.loads(results_json)
-        return data.get("findings", [])
-    except (ValueError, TypeError, json.JSONDecodeError):
-        return []
 
 
 @router.get("/stats")
@@ -97,24 +87,32 @@ async def get_dashboard_stats(
     # 6. Aggregate findings and risk scores
     severity_totals = defaultdict(int)
     project_risk = []
+
+    scan_ids = [scan.id for scan in completed_scans]
     risk_rows = []
+    risk_by_scan_id = {}
+    if scan_ids:
+        risk_rows = db.query(RiskScore).filter(RiskScore.scan_id.in_(scan_ids)).all()
+        risk_by_scan_id = {risk.scan_id: risk for risk in risk_rows}
 
     for p in all_projects:
         latest_scan = scans_by_project.get(p.id)
         if not latest_scan:
             continue
         
-        findings = _parse_findings(latest_scan.results_json)
-        crit = high = med = low = info = 0
-        for f in findings:
-            sev = (f.get("severity") or "info").lower()
-            if sev == "critical":   crit += 1; severity_totals["critical"] += 1
-            elif sev == "high":     high += 1; severity_totals["high"] += 1
-            elif sev == "medium":   med  += 1; severity_totals["medium"] += 1
-            elif sev == "low":      low  += 1; severity_totals["low"] += 1
-            else:                   info += 1; severity_totals["info"] += 1
-        
-        risk = get_or_create_scan_risk_score(db, latest_scan)
+        summary = get_scan_summary(latest_scan)
+        crit = summary["critical"]
+        high = summary["high"]
+        med = summary["medium"]
+        low = summary["low"]
+        info = summary["info"]
+        severity_totals["critical"] += crit
+        severity_totals["high"] += high
+        severity_totals["medium"] += med
+        severity_totals["low"] += low
+        severity_totals["info"] += info
+
+        risk = risk_by_scan_id.get(latest_scan.id)
         risk_score = round(float(risk.score), 2) if risk else 0.0
         
         project_row = {
@@ -127,8 +125,6 @@ async def get_dashboard_stats(
             "risk_score": risk_score,
         }
         project_risk.append(project_row)
-        if risk:
-            risk_rows.append(risk)
 
     # Sort top risky projects
     top_risky = sorted(project_risk, key=lambda x: (x.get("risk_score", 0), x["critical"], x["high"]), reverse=True)[:5]

@@ -25,6 +25,7 @@ from app.models.github_repository import GitHubRepository
 from app.models.scan_tool import ScanTool
 from app.models.tool_execution import ToolExecution
 from app.services.risk_score import upsert_scan_risk_score
+from app.services.vulnerability_workflow import sync_vulnerability_tasks_for_scan
 from app.core.encryption import decrypt_token
 from app.core.scan_sanitizer import sanitize_scan_results
 
@@ -786,6 +787,7 @@ def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str, githu
         db.commit()
         _upsert_pipeline_execution(db, scan, "completed")
         upsert_scan_risk_score(db, scan)
+        sync_vulnerability_tasks_for_scan(db, scan.project, scan)
 
     except (RuntimeError, OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
         try:

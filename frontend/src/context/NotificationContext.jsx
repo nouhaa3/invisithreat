@@ -1,10 +1,18 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useAuth } from './AuthContext'
 import * as svc from '../services/notificationService'
 import { adminGetUsers } from '../services/adminService'
 import { initializeWebSocket, closeWebSocket, onNotification } from '../services/websocketService'
 
 const NotificationContext = createContext(null)
+
+const areNotificationsEqual = (prev, next) => {
+  if (prev.length !== next.length) return false
+  for (let i = 0; i < prev.length; i += 1) {
+    if (prev[i].id !== next[i].id || prev[i].is_read !== next[i].is_read) return false
+  }
+  return true
+}
 
 export function NotificationProvider({ children }) {
   const { isAuthenticated, isLoading, user } = useAuth()
@@ -50,8 +58,9 @@ export function NotificationProvider({ children }) {
         merged = [...syntheticOnly, ...data]
       }
 
-      setNotifications(merged)
-      setUnreadCount(merged.filter(n => !n.is_read).length)
+      setNotifications(prev => (areNotificationsEqual(prev, merged) ? prev : merged))
+      const nextUnread = merged.filter(n => !n.is_read).length
+      setUnreadCount(prev => (prev === nextUnread ? prev : nextUnread))
     } catch {}
   }, [isAuthenticated, userRole])
 
@@ -127,15 +136,17 @@ export function NotificationProvider({ children }) {
     if (notif && !notif.is_read) setUnreadCount(prev => Math.max(0, prev - 1))
   }
 
+  const value = useMemo(() => ({
+    notifications,
+    unreadCount,
+    refresh,
+    markRead,
+    markAllRead,
+    removeNotification,
+  }), [notifications, unreadCount, refresh, markRead, markAllRead, removeNotification])
+
   return (
-    <NotificationContext.Provider value={{
-      notifications,
-      unreadCount,
-      refresh,
-      markRead,
-      markAllRead,
-      removeNotification,
-    }}>
+    <NotificationContext.Provider value={value}>
       {children}
     </NotificationContext.Provider>
   )

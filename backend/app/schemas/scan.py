@@ -197,6 +197,18 @@ class ScanCreate(BaseModel):
         return self
 
 
+class ScanSummary(BaseModel):
+    total_findings: int = 0
+    critical: int = 0
+    high: int = 0
+    medium: int = 0
+    low: int = 0
+    info: int = 0
+    scanned_files: Optional[int] = None
+    tool: Optional[str] = None
+    version: Optional[str] = None
+
+
 class ScanResponse(BaseModel):
     id: uuid.UUID
     project_id: uuid.UUID
@@ -207,6 +219,7 @@ class ScanResponse(BaseModel):
     repo_url: Optional[str] = None
     repo_branch: Optional[str] = None
     results_json: Optional[str] = None
+    results_summary: Optional[ScanSummary] = None
     error_message: Optional[str] = None
     started_at: datetime
     completed_at: Optional[datetime] = None

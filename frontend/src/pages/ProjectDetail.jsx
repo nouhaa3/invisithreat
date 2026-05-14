@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import {
   getProject,
   getScans,
+  getScanResults,
   deleteProject,
   createScan,
   startDastScan,
@@ -53,7 +54,7 @@ const parseScanResults = (resultsJson) => {
   }
 }
 
-const summarizeScan = (scan) => {
+const summarizeScan = (scan, resultsJsonOverride, summaryOverride) => {
   if (!scan || scan.status !== 'completed') {
     return {
       total: 0,
@@ -65,9 +66,9 @@ const summarizeScan = (scan) => {
     }
   }
 
-  const parsed = parseScanResults(scan.results_json)
+  const summary = summaryOverride && typeof summaryOverride === 'object' ? summaryOverride : null
+  const parsed = summary ? null : parseScanResults(resultsJsonOverride ?? scan.results_json)
   const findings = Array.isArray(parsed?.findings) ? parsed.findings : []
-  const summary = parsed?.summary && typeof parsed.summary === 'object' ? parsed.summary : {}
 
   const fallbackCounts = findings.reduce(
     (acc, finding) => {
@@ -82,11 +83,11 @@ const summarizeScan = (scan) => {
   )
 
   return {
-    total: toInt(summary.total_findings ?? summary.total ?? findings.length),
-    critical: toInt(summary.critical ?? fallbackCounts.critical),
-    high: toInt(summary.high ?? fallbackCounts.high),
-    medium: toInt(summary.medium ?? fallbackCounts.medium),
-    low: toInt(summary.low ?? fallbackCounts.low),
+    total: toInt(summary?.total_findings ?? summary?.total ?? findings.length),
+    critical: toInt(summary?.critical ?? fallbackCounts.critical),
+    high: toInt(summary?.high ?? fallbackCounts.high),
+    medium: toInt(summary?.medium ?? fallbackCounts.medium),
+    low: toInt(summary?.low ?? fallbackCounts.low),
     scannedAt: scan.completed_at || scan.started_at || null,
   }
 }
@@ -641,20 +642,28 @@ function CurrentFindingRow({
 
 // ─── Scan Row ────────────────────────────────────────────────────────────────
 
-function ScanRow({ scan, onRescan, rescanning }) {
+const ScanRow = memo(function ScanRow({ scan, onRescan, rescanning, resultsJson, resultsSummary, onLoadResults }) {
   const [expanded, setExpanded] = useState(false)
   const status = STATUS_CONFIG[scan.status] || STATUS_CONFIG.pending
   const method = METHOD_CONFIG[scan.method] || METHOD_CONFIG.cli
   const isActive = scan.status === 'pending' || scan.status === 'running'
 
-  const results = (() => {
-    if (!scan.results_json || scan.results_json.startsWith('__pending_token:')) return null
-    try { return JSON.parse(scan.results_json) } catch { return null }
-  })()
+  const isPendingToken = typeof resultsJson === 'string' && resultsJson.startsWith('__pending_token:')
+  const canExpandResults = scan.status === 'completed' && !isPendingToken
 
-  const findingCount = results?.findings?.length ?? null
-  const summary = results?.summary
-  const canExpandResults = Boolean(results && (Array.isArray(results.findings) || typeof results.summary === 'object'))
+  useEffect(() => {
+    if (expanded && canExpandResults && resultsJson == null && onLoadResults) {
+      onLoadResults(scan.id)
+    }
+  }, [expanded, canExpandResults, resultsJson, onLoadResults, scan.id])
+
+  const results = useMemo(() => {
+    if (!expanded || !resultsJson || isPendingToken) return null
+    try { return JSON.parse(resultsJson) } catch { return null }
+  }, [expanded, resultsJson, isPendingToken])
+
+  const summary = resultsSummary || results?.summary
+  const isLoadingResults = expanded && canExpandResults && resultsJson == null
 
   const formatDate = (iso) => {
     if (!iso) return '—'
@@ -769,9 +778,14 @@ function ScanRow({ scan, onRescan, rescanning }) {
           <FindingsPanel results={results} />
         </div>
       )}
+      {isLoadingResults && (
+        <div className="px-5 pb-5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          <p className="text-xs text-white/30">Loading scan results...</p>
+        </div>
+      )}
     </div>
   )
-}
+})
 
 function SevChip({ label, color }) {
   return (
@@ -816,6 +830,7 @@ export default function ProjectDetail() {
   const { toast } = useUiFeedback()
   const [project, setProject] = useState(null)
   const [scans, setScans] = useState([])
+  const [scanResultsById, setScanResultsById] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [deleting, setDeleting] = useState(false)
@@ -834,6 +849,8 @@ export default function ProjectDetail() {
   const vulnerabilityPollRef = useRef(null)
   const vulnerabilityInFlightRef = useRef(false)
   const lastWorkflowErrorLogAtRef = useRef(0)
+  const scanResultsByIdRef = useRef({})
+  const scanResultsInFlightRef = useRef(new Set())
 
   const syncActiveDastStatuses = useCallback(async (scanList) => {
     const activeDast = (scanList || []).filter(
@@ -845,12 +862,52 @@ export default function ProjectDetail() {
     return true
   }, [])
 
+  useEffect(() => {
+    scanResultsByIdRef.current = scanResultsById
+  }, [scanResultsById])
+
   const loadScans = useCallback(async () => {
     try {
-      const list = await getScans(id)
-      setScans(list)
+      const list = await getScans(id, { includeResults: false })
+      setScans((prev) => {
+        if (prev.length === list.length && prev.every((scan, idx) => {
+          const nextScan = list[idx]
+          return scan.id === nextScan.id
+            && scan.status === nextScan.status
+            && scan.job_state === nextScan.job_state
+            && scan.completed_at === nextScan.completed_at
+            && scan.error_message === nextScan.error_message
+        })) {
+          return prev
+        }
+        return list
+      })
       return list
     } catch { return [] }
+  }, [id])
+
+  const fetchScanResults = useCallback(async (scanId) => {
+    if (!scanId) return null
+    const cached = scanResultsByIdRef.current[scanId]
+    if (cached !== undefined) return cached
+    if (scanResultsInFlightRef.current.has(scanId)) return null
+
+    scanResultsInFlightRef.current.add(scanId)
+    try {
+      const data = await getScanResults(id, scanId)
+      const resultsJson = typeof data?.results_json === 'string' ? data.results_json : null
+      if (resultsJson !== null) {
+        setScanResultsById((prev) => {
+          if (prev[scanId] === resultsJson) return prev
+          return { ...prev, [scanId]: resultsJson }
+        })
+      }
+      return resultsJson
+    } catch {
+      return null
+    } finally {
+      scanResultsInFlightRef.current.delete(scanId)
+    }
   }, [id])
 
   const loadVulnerabilityWorkflow = useCallback(async () => {
@@ -886,7 +943,7 @@ export default function ProjectDetail() {
       try {
         const [proj, scanList, workflowSnapshot] = await Promise.all([
           getProject(id),
-          getScans(id),
+          getScans(id, { includeResults: false }),
           getVulnerabilityWorkflow(id).catch(() => null),
         ])
         setProject(proj)
@@ -957,6 +1014,14 @@ export default function ProjectDetail() {
       cleanupProgress?.()
     }
   }, [id, loadScans])
+
+  useEffect(() => {
+    const completed = scans.filter((s) => s.status === 'completed')
+    const latest = completed[0]
+    const previous = completed[1]
+    if (latest) fetchScanResults(latest.id)
+    if (previous) fetchScanResults(previous.id)
+  }, [scans, fetchScanResults])
 
   useEffect(() => {
     if (!vulnerabilityPollRef.current) {
@@ -1035,8 +1100,10 @@ export default function ProjectDetail() {
   const completedScans = scans.filter(s => s.status === 'completed')
   const latestCompletedScan = completedScans[0] || null
   const previousCompletedScan = completedScans[1] || null
-  const latestSummary = summarizeScan(latestCompletedScan)
-  const previousSummary = summarizeScan(previousCompletedScan)
+  const latestResultsJson = latestCompletedScan ? scanResultsById[latestCompletedScan.id] : null
+  const previousResultsJson = previousCompletedScan ? scanResultsById[previousCompletedScan.id] : null
+  const latestSummary = summarizeScan(latestCompletedScan, latestResultsJson, latestCompletedScan?.results_summary)
+  const previousSummary = summarizeScan(previousCompletedScan, previousResultsJson, previousCompletedScan?.results_summary)
 
   const hasTrendBaseline = Boolean(latestCompletedScan && previousCompletedScan)
   const findingsDelta = hasTrendBaseline ? latestSummary.total - previousSummary.total : 0
@@ -1105,10 +1172,13 @@ export default function ProjectDetail() {
     )
   )
 
-  const workflowTaskByFingerprint = (vulnerabilityWorkflow.tasks || []).reduce((acc, task) => {
-    if (task?.fingerprint) acc[task.fingerprint] = task
-    return acc
-  }, {})
+  const workflowTaskByFingerprint = useMemo(
+    () => (vulnerabilityWorkflow.tasks || []).reduce((acc, task) => {
+      if (task?.fingerprint) acc[task.fingerprint] = task
+      return acc
+    }, {}),
+    [vulnerabilityWorkflow.tasks]
+  )
 
   const canManageWorkflowTask = user?.role_name === 'Security Manager' || user?.role_name === 'Admin'
 
@@ -1479,7 +1549,15 @@ export default function ProjectDetail() {
               </div>
             ) : (
               scans.map(scan => (
-                <ScanRow key={scan.id} scan={scan} onRescan={canEdit ? handleRescan : null} rescanning={rescanning} />
+                <ScanRow
+                  key={scan.id}
+                  scan={scan}
+                  onRescan={canEdit ? handleRescan : null}
+                  rescanning={rescanning}
+                  resultsJson={scanResultsById[scan.id] ?? scan.results_json ?? null}
+                  resultsSummary={scan.results_summary}
+                  onLoadResults={fetchScanResults}
+                />
               ))
             )}
           </div>
@@ -1490,21 +1568,20 @@ export default function ProjectDetail() {
             if (completed.length === 0) return null
             const latest = completed[0]
             const prev = completed[1] || null
-            let latestResults = null
-            try { latestResults = JSON.parse(latest.results_json) } catch { return null }
+            const latestResultsJson = scanResultsById[latest.id] ?? latest.results_json
+            const prevResultsJson = prev ? (scanResultsById[prev.id] ?? prev.results_json) : null
+            const latestResults = parseScanResults(latestResultsJson)
             if (!latestResults?.findings?.length) return null
 
             // Build a set of "rule_id:file:line" from the prev scan to detect recurring findings
             const prevKeys = new Set()
-            if (prev?.results_json) {
-              try {
-                const r = JSON.parse(prev.results_json)
-                ;(r.findings || []).forEach(f => prevKeys.add(`${f.rule_id}:${f.file}:${f.line}`))
-              } catch {}
+            if (prevResultsJson) {
+              const prevParsed = parseScanResults(prevResultsJson)
+              ;(prevParsed?.findings || []).forEach(f => prevKeys.add(`${f.rule_id}:${f.file}:${f.line}`))
             }
 
             const findings = latestResults.findings
-            const summary = latestResults.summary || {}
+            const summary = latest.results_summary || latestResults.summary || {}
             const hasNewScanRunning = scans.some(s => s.status === 'pending' || s.status === 'running')
             const scannedAt = latest.completed_at
               ? new Date(latest.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })

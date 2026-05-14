@@ -93,3 +93,9 @@ def get_or_create_scan_risk_score(db: Session, scan: Scan) -> RiskScore | None:
     if existing:
         return existing
     return upsert_scan_risk_score(db, scan)
+
+
+def get_existing_scan_risk_score(db: Session, scan: Scan | None) -> RiskScore | None:
+    if not scan or scan.status != ScanStatus.completed:
+        return None
+    return db.query(RiskScore).filter(RiskScore.scan_id == scan.id).first()

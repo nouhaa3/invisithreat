@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppLayout from '../components/AppLayout'
@@ -291,20 +291,28 @@ function SecurityManagerDashboard({
     )
   }
 
-  const queueSource = portfolioProjects?.length
-    ? [...portfolioProjects].sort((a, b) => {
-      const riskDelta = Number(b?.risk_score || 0) - Number(a?.risk_score || 0)
-      if (riskDelta !== 0) return riskDelta
-      const criticalDelta = Number(b?.critical || 0) - Number(a?.critical || 0)
-      if (criticalDelta !== 0) return criticalDelta
-      return Number(b?.high || 0) - Number(a?.high || 0)
-    }).slice(0, 8)
-    : (stats.top_risky_projects || [])
+  const queueSource = useMemo(() => {
+    if (portfolioProjects?.length) {
+      return [...portfolioProjects]
+        .sort((a, b) => {
+          const riskDelta = Number(b?.risk_score || 0) - Number(a?.risk_score || 0)
+          if (riskDelta !== 0) return riskDelta
+          const criticalDelta = Number(b?.critical || 0) - Number(a?.critical || 0)
+          if (criticalDelta !== 0) return criticalDelta
+          return Number(b?.high || 0) - Number(a?.high || 0)
+        })
+        .slice(0, 8)
+    }
+    return stats.top_risky_projects || []
+  }, [portfolioProjects, stats?.top_risky_projects])
 
-  const priorityQueue = queueSource.map((project) => ({
-    ...project,
-    priority: getPriorityInfo(project),
-  }))
+  const priorityQueue = useMemo(
+    () => queueSource.map((project) => ({
+      ...project,
+      priority: getPriorityInfo(project),
+    })),
+    [queueSource]
+  )
 
   const immediateActions = priorityQueue.filter((p) => p.priority.label === 'P1').length
   const prioritizedItems = priorityQueue.filter((p) => p.priority.label !== 'P3').length

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useUiFeedback } from '../context/UiFeedbackContext'
@@ -136,7 +136,7 @@ function EmptyState({ title, description, actionLabel, onAction }) {
 
 // ─── Developer row ────────────────────────────────────────────────────────────
 
-function ProjectRow({ project, onClick }) {
+const ProjectRow = memo(function ProjectRow({ project, onClick }) {
   const userRoleBadge = project.user_role && project.user_role !== 'owner'
   const projectCategory = inferProjectCategory(project)
 
@@ -212,7 +212,7 @@ function ProjectRow({ project, onClick }) {
       </div>
     </div>
   )
-}
+})
 
 // ─── Admin components ─────────────────────────────────────────────────────────
 
@@ -250,7 +250,7 @@ function RiskBadge({ risk }) {
   )
 }
 
-function AdminProjectRow({
+const AdminProjectRow = memo(function AdminProjectRow({
   project,
   deleting,
   toggling,
@@ -332,7 +332,7 @@ function AdminProjectRow({
       </div>
     </div>
   )
-}
+})
 
 function MetaPill({ label, value }) {
   return (
@@ -366,7 +366,7 @@ function AdminToolbarSelect({ value, onChange, options }) {
   )
 }
 
-function AdminProjectCard({
+const AdminProjectCard = memo(function AdminProjectCard({
   project,
   selected,
   disableSelect,
@@ -475,7 +475,7 @@ function AdminProjectCard({
       </div>
     </div>
   )
-}
+})
 
 function ScanStatusBadge({ status }) {
   const cfg = SCAN_STATUS_STYLE[status] || {
@@ -495,7 +495,7 @@ function ScanStatusBadge({ status }) {
   )
 }
 
-function SecurityProjectRow({ project, onView }) {
+const SecurityProjectRow = memo(function SecurityProjectRow({ project, onView }) {
   return (
     <div
       className="ui-row px-5 py-4"
@@ -530,9 +530,9 @@ function SecurityProjectRow({ project, onView }) {
       </div>
     </div>
   )
-}
+})
 
-function SecurityProjectCard({ project, onView }) {
+const SecurityProjectCard = memo(function SecurityProjectCard({ project, onView }) {
   const ownerAvatarSrc = resolveProfilePictureSrc(project.owner_profile_picture)
   const ownerInitials = getInitials(project.owner_name)
 
@@ -631,7 +631,7 @@ function SecurityProjectCard({ project, onView }) {
       </div>
     </div>
   )
-}
+})
 
 function AssignedUsersDropdown({ usersAssigned }) {
   const [open, setOpen] = useState(false)
@@ -841,112 +841,130 @@ export default function ProjectsPage() {
     securityRiskFilter !== 'All Risk' ||
     securityScanFilter !== 'All Scan Status'
 
-  const developerProjects = isDeveloperView
-    ? projects.filter((project) => {
-        const projectCategory = inferProjectCategory(project)
-        const searchValue = searchQuery.trim().toLowerCase()
+  const developerProjects = useMemo(() => {
+    if (!isDeveloperView) return projects
+    return projects.filter((project) => {
+      const projectCategory = inferProjectCategory(project)
+      const searchValue = searchQuery.trim().toLowerCase()
 
-        const searchable = [
-          project.name,
-          project.description,
-          project.language,
-          project.project_type,
-          project.analysis_type,
-          project.last_scan_status,
-          project.user_role,
-          projectCategory,
-        ].map(normalizeProjectText).join(' ')
+      const searchable = [
+        project.name,
+        project.description,
+        project.language,
+        project.project_type,
+        project.analysis_type,
+        project.last_scan_status,
+        project.user_role,
+        projectCategory,
+      ].map(normalizeProjectText).join(' ')
 
-        const matchesSearch = !searchValue || searchable.includes(searchValue)
-        const matchesFilter = activeDevFilter === 'All' || projectCategory === activeDevFilter
+      const matchesSearch = !searchValue || searchable.includes(searchValue)
+      const matchesFilter = activeDevFilter === 'All' || projectCategory === activeDevFilter
 
-        return matchesSearch && matchesFilter
-      })
-    : projects
+      return matchesSearch && matchesFilter
+    })
+  }, [activeDevFilter, isDeveloperView, projects, searchQuery])
 
-  const adminOwnerOptions = isAdmin
-    ? ['All PIC', ...Array.from(new Set(projects.map((p) => p.owner_name).filter(Boolean))).sort((a, b) => a.localeCompare(b))]
-    : ['All PIC']
+  const adminOwnerOptions = useMemo(() => {
+    if (!isAdmin) return ['All PIC']
+    const owners = Array.from(new Set(projects.map((p) => p.owner_name).filter(Boolean)))
+    owners.sort((a, b) => a.localeCompare(b))
+    return ['All PIC', ...owners]
+  }, [isAdmin, projects])
 
-  const adminProjects = isAdmin
-    ? projects.filter((project) => {
-        const searchValue = adminSearchQuery.trim().toLowerCase()
-        const searchable = [
-          project.name,
-          project.owner_name,
-          project.global_risk_level,
-          project.status,
-          project.users_assigned_count,
-          project.total_scans,
-        ].map(normalizeProjectText).join(' ')
+  const adminProjects = useMemo(() => {
+    if (!isAdmin) return projects
+    return projects.filter((project) => {
+      const searchValue = adminSearchQuery.trim().toLowerCase()
+      const searchable = [
+        project.name,
+        project.owner_name,
+        project.global_risk_level,
+        project.status,
+        project.users_assigned_count,
+        project.total_scans,
+      ].map(normalizeProjectText).join(' ')
 
-        const matchesSearch = !searchValue || searchable.includes(searchValue)
-        const matchesStatus =
-          adminStatusFilter === 'All Status' ||
-          normalizeProjectText(project.status) === normalizeProjectText(adminStatusFilter)
-        const matchesRisk =
-          adminRiskFilter === 'All Risk' ||
-          normalizeProjectText(project.global_risk_level) === normalizeProjectText(adminRiskFilter)
-        const matchesOwner = adminOwnerFilter === 'All PIC' || project.owner_name === adminOwnerFilter
+      const matchesSearch = !searchValue || searchable.includes(searchValue)
+      const matchesStatus =
+        adminStatusFilter === 'All Status' ||
+        normalizeProjectText(project.status) === normalizeProjectText(adminStatusFilter)
+      const matchesRisk =
+        adminRiskFilter === 'All Risk' ||
+        normalizeProjectText(project.global_risk_level) === normalizeProjectText(adminRiskFilter)
+      const matchesOwner = adminOwnerFilter === 'All PIC' || project.owner_name === adminOwnerFilter
 
-        return matchesSearch && matchesStatus && matchesRisk && matchesOwner
-      })
-    : projects
+      return matchesSearch && matchesStatus && matchesRisk && matchesOwner
+    })
+  }, [adminOwnerFilter, adminRiskFilter, adminSearchQuery, adminStatusFilter, isAdmin, projects])
 
-  const securityProjects = isSecurityManager
-    ? projects.filter((project) => {
-        const searchValue = securitySearchQuery.trim().toLowerCase()
-        const searchable = [
-          project.name,
-          project.owner_name,
-          project.global_risk_level,
-          project.last_scan_status,
-          project.risk_score,
-          project.critical,
-          project.high,
-          project.medium,
-          project.low,
-          project.total_scans,
-        ].map(normalizeProjectText).join(' ')
+  const securityProjects = useMemo(() => {
+    if (!isSecurityManager) return projects
+    return projects.filter((project) => {
+      const searchValue = securitySearchQuery.trim().toLowerCase()
+      const searchable = [
+        project.name,
+        project.owner_name,
+        project.global_risk_level,
+        project.last_scan_status,
+        project.risk_score,
+        project.critical,
+        project.high,
+        project.medium,
+        project.low,
+        project.total_scans,
+      ].map(normalizeProjectText).join(' ')
 
-        const matchesSearch = !searchValue || searchable.includes(searchValue)
-        const matchesRisk =
-          securityRiskFilter === 'All Risk' ||
-          normalizeProjectText(project.global_risk_level) === normalizeProjectText(securityRiskFilter)
+      const matchesSearch = !searchValue || searchable.includes(searchValue)
+      const matchesRisk =
+        securityRiskFilter === 'All Risk' ||
+        normalizeProjectText(project.global_risk_level) === normalizeProjectText(securityRiskFilter)
 
-        const matchesScan =
-          securityScanFilter === 'All Scan Status' ||
-          (securityScanFilter === 'No Scan'
-            ? !project.last_scan_status
-            : normalizeProjectText(project.last_scan_status) === normalizeProjectText(securityScanFilter))
+      const matchesScan =
+        securityScanFilter === 'All Scan Status' ||
+        (securityScanFilter === 'No Scan'
+          ? !project.last_scan_status
+          : normalizeProjectText(project.last_scan_status) === normalizeProjectText(securityScanFilter))
 
-        return matchesSearch && matchesRisk && matchesScan
-      })
-    : projects
+      return matchesSearch && matchesRisk && matchesScan
+    })
+  }, [isSecurityManager, projects, securityRiskFilter, securityScanFilter, securitySearchQuery])
 
-  const visibleProjects = isDeveloperView
-    ? developerProjects
-    : isAdmin
-      ? adminProjects
-      : isSecurityManager
-        ? securityProjects
-        : projects
+  const visibleProjects = useMemo(() => {
+    if (isDeveloperView) return developerProjects
+    if (isAdmin) return adminProjects
+    if (isSecurityManager) return securityProjects
+    return projects
+  }, [adminProjects, developerProjects, isAdmin, isDeveloperView, isSecurityManager, projects, securityProjects])
 
-  const adminVisibleIds = isAdmin ? visibleProjects.map((p) => p.id) : []
-  const selectedVisibleCount = isAdmin
-    ? adminVisibleIds.filter((id) => selectedProjectIds.has(id)).length
-    : 0
+  const adminVisibleIds = useMemo(
+    () => (isAdmin ? visibleProjects.map((p) => p.id) : []),
+    [isAdmin, visibleProjects]
+  )
+  const selectedVisibleCount = useMemo(
+    () => (isAdmin ? adminVisibleIds.filter((id) => selectedProjectIds.has(id)).length : 0),
+    [adminVisibleIds, isAdmin, selectedProjectIds]
+  )
   const allVisibleSelected = isAdmin && adminVisibleIds.length > 0 && selectedVisibleCount === adminVisibleIds.length
 
-  const adminHighRiskCount = isAdmin
-    ? projects.filter((project) => normalizeProjectText(project.global_risk_level) === 'high').length
-    : 0
-  const adminLowRiskCount = isAdmin
-    ? projects.filter((project) => normalizeProjectText(project.global_risk_level) === 'low').length
-    : 0
-  const adminUnscannedCount = isAdmin
-    ? projects.filter((project) => Number(project.total_scans || 0) === 0).length
-    : 0
+  const adminHighRiskCount = useMemo(
+    () => (isAdmin
+      ? projects.filter((project) => normalizeProjectText(project.global_risk_level) === 'high').length
+      : 0),
+    [isAdmin, projects]
+  )
+  const adminLowRiskCount = useMemo(
+    () => (isAdmin
+      ? projects.filter((project) => normalizeProjectText(project.global_risk_level) === 'low').length
+      : 0),
+    [isAdmin, projects]
+  )
+  const adminUnscannedCount = useMemo(
+    () => (isAdmin
+      ? projects.filter((project) => Number(project.total_scans || 0) === 0).length
+      : 0),
+    [isAdmin, projects]
+  )
 
   const load = async () => {
     setLoading(true)
