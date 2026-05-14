@@ -363,11 +363,11 @@ def get_security_projects_overview(db: Session, user: User) -> dict:
             risk_score = round(float(latest_completed_scan.risk_score.score), 2)
             risk_scores.append(risk_score)
 
-        summary = get_scan_summary(latest_completed_scan) if latest_completed_scan else None
-        critical = summary["critical"] if summary else 0
-        high = summary["high"] if summary else 0
-        medium = summary["medium"] if summary else 0
-        low = summary["low"] if summary else 0
+        scan_summary = get_scan_summary(latest_completed_scan) if latest_completed_scan else None
+        critical = scan_summary["critical"] if scan_summary else 0
+        high = scan_summary["high"] if scan_summary else 0
+        medium = scan_summary["medium"] if scan_summary else 0
+        low = scan_summary["low"] if scan_summary else 0
 
         if (critical + high + medium + low) > 0:
             summary["projects_with_findings"] += 1

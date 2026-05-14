@@ -45,6 +45,8 @@ ALLOWED_ORIGINS = list(
     )
 )
 
+LOCAL_DEV_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+
 # ─── Scheduler Setup ──────────────────────────────────────────────────────────
 scheduler = AsyncIOScheduler()
 
@@ -106,6 +108,7 @@ app_fastapi.add_middleware(RequestTracingMiddleware)
 app_fastapi.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=LOCAL_DEV_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
