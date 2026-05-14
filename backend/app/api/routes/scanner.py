@@ -4,27 +4,21 @@ from pathlib import Path
 
 router = APIRouter(prefix="/scanner", tags=["scanner"])
 
-# Resolve scanner.py relative to this file: backend/app/api/routes/scanner.py -> ../../../../scanner-cli/scanner.py
-_SCANNER_CLI_DIR = Path(__file__).resolve().parents[4] / "scanner-cli"
+# Resolve scan.py relative to repo root: backend/app/api/routes/scanner.py -> ../../../../scripts/scan.py
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_SCRIPT_PATH = _REPO_ROOT / "scripts" / "scan.py"
 
 
 @router.get("/download", response_class=PlainTextResponse)
 async def download_scanner():
     """
-    Serve the InvisiThreat CLI scanner script.
-    Users download this once and run it locally — source code never leaves their machine.
-    
-    Supports commands:
-      - login: Save API key and connect to platform
-      - logout: Remove saved credentials
-      - scan: Scan local directory and upload results
-      - projects: List accessible projects
-      - status: Show current user info
+        Serve the lightweight Python CLI scanner script (token-based upload).
+        Users download this once and run it locally — source code never leaves their machine.
     """
-    script_path = _SCANNER_CLI_DIR / "scanner.py"
+    script_path = _SCRIPT_PATH
     if not script_path.exists():
-        # Fallback: try the path relative to the working directory (Docker context)
-        script_path = Path("/scanner-cli/scanner.py")
+        # Fallback: try the path mounted in Docker compose
+        script_path = Path("/scripts/scan.py")
 
     if not script_path.exists():
         raise HTTPException(status_code=404, detail="Scanner script not found on server.")

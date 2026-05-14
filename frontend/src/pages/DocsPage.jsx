@@ -126,8 +126,9 @@ export default function DocsPage() {
           <div className="glass rounded-2xl border border-white/10 p-6">
             <p className="text-xs uppercase tracking-[0.2em] text-white/40">CLI example</p>
             <pre className="mt-4 text-xs text-white/70 whitespace-pre-wrap break-words">
-curl "https://app.invisithreat.dev/api/scanner/download" -o scan.py
-python scan.py . --token=YOUR_TOKEN --api-url https://app.invisithreat.dev
+curl "https://app.invisithreat.dev/api/scanner/download" -o invisithreat-scan.py
+pip install requests
+python invisithreat-scan.py . --token=YOUR_TOKEN --api-url https://app.invisithreat.dev
             </pre>
             <p className="mt-4 text-xs text-white/45">Local-only mode keeps your source code on your machine.</p>
           </div>

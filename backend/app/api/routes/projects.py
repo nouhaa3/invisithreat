@@ -24,6 +24,7 @@ from app.services.project import (
     get_security_projects_overview
 )
 from app.services.github_scanner import run_github_scan
+from app.core.queue import celery_app
 import uuid, secrets
 import json
 from datetime import date, datetime, UTC
@@ -57,6 +58,14 @@ from app.workers.scan_worker import run_github_scan_job
 from app.core.observability import request_id_var, user_id_var
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
+
+
+def _celery_workers_available() -> bool:
+    try:
+        replies = celery_app.control.ping(timeout=1.0)
+        return bool(replies)
+    except Exception:
+        return False
 
 
 def _guess_repo_name(repo_url: str) -> str:
@@ -1028,16 +1037,36 @@ async def create_new_scan(
                 repo_record.access_token_encrypted = encrypt_token(data.repo_token) if data.repo_token else None
         db.commit()
 
-        background_tasks.add_task(
-            lambda: None
-        )
         # Propagate tracing context into worker
         headers = {"request_id": request_id_var.get(), "user_id": str(current_user.id)}
-        job = run_github_scan_job.apply_async(args=[str(scan.id)], headers=headers)
-        scan.job_id = job.id
-        scan.job_state = JobState.queued.value
-        scan.job_updated_at = datetime.now(UTC)
-        db.commit()
+
+        if settings.ENVIRONMENT.lower() == "development" and not _celery_workers_available():
+            # Fallback to in-process background task for local dev when Celery is unavailable.
+            scan.status = ScanStatus.running
+            scan.job_state = JobState.running.value
+            scan.job_updated_at = datetime.now(UTC)
+            db.commit()
+            background_tasks.add_task(
+                run_github_scan,
+                scan_id=str(scan.id),
+                repo_url=scan.repo_url,
+                branch=scan.repo_branch or "main",
+                db_url=settings.DATABASE_URL,
+                github_token=None,
+            )
+        else:
+            try:
+                job = run_github_scan_job.apply_async(args=[str(scan.id)], headers=headers)
+            except Exception as exc:
+                scan.status = ScanStatus.failed
+                scan.error_message = f"Failed to enqueue scan job: {exc}"
+                scan.completed_at = datetime.now(UTC)
+                db.commit()
+                raise HTTPException(status_code=503, detail="Scan worker unavailable") from exc
+            scan.job_id = job.id
+            scan.job_state = JobState.queued.value
+            scan.job_updated_at = datetime.now(UTC)
+            db.commit()
 
     return scan
 
@@ -1161,7 +1190,9 @@ async def get_cli_upload_token(
     The CLI never needs a user password — only this short-lived token.
     """
     _ = request
-    get_project(db, project_id, current_user)
+    project, user_role = get_project_accessible(db, project_id, current_user)
+    if user_role not in ("owner", "editor"):
+        raise HTTPException(status_code=403, detail="Only owners and editors can run scans")
     scan = db.query(ScanModel).filter(ScanModel.id == scan_id, ScanModel.project_id == project_id).first()
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
@@ -1196,6 +1227,8 @@ async def cli_upload_results(
     scan.status = ScanStatus.completed if payload.status == "completed" else ScanStatus.failed
     scan.error_message = payload.error_message
     scan.completed_at = datetime.now(UTC)
+    scan.job_state = JobState.success.value if scan.status == ScanStatus.completed else JobState.failed.value
+    scan.job_updated_at = datetime.now(UTC)
     db.commit()
     if scan.status == ScanStatus.completed:
         get_or_create_scan_risk_score(db, scan)

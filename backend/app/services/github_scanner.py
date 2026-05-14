@@ -1,4 +1,4 @@
-﻿"""
+"""
 GitHub Scanner Background Service
 Clones a GitHub repository into a temp directory, runs the InvisiThreat
 security rules against it, stores results in the database, then cleans up.
@@ -32,10 +32,10 @@ from app.core.scan_sanitizer import sanitize_scan_results
 # Try to import new modular rules system, fall back to legacy rules if unavailable
 try:
     sys.path.insert(0, str(Path(__file__).parent.parent.parent / "cli"))
-    from rules import get_rules_for_language  # type: ignore[import]
-    USE_NEW_RULES = True  # pylint: disable=used-before-assignment
+    from rules import get_rules_for_language
+    USE_NEW_RULES = True
 except ImportError:
-    USE_NEW_RULES = False  # pylint: disable=used-before-assignment
+    USE_NEW_RULES = False
     get_rules_for_language = None
 
 
@@ -789,7 +789,7 @@ def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str, githu
         upsert_scan_risk_score(db, scan)
         sync_vulnerability_tasks_for_scan(db, scan.project, scan)
 
-    except (RuntimeError, OSError, ValueError, KeyError, json.JSONDecodeError) as _:
+    except (RuntimeError, OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
         try:
             scan = db.query(Scan).filter(Scan.id == scan_id).first()
             if scan:

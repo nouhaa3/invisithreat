@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import api from '../services/api'
-import { getProjects, createProject, createScan, getCLIToken } from '../services/projectService'
+import { getProjects, createProject, createScan, getCLIToken, getScanResults } from '../services/projectService'
 import { listApiKeys, createApiKey } from '../services/apiKeyService'
 import { getGitHubAppInstallUrl, getGitHubOAuthStart, exchangeGitHubOAuthCode } from '../services/integrationService'
 import AnalysisTypeSelector from '../components/AnalysisTypeSelector'
@@ -144,6 +144,8 @@ export default function NewScanPage() {
   const [createdProject, setCreatedProject] = useState(null)
   const [createdScan, setCreatedScan] = useState(null)
   const [cliToken, setCliToken] = useState(null)
+  const [cliAwaitingResults, setCliAwaitingResults] = useState(false)
+  const [cliUploadStatus, setCliUploadStatus] = useState('')
   const [loading, setLoading] = useState(false)
 
   const isNewProject = projectMode === 'new'
@@ -185,6 +187,41 @@ export default function NewScanPage() {
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
   }, [])
+
+  // CLI scan polling: auto-open project when results arrive
+  useEffect(() => {
+    if (method !== 'cli') return
+    if (!cliToken || !createdProject?.id || !createdScan?.id) return
+
+    let active = true
+    setCliAwaitingResults(true)
+    setCliUploadStatus('')
+
+    const poll = async () => {
+      try {
+        const result = await getScanResults(createdProject.id, createdScan.id)
+        if (!active) return
+        const status = result?.status
+        if (status === 'completed') {
+          setCliAwaitingResults(false)
+          setCliUploadStatus('completed')
+          navigate(`/projects/${createdProject.id}`)
+        } else if (status === 'failed') {
+          setCliAwaitingResults(false)
+          setCliUploadStatus('failed')
+        }
+      } catch {
+        // Ignore transient errors while waiting for upload.
+      }
+    }
+
+    const intervalId = setInterval(poll, 5000)
+    poll()
+    return () => {
+      active = false
+      clearInterval(intervalId)
+    }
+  }, [cliToken, createdProject?.id, createdScan?.id, method, navigate])
 
   const handleExeGenerateKey = async () => {
     const name = exeNewKeyName.trim() || 'My Key'
@@ -880,13 +917,13 @@ export default function NewScanPage() {
 
                   <StepCmd n={2} label="Authenticate once with your API key">
                     <CodeBlock>
-                      {`invisithreat.exe login --server ${getApiBase()} --token "${exeNewKeyData?.plaintext || 'YOUR_API_KEY'}"`}
+                      {`.\\invisithreat.exe login --server ${getApiBase()} --token "${exeNewKeyData?.plaintext || 'YOUR_API_KEY'}"`}
                     </CodeBlock>
                   </StepCmd>
 
                   <StepCmd n={3} label="Run a scan">
                     <CodeBlock>
-                      {`invisithreat.exe scan "C:\\path\\to\\your-project" --project-id ${projectMode === 'existing' ? selectedProject?.id : 'YOUR_PROJECT_UUID'}`}
+                      {`.\\invisithreat.exe scan "C:\\path\\to\\your-project" --project-id ${projectMode === 'existing' ? selectedProject?.id : 'YOUR_PROJECT_UUID'}`}
                     </CodeBlock>
                   </StepCmd>
 
@@ -1030,32 +1067,13 @@ export default function NewScanPage() {
                     </div>
 
                     <div className="space-y-3">
-                      <StepCmd n={1} label="Ensure Python 3.8+ is installed">
-                        <CodeBlock>python --version</CodeBlock>
-                      </StepCmd>
-
-                      <StepCmd n={2} label="Download the scanner">
+                      <StepCmd n={1} label="Download the scanner">
                         <CodeBlock>{`curl "${getApiBase()}/api/scanner/download" -o invisithreat-scan.py`}</CodeBlock>
                       </StepCmd>
 
-                      <StepCmd n={3} label="Install dependencies (one-time)">
-                        <CodeBlock>pip install click requests</CodeBlock>
+                      <StepCmd n={2} label="Install dependencies (one-time)">
+                        <CodeBlock>pip install requests</CodeBlock>
                       </StepCmd>
-
-                      <StepCmd n={4} label="Login with your API key">
-                        <CodeBlock>{`python invisithreat-scan.py login --server ${getApiBase()}`}</CodeBlock>
-                      </StepCmd>
-
-                      <StepCmd n={5} label="Scan your project">
-                        <CodeBlock>python invisithreat-scan.py scan /path/to/your-project</CodeBlock>
-                      </StepCmd>
-                    </div>
-
-                    <div className="mt-5 p-4 rounded-xl"
-                      style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.15)' }}>
-                      <p className="text-xs text-green-400 leading-relaxed">
-                        <span className="font-semibold">💡 Tip:</span> Run scans on every commit in CI/CD using <span className="font-mono text-white/80">python invisithreat-scan.py scan .</span> in your workflow. Results appear instantly on your dashboard.
-                      </p>
                     </div>
                   </SectionCard>
 
@@ -1119,13 +1137,13 @@ export default function NewScanPage() {
                       </div>
 
                       <div className="space-y-3 mb-4">
-                        <StepCmd n={1} label="Navigate to your project folder">
-                          <CodeBlock>cd /path/to/your/project</CodeBlock>
+                        <StepCmd n={1} label="Navigate to the folder where you saved the scanner">
+                          <CodeBlock>cd /path/to/downloads</CodeBlock>
                         </StepCmd>
 
-                        <StepCmd n={2} label="Run the scan with your token">
+                        <StepCmd n={2} label="Run the scan (pass your project path)">
                           <CodeBlock>
-                            {`python scan.py . --token "${cliToken.upload_token}" --api-url "${getApiBase()}"`}
+                            {`python invisithreat-scan.py /path/to/your/project --token "${cliToken.upload_token}" --api-url "${getApiBase()}"`}
                           </CodeBlock>
                         </StepCmd>
 
@@ -1145,6 +1163,24 @@ export default function NewScanPage() {
                           </p>
                         </div>
                       </div>
+
+                      {cliAwaitingResults && (
+                        <div className="mt-4 rounded-xl px-4 py-3"
+                          style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}>
+                          <p className="text-xs text-blue-300">
+                            Waiting for results upload... this page will open your project as soon as the scan is saved.
+                          </p>
+                        </div>
+                      )}
+
+                      {cliUploadStatus === 'failed' && (
+                        <div className="mt-4 rounded-xl px-4 py-3"
+                          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                          <p className="text-xs text-red-300">
+                            Upload received but scan failed. Check the CLI output and try again.
+                          </p>
+                        </div>
+                      )}
                     </SectionCard>
                   )}
                 </>

@@ -17,8 +17,8 @@ from app.models.member import ProjectMember
 from app.services.notification import create_notification
 from app.core.scan_sanitizer import sanitize_scan_results
 from app.models.scan import JobState
-from app.workers.scan_worker import process_cli_scan_job
-from app.core.observability import request_id_var
+from app.services.risk_score import get_or_create_scan_risk_score
+from app.services.vulnerability_workflow import sync_vulnerability_tasks_for_scan
 
 router = APIRouter(prefix="/cli", tags=["CLI"])
 
@@ -174,7 +174,7 @@ async def cli_upload_scan(
     scan = Scan(
         id=uuid.uuid4(),
         project_id=project.id,
-        method=ScanMethod.cli,
+        method=ScanMethod.exe,
         status=ScanStatus.pending,
         results_json=None,
         started_at=datetime.now(UTC),
@@ -184,13 +184,31 @@ async def cli_upload_scan(
     db.commit()
     db.refresh(scan)
 
-    # Enqueue post-processing (sanitize/normalize/persist/notify)
-    headers = {"request_id": request_id_var.get(), "user_id": str(current_user.id)}
-    job = process_cli_scan_job.apply_async(args=[str(scan.id), results_for_db], headers=headers)
-    scan.job_id = job.id
-    scan.job_state = JobState.queued.value
+    # Process synchronously to avoid pending scans if the worker is unavailable.
+    scan.status = ScanStatus.running
+    scan.job_state = JobState.running.value
     scan.job_updated_at = datetime.now(UTC)
     db.commit()
+
+    sanitized = sanitize_scan_results(results_for_db)
+    scan.results_json = json.dumps(sanitized)
+    scan.status = ScanStatus.completed
+    scan.completed_at = datetime.now(UTC)
+    scan.job_state = JobState.success.value
+    scan.job_updated_at = datetime.now(UTC)
+    db.commit()
+
+    get_or_create_scan_risk_score(db, scan)
+    sync_vulnerability_tasks_for_scan(db, scan.project, scan, results_for_db.get("findings", []))
+
+    create_notification(
+        db,
+        user_id=project.owner_id,
+        type="scan_complete",
+        title=f"Scan completed — {project.name}",
+        message=f"{sanitized.get('summary', {}).get('total_findings', 0)} finding(s) detected.",
+        link=f"/projects/{project.id}",
+    )
 
     return CLIScanResponse(
         scan_id=scan.id,

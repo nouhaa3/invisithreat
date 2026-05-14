@@ -1364,13 +1364,13 @@ export default function ProjectDetail() {
               {rescanPanel.method === 'cli' && rescanPanel.cliToken && (
                 <div className="px-4 pb-4 pt-3 flex flex-col gap-2">
                   <RescanCmd label="1. Download the scanner">
-                    {`curl "${getApiBase()}/api/scanner/download" -o scan.py`}
+                    {`curl "${getApiBase()}/api/scanner/download" -o invisithreat-scan.py`}
                   </RescanCmd>
                   <RescanCmd label="2. Install dependency (once)">
                     pip install requests
                   </RescanCmd>
                   <RescanCmd label="3. Run the scan">
-                    {`python scan.py . "--token=${rescanPanel.cliToken.upload_token}" --api-url ${getApiBase()}`}
+                    {`python invisithreat-scan.py . --token "${rescanPanel.cliToken.upload_token}" --api-url ${getApiBase()}`}
                   </RescanCmd>
                 </div>
               )}

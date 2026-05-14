@@ -6,8 +6,9 @@
 import { ZapIcon, ShieldIcon, LockIcon } from '../icons/LandingIcons';
 
 export default function CLISection() {
-  const commandExample = `curl "${window.location.origin}/api/scanner/download" -o scan.py
-python scan.py . --token=YOUR_TOKEN --api-url ${window.location.origin}`;
+  const commandExample = `curl "${window.location.origin}/api/scanner/download" -o invisithreat-scan.py
+pip install requests
+python invisithreat-scan.py . --token=YOUR_TOKEN --api-url ${window.location.origin}`;
 
   const outputExample = `[INFO] InvisiThreat Scanner v1.0.0
 [INFO] Scanning directory: /app
