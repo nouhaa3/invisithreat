@@ -12,5 +12,4 @@ export const markRead = (id) =>
 export const markAllRead = () =>
   api.post('/api/notifications/read-all')
 
-export const deleteNotification = (id) =>
-  api.delete(`/api/notifications/${id}`)
+// NOTE: Notification deletion is intentionally disabled. All notifications are permanent.

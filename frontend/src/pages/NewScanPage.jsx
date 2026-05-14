@@ -1024,29 +1024,37 @@ export default function NewScanPage() {
                         1
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-white">Prepare local scanner</p>
-                        <p className="text-xs text-white/30 mt-0.5">Requires Python 3.8+ installed</p>
+                        <p className="text-sm font-semibold text-white">Local CLI Scanner</p>
+                        <p className="text-xs text-white/30 mt-0.5">Download & run scans on your machine — results sync automatically</p>
                       </div>
                     </div>
 
                     <div className="space-y-3">
-                      <StepCmd n={1} label="Ensure Python is installed">
+                      <StepCmd n={1} label="Ensure Python 3.8+ is installed">
                         <CodeBlock>python --version</CodeBlock>
                       </StepCmd>
 
-                      <StepCmd n={2} label="Download official scan script">
-                        <CodeBlock>{`curl "${getApiBase()}/api/scanner/download" -o scan.py`}</CodeBlock>
+                      <StepCmd n={2} label="Download the scanner">
+                        <CodeBlock>{`curl "${getApiBase()}/api/scanner/download" -o invisithreat-scan.py`}</CodeBlock>
                       </StepCmd>
 
-                      <StepCmd n={3} label="Install runtime dependency (once)">
-                        <CodeBlock>pip install requests</CodeBlock>
+                      <StepCmd n={3} label="Install dependencies (one-time)">
+                        <CodeBlock>pip install click requests</CodeBlock>
+                      </StepCmd>
+
+                      <StepCmd n={4} label="Login with your API key">
+                        <CodeBlock>{`python invisithreat-scan.py login --server ${getApiBase()}`}</CodeBlock>
+                      </StepCmd>
+
+                      <StepCmd n={5} label="Scan your project">
+                        <CodeBlock>python invisithreat-scan.py scan /path/to/your-project</CodeBlock>
                       </StepCmd>
                     </div>
 
                     <div className="mt-5 p-4 rounded-xl"
                       style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.15)' }}>
                       <p className="text-xs text-green-400 leading-relaxed">
-                        CI-native runner available: use <span className="font-mono text-white/80">./.github/actions/invisithreat-scan</span> in GitHub Actions to run scans automatically.
+                        <span className="font-semibold">💡 Tip:</span> Run scans on every commit in CI/CD using <span className="font-mono text-white/80">python invisithreat-scan.py scan .</span> in your workflow. Results appear instantly on your dashboard.
                       </p>
                     </div>
                   </SectionCard>

@@ -9,14 +9,13 @@ import socketio
 from http.cookies import SimpleCookie
 import uuid
 from sqlalchemy.orm import joinedload
+from socket import error as SocketError
 
 from app.core.config import settings
 from app.core.auth_cookies import ACCESS_COOKIE
 from app.core.jwt import decode_token
 from app.db.session import SessionLocal
 from app.models.user import User
-from app.models.member import ProjectMember
-from app.models.scan import Scan
 from app.core.observability import request_id_var
 
 logger = logging.getLogger(__name__)
@@ -45,6 +44,9 @@ sio = socketio.AsyncServer(
     cors_allowed_origins=_socket_allowed_origins(),
     logger=False,  # Reduce verbosity
     engineio_logger=False,
+    transports=['websocket', 'polling'],  # Enable both WebSocket and polling
+    ping_timeout=60,
+    ping_interval=25,
 )
 
 class SocketIOManager:
@@ -67,12 +69,12 @@ class SocketIOManager:
         }
         if role == 'Admin':
             cls.admin_connections[user_id] = sid
-            logger.info(f'[OK] Admin {user_id} ({email}) connected (SID: {sid}) - Total admins: {len(cls.admin_connections)}')
+            logger.info('[OK] Admin %s (%s) connected (SID: %s) - Total admins: %s', user_id, email, sid, len(cls.admin_connections))  # pylint: disable=logging-not-lazy
         else:
-            logger.info(f'[OK] User {user_id} ({email}) connected (SID: {sid})')
+            logger.info('[OK] User %s (%s) connected (SID: %s)', user_id, email, sid)  # pylint: disable=logging-not-lazy
         
         if old_sid and old_sid != sid:
-            logger.info(f'[WARN] User {user_id} had old SID {old_sid}, updated to {sid}')
+            logger.info('[WARN] User %s had old SID %s, updated to %s', user_id, old_sid, sid)  # pylint: disable=logging-not-lazy
     
     @classmethod
     def unregister_user(cls, user_id: str):
@@ -84,11 +86,11 @@ class SocketIOManager:
             del cls.connected_users[user_id]
             if was_admin:
                 del cls.admin_connections[user_id]
-                logger.info(f'[ERROR] Admin {user_id} ({email}) disconnected - Remaining admins: {len(cls.admin_connections)}')
+                logger.info('[ERROR] Admin %s (%s) disconnected - Remaining admins: %s', user_id, email, len(cls.admin_connections))  # pylint: disable=logging-not-lazy
             else:
-                logger.info(f'[ERROR] User {user_id} ({email}) disconnected')
+                logger.info('[ERROR] User %s (%s) disconnected', user_id, email)  # pylint: disable=logging-not-lazy
         else:
-            logger.warning(f'[ERROR] Attempting to unregister unknown user {user_id}')
+            logger.warning('[ERROR] Attempting to unregister unknown user %s', user_id)  # pylint: disable=logging-not-lazy
     
     @classmethod
     async def notify_user_created(cls, user_data: dict):
@@ -106,20 +108,20 @@ class SocketIOManager:
         }
         
         admin_count = len(cls.admin_connections)
-        logger.info(f'[NOTIFY] NEW USER CREATED: {user_nom} (ID: {user_id}) - Broadcasting to {admin_count} admin(s)')
-        logger.info(f'   Admin IDs: {list(cls.admin_connections.keys())}')
+        logger.info('[NOTIFY] NEW USER CREATED: %s (ID: %s) - Broadcasting to %s admin(s)', user_nom, user_id, admin_count)  # pylint: disable=logging-not-lazy
+        logger.info('   Admin IDs: %s', list(cls.admin_connections.keys()))  # pylint: disable=logging-not-lazy
         
         if admin_count == 0:
-            logger.warning('   [WARN] [NOTIFY] No admins connected!')
+            logger.warning('   [WARN] [NOTIFY] No admins connected!')  # pylint: disable=logging-not-lazy
             return
         
         # Send to all connected admins
         for admin_id, sid in list(cls.admin_connections.items()):
             try:
                 await sio.emit('notification', event_data, room=sid)
-                logger.info(f'   [OK] [NOTIFY] Emitted to admin {admin_id} (SID: {sid})')
-            except Exception as e:
-                logger.error(f'   [ERROR] [NOTIFY] Error sending to admin {admin_id}: {e}')
+                logger.info('   [OK] [NOTIFY] Emitted to admin %s (SID: %s)', admin_id, sid)  # pylint: disable=logging-not-lazy
+            except (OSError, RuntimeError) as e:  # pylint: disable=broad-except
+                logger.error('   [ERROR] [NOTIFY] Error sending to admin %s: %s', admin_id, e)  # pylint: disable=logging-not-lazy
     
     @classmethod
     async def notify_user_deleted(cls, user_id: str):
@@ -130,34 +132,14 @@ class SocketIOManager:
         }
         
         admin_count = len(cls.admin_connections)
-        logger.info(f'[NOTIFY] USER DELETED: {user_id} - Broadcasting to {admin_count} admin(s)')
+        logger.info('[NOTIFY] USER DELETED: %s - Broadcasting to %s admin(s)', user_id, admin_count)  # pylint: disable=logging-not-lazy
         
         for admin_id, sid in list(cls.admin_connections.items()):
             try:
                 await sio.emit('notification', event_data, room=sid)
-                logger.info(f'   [OK] Sent to admin {admin_id}')
-            except Exception as e:
-                logger.error(f'   [ERROR] Error sending to admin {admin_id}: {e}')
-    
-    @classmethod
-    async def notify_user_status_changed(cls, user_id: str, is_active: bool):
-        """Notify when user is activated/deactivated"""
-        event_data = {
-            'type': 'user_status_changed',
-            'user_id': str(user_id),
-            'is_active': is_active,
-        }
-        
-        action = 'ACTIVATED' if is_active else 'DEACTIVATED'
-        admin_count = len(cls.admin_connections)
-        logger.info(f'[NOTIFY] USER {action}: {user_id} - Broadcasting to {admin_count} admin(s)')
-        
-        for admin_id, sid in list(cls.admin_connections.items()):
-            try:
-                await sio.emit('notification', event_data, room=sid)
-                logger.info(f'   [OK] Sent to admin {admin_id}')
-            except Exception as e:
-                logger.error(f'   [ERROR] Error sending to admin {admin_id}: {e}')
+                logger.info('   [OK] Sent to admin %s', admin_id)
+            except (OSError, RuntimeError) as e:
+                logger.error('   [ERROR] Error sending to admin %s: %s', admin_id, e)
 
     @classmethod
     async def notify_user_notification_created(cls, user_id: str, notification_data: dict):
@@ -165,12 +147,12 @@ class SocketIOManager:
         user_key = str(user_id)
         connected = cls.connected_users.get(user_key)
         if not connected:
-            logger.info(f'[NOTIFY] User {user_key} not connected - persisted notification only')
+            logger.info('[NOTIFY] User %s not connected - persisted notification only', user_key)  # pylint: disable=logging-not-lazy
             return
 
         sid = connected.get('sid')
         if not sid:
-            logger.warning(f'[WARN] Connected user {user_key} has no SID')
+            logger.warning('[WARN] Connected user %s has no SID', user_key)  # pylint: disable=logging-not-lazy
             return
 
         try:
@@ -178,9 +160,9 @@ class SocketIOManager:
                 'type': 'notification_created',
                 'notification': notification_data,
             }, room=sid)
-            logger.info(f'[NOTIFY] Real-time notification delivered to user {user_key}')
-        except Exception as e:
-            logger.error(f'[ERROR] Failed to emit notification to user {user_key}: {e}')
+            logger.info('[NOTIFY] Real-time notification delivered to user %s', user_key)  # pylint: disable=logging-not-lazy
+        except (OSError, RuntimeError) as e:
+            logger.error('[ERROR] Failed to emit notification to user %s: %s', user_key, e)  # pylint: disable=logging-not-lazy
 
     @classmethod
     def emit_notification_created(cls, notification_obj):
@@ -208,8 +190,8 @@ class SocketIOManager:
                 str(notification_obj.user_id),
                 payload,
             )
-        except Exception as e:
-            logger.error(f'[ERROR] Failed to schedule notification emission: {e}')
+        except (OSError, RuntimeError) as e:  # pylint: disable=broad-except
+            logger.error('[ERROR] Failed to schedule notification emission: %s', e)  # pylint: disable=logging-not-lazy
 
     @classmethod
     def _emit_to_user(cls, user_id: str, event: str, payload: dict):
@@ -258,29 +240,29 @@ async def connect(sid, environ):
     """Authenticate websocket connection with HttpOnly access cookie JWT."""
     raw_cookie = (environ.get("HTTP_COOKIE") or "").strip()
     if not raw_cookie:
-        logger.warning("[WS] Rejecting sid %s: missing auth cookie", sid)
+        logger.warning("[WS] Rejecting sid %s: missing auth cookie", sid)  # pylint: disable=logging-not-lazy
         return False
 
     cookie = SimpleCookie()
     cookie.load(raw_cookie)
     morsel = cookie.get(ACCESS_COOKIE)
     if morsel is None:
-        logger.warning("[WS] Rejecting sid %s: access cookie not found", sid)
+        logger.warning("[WS] Rejecting sid %s: access cookie not found", sid)  # pylint: disable=logging-not-lazy
         return False
 
     try:
         payload = decode_token(morsel.value)
-    except Exception:
-        logger.warning("[WS] Rejecting sid %s: invalid access token", sid)
+    except (SocketError, ConnectionError, RuntimeError):
+        logger.warning("[WS] Rejecting sid %s: invalid access token", sid)  # pylint: disable=logging-not-lazy
         return False
 
     if payload.get("type") != "access" or not payload.get("sub"):
-        logger.warning("[WS] Rejecting sid %s: invalid token payload", sid)
+        logger.warning("[WS] Rejecting sid %s: invalid token payload", sid)  # pylint: disable=logging-not-lazy
         return False
     try:
         user_uuid = uuid.UUID(str(payload["sub"]))
     except (TypeError, ValueError):
-        logger.warning("[WS] Rejecting sid %s: malformed user id in token", sid)
+        logger.warning("[WS] Rejecting sid %s: malformed user id in token", sid)  # pylint: disable=logging-not-lazy
         return False
 
     db = SessionLocal()
@@ -292,7 +274,7 @@ async def connect(sid, environ):
             .first()
         )
         if not user:
-            logger.warning("[WS] Rejecting sid %s: user not found or inactive", sid)
+            logger.warning("[WS] Rejecting sid %s: user not found or inactive", sid)  # pylint: disable=logging-not-lazy
             return False
 
         role_name = user.role.name if user.role else None
@@ -302,7 +284,7 @@ async def connect(sid, environ):
             {"status": "success", "message": "Authenticated websocket connection"},
             room=sid,
         )
-        logger.info("[WS] Authenticated connection %s for user %s", sid, user.id)
+        logger.info("[WS] Authenticated connection %s for user %s", sid, user.id)  # pylint: disable=logging-not-lazy
         return True
     finally:
         db.close()
@@ -313,11 +295,11 @@ async def disconnect(sid):
     found = False
     for user_id, data in list(SocketIOManager.connected_users.items()):
         if data['sid'] == sid:
-            logger.info(f'[WS] Client {sid} (user: {user_id}) disconnecting')
+            logger.info('[WS] Client %s (user: %s) disconnecting', sid, user_id)  # pylint: disable=logging-not-lazy
             SocketIOManager.unregister_user(user_id)
             found = True
             break
     
     if not found:
-        logger.warning(f'[WARN] Disconnection event for unknown SID: {sid}')
+        logger.warning('[WARN] Disconnection event for unknown SID: %s', sid)  # pylint: disable=logging-not-lazy
 

@@ -1,10 +1,9 @@
 """
 Advanced Authentication Tests
-Tests login flows, token refresh, and 2FA functionality
+Tests login flows, token refresh, 2FA, JWT, session management, and security
 """
 from fastapi.testclient import TestClient
 from uuid import uuid4
-import pytest
 
 from app.main import app
 
@@ -15,12 +14,6 @@ client = TestClient(app)
 TEST_USER_EMAIL = f"auth-test-{str(uuid4())[:8]}@test.com"
 TEST_USER_PASSWORD = "SecurePass123!TestUser"
 TEST_USER_NAME = "Auth Test User"
-
-
-@pytest.fixture(autouse=True)
-def setup_database(setup_db):
-    """Auto-use setup_db fixture for all tests in this module"""
-    pass
 
 
 class TestUserRegistration:

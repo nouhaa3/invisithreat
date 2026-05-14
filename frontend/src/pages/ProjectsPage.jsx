@@ -847,18 +847,7 @@ export default function ProjectsPage() {
       const projectCategory = inferProjectCategory(project)
       const searchValue = searchQuery.trim().toLowerCase()
 
-      const searchable = [
-        project.name,
-        project.description,
-        project.language,
-        project.project_type,
-        project.analysis_type,
-        project.last_scan_status,
-        project.user_role,
-        projectCategory,
-      ].map(normalizeProjectText).join(' ')
-
-      const matchesSearch = !searchValue || searchable.includes(searchValue)
+      const matchesSearch = !searchValue || normalizeProjectText(project.name).includes(searchValue)
       const matchesFilter = activeDevFilter === 'All' || projectCategory === activeDevFilter
 
       return matchesSearch && matchesFilter
@@ -876,16 +865,8 @@ export default function ProjectsPage() {
     if (!isAdmin) return projects
     return projects.filter((project) => {
       const searchValue = adminSearchQuery.trim().toLowerCase()
-      const searchable = [
-        project.name,
-        project.owner_name,
-        project.global_risk_level,
-        project.status,
-        project.users_assigned_count,
-        project.total_scans,
-      ].map(normalizeProjectText).join(' ')
 
-      const matchesSearch = !searchValue || searchable.includes(searchValue)
+      const matchesSearch = !searchValue || normalizeProjectText(project.name).includes(searchValue)
       const matchesStatus =
         adminStatusFilter === 'All Status' ||
         normalizeProjectText(project.status) === normalizeProjectText(adminStatusFilter)
@@ -902,20 +883,8 @@ export default function ProjectsPage() {
     if (!isSecurityManager) return projects
     return projects.filter((project) => {
       const searchValue = securitySearchQuery.trim().toLowerCase()
-      const searchable = [
-        project.name,
-        project.owner_name,
-        project.global_risk_level,
-        project.last_scan_status,
-        project.risk_score,
-        project.critical,
-        project.high,
-        project.medium,
-        project.low,
-        project.total_scans,
-      ].map(normalizeProjectText).join(' ')
 
-      const matchesSearch = !searchValue || searchable.includes(searchValue)
+      const matchesSearch = !searchValue || normalizeProjectText(project.name).includes(searchValue)
       const matchesRisk =
         securityRiskFilter === 'All Risk' ||
         normalizeProjectText(project.global_risk_level) === normalizeProjectText(securityRiskFilter)
