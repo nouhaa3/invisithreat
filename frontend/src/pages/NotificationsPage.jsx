@@ -87,7 +87,6 @@ const ROLES = ['Admin', 'Developer', 'Security Manager', 'Viewer']
 function NotifCard({
   notif,
   onMarkRead,
-  onDelete,
   selectedRole,
   onRoleSelect,
   onApproveRoleRequest,
@@ -222,17 +221,7 @@ function NotifCard({
         </div>
       </div>
 
-      {/* Delete button */}
-      {!notif.synthetic && (
-        <button
-          type="button"
-          onClick={e => { e.stopPropagation(); onDelete(notif.id) }}
-          className="absolute bottom-3.5 right-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-white/20 hover:text-white/60 text-xs font-semibold px-2 py-1 rounded"
-          title="Dismiss"
-        >
-          Dismiss
-        </button>
-      )}
+      {/* NOTE: Notification deletion is intentionally disabled. All notifications are permanent. */}
     </div>
   )
 }
@@ -241,7 +230,7 @@ function NotifCard({
 
 export default function NotificationsPage() {
   const { user } = useAuth()
-  const { notifications, unreadCount, refresh, markRead, markAllRead, removeNotification } = useNotifications()
+  const { notifications, unreadCount, refresh, markRead, markAllRead } = useNotifications()
   const { toast } = useUiFeedback()
   const [activeFilter, setActiveFilter] = useState('All')
   const [roleRequests, setRoleRequests] = useState([])
@@ -424,7 +413,6 @@ export default function NotificationsPage() {
                 key={n.id}
                 notif={n}
                 onMarkRead={markRead}
-                onDelete={removeNotification}
                 selectedRole={selectedRoles[n.requestUserId] || 'Developer'}
                 onRoleSelect={(userId, roleName) => setSelectedRoles(prev => ({ ...prev, [userId]: roleName }))}
                 onApproveRoleRequest={handleApproveRoleRequest}

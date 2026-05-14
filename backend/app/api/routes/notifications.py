@@ -72,19 +72,4 @@ def mark_all_read(
     return {"ok": True}
 
 
-@router.delete("/{notif_id}")
-def delete_notification(
-    notif_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    notif = (
-        db.query(Notification)
-        .filter(Notification.id == notif_id, Notification.user_id == current_user.id)
-        .first()
-    )
-    if not notif:
-        raise HTTPException(status_code=404, detail="Notification not found")
-    db.delete(notif)
-    db.commit()
-    return {"ok": True}
+# NOTE: Notification deletion is intentionally disabled. All notifications are permanent.

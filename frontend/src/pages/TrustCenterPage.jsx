@@ -60,8 +60,8 @@ const RETENTION_ITEMS = [
   },
   {
     title: 'Notifications',
-    value: 'Until user deletes',
-    note: 'Users can clear notifications in the activity feed.',
+    value: 'Permanent',
+    note: 'All notifications are kept permanently for audit trail.',
   },
   {
     title: 'API keys',
@@ -78,10 +78,6 @@ const PURGE_ACTIONS = [
   {
     title: 'Revoke API keys',
     desc: 'Disable CLI access tokens immediately from the settings page.',
-  },
-  {
-    title: 'Clear notifications',
-    desc: 'Delete notifications from your activity feed.',
   },
 ]
 

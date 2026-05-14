@@ -119,12 +119,8 @@ export function NotificationProvider({ children }) {
   }
 
   const removeNotification = async (id) => {
-    const notif = notifications.find(n => n.id === id)
-    if (!(typeof id === 'string' && id.startsWith('role-request-'))) {
-      await svc.deleteNotification(id)
-    }
-    setNotifications(prev => prev.filter(n => n.id !== id))
-    if (notif && !notif.is_read) setUnreadCount(prev => Math.max(0, prev - 1))
+    // NOTE: Notification deletion is intentionally disabled. All notifications are permanent.
+    // This function is kept for backward compatibility but does nothing.
   }
 
   return (

@@ -31,10 +31,10 @@ from app.core.scan_sanitizer import sanitize_scan_results
 # Try to import new modular rules system, fall back to legacy rules if unavailable
 try:
     sys.path.insert(0, str(Path(__file__).parent.parent.parent / "cli"))
-    from rules import get_rules_for_language
-    USE_NEW_RULES = True
+    from rules import get_rules_for_language  # type: ignore[import]
+    USE_NEW_RULES = True  # pylint: disable=used-before-assignment
 except ImportError:
-    USE_NEW_RULES = False
+    USE_NEW_RULES = False  # pylint: disable=used-before-assignment
     get_rules_for_language = None
 
 
@@ -787,7 +787,7 @@ def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str, githu
         _upsert_pipeline_execution(db, scan, "completed")
         upsert_scan_risk_score(db, scan)
 
-    except (RuntimeError, OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+    except (RuntimeError, OSError, ValueError, KeyError, json.JSONDecodeError) as _:
         try:
             scan = db.query(Scan).filter(Scan.id == scan_id).first()
             if scan:

@@ -14,11 +14,6 @@ client = TestClient(app)
 pytestmark = [pytest.mark.integration]
 
 
-@pytest.fixture(autouse=True)
-def setup_database(setup_db):
-    pass
-
-
 class TestHTTPStatusCodes:
     def test_404_not_found(self):
         response = client.get("/api/this-does-not-exist")
