@@ -205,8 +205,8 @@ export default function NewScanPage() {
       ? ['Project', 'Project Type', 'Analysis', 'Target URL']
       : ['Project', 'Project Type', 'Analysis', 'Method', configLabel]
     : isDast
-      ? ['Project', 'Target URL']
-      : ['Project', 'Method', configLabel]
+      ? ['Project', 'Analysis', 'Target URL']
+      : ['Project', 'Analysis', 'Method', configLabel]
 
   useEffect(() => {
     getProjects().then(setProjects).catch(() => setProjects([]))
@@ -505,18 +505,14 @@ export default function NewScanPage() {
 
   // ─── Step 2 (new): Analysis type ───────────────────────────────────────────
   const handleStepAnalysis = () => {
-    // DAST skips method selection and goes straight to DAST configuration
-    if (isDast) {
-      setStep(3) // Go to DAST configuration
-    } else {
-      setStep(3) // Go to method selection
-    }
+    const nextStep = projectMode === 'new' ? 3 : 2
+    setStep(nextStep)
   }
 
   // ─── Method step (index depends on mode) ───────────────────────────────────
   const handleMethodStep = () => {
     if (!method) return
-    const nextStep = projectMode === 'new' ? 4 : 2
+    const nextStep = projectMode === 'new' ? 4 : 3
     setStep(nextStep)
   }
 
@@ -756,7 +752,11 @@ export default function NewScanPage() {
                         {projects.map(p => (
                           <button
                             key={p.id}
-                            onClick={() => { setSelectedProject(p); setProjectError('') }}
+                            onClick={() => {
+                              setSelectedProject(p)
+                              setProjectError('')
+                              if (p.analysis_type) setNewProjectAnalysis(p.analysis_type)
+                            }}
                             className={`${choiceClasses(selectedProject?.id === p.id)} justify-between`}
                           >
                             <span className="text-sm text-white font-medium">{p.name}</span>
@@ -817,7 +817,7 @@ export default function NewScanPage() {
           )}
 
           {/* ─── STEP 2 (new): Analysis ─────────────────────────────────────── */}
-          {isNewProject && step === 2 && (
+          {((isNewProject && step === 2) || (!isNewProject && step === 1)) && (
             <div className="animate-slide-up">
               <SectionCard>
                 <h2 className="text-base font-semibold text-white mb-6 flex items-center gap-2">
@@ -838,7 +838,7 @@ export default function NewScanPage() {
           )}
 
           {/* ─── METHOD STEP (skip for DAST) ──────────────────────────────────────────────── */}
-          {!isDast && !isDast && ((isNewProject && step === 3) || (!isNewProject && step === 1)) && (
+          {!isDast && ((isNewProject && step === 3) || (!isNewProject && step === 2)) && (
             <div className="animate-slide-up">
               <div className="mb-8">
                 <h2 className="text-base font-semibold text-white mb-6 flex items-center gap-2">
@@ -904,7 +904,7 @@ export default function NewScanPage() {
           )}
 
           {/* ─── CONFIGURE / SETUP (EXE) ───────────────────────────────────── */}
-          {!isDast && ((isNewProject && step === 4) || (!isNewProject && step === 2)) && method === 'exe' && (
+          {!isDast && ((isNewProject && step === 4) || (!isNewProject && step === 3)) && method === 'exe' && (
             <div className="animate-slide-up">
               {/* Step 1: Download */}
               <SectionCard className="mb-4">
@@ -1122,7 +1122,7 @@ export default function NewScanPage() {
           )}
 
           {/* ─── DAST CONFIGURATION ──────────────────────────────────────── */}
-          {isDast && ((isNewProject && step === 3) || (!isNewProject && step === 1)) && (
+          {isDast && ((isNewProject && step === 3) || (!isNewProject && step === 2)) && (
             <div className="animate-slide-up">
               <SectionCard>
                 <h2 className="text-base font-semibold text-white mb-6 flex items-center gap-2">
@@ -1207,7 +1207,7 @@ export default function NewScanPage() {
           )}
 
           {/* ─── CONFIGURE (CLI/GitHub) ───────────────────────────────────── */}
-          {!isDast && ((isNewProject && step === 4) || (!isNewProject && step === 2)) && method !== 'exe' && (
+          {!isDast && ((isNewProject && step === 4) || (!isNewProject && step === 3)) && method !== 'exe' && (
             <div className="animate-slide-up">
               {method === 'cli' ? (
                 <>

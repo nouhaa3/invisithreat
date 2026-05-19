@@ -7,7 +7,7 @@ from json import JSONDecodeError
 from typing import Dict
 from urllib.parse import urlparse, urlunparse
 from uuid import UUID
-
+from app.services.zap_client import ZapClient, ZapApiException
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
