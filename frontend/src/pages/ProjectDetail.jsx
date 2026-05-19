@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import {
   getProject,
@@ -642,11 +642,14 @@ function CurrentFindingRow({
 
 // ─── Scan Row ────────────────────────────────────────────────────────────────
 
-const ScanRow = memo(function ScanRow({ scan, onRescan, rescanning, resultsJson, resultsSummary, onLoadResults }) {
+const ScanRow = memo(function ScanRow({ scan, onRescan, rescanning, resultsJson, resultsSummary, onLoadResults, autoExpand }) {
   const [expanded, setExpanded] = useState(false)
   const status = STATUS_CONFIG[scan.status] || STATUS_CONFIG.pending
   const method = METHOD_CONFIG[scan.method] || METHOD_CONFIG.cli
-  const isActive = scan.status === 'pending' || scan.status === 'running'
+  const jobState = String(scan.job_state || '')
+  const isActive = scan.status === 'pending'
+    || scan.status === 'running'
+    || ['PENDING', 'QUEUED', 'RUNNING', 'RETRYING'].includes(jobState)
 
   const isPendingToken = typeof resultsJson === 'string' && resultsJson.startsWith('__pending_token:')
   const canExpandResults = scan.status === 'completed' && !isPendingToken
@@ -656,6 +659,12 @@ const ScanRow = memo(function ScanRow({ scan, onRescan, rescanning, resultsJson,
       onLoadResults(scan.id)
     }
   }, [expanded, canExpandResults, resultsJson, onLoadResults, scan.id])
+
+  useEffect(() => {
+    if (autoExpand && canExpandResults) {
+      setExpanded(true)
+    }
+  }, [autoExpand, canExpandResults])
 
   const results = useMemo(() => {
     if (!expanded || !resultsJson || isPendingToken) return null
@@ -678,7 +687,7 @@ const ScanRow = memo(function ScanRow({ scan, onRescan, rescanning, resultsJson,
   }
 
   return (
-    <div style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+    <div id={`scan-row-${scan.id}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
       {/* Row header */}
       <div
         role={canExpandResults ? 'button' : undefined}
@@ -826,6 +835,7 @@ function RescanCmd({ label, children }) {
 export default function ProjectDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user } = useAuth()
   const { toast } = useUiFeedback()
   const [project, setProject] = useState(null)
@@ -840,17 +850,20 @@ export default function ProjectDetail() {
   const [workflowNote, setWorkflowNote] = useState('')
   const [workflowSubmitting, setWorkflowSubmitting] = useState(null)
   const [workflowFeedback, setWorkflowFeedback] = useState(null)
+  const [autoExpandScanId, setAutoExpandScanId] = useState(null)
   const [vulnerabilityWorkflow, setVulnerabilityWorkflow] = useState({
     scan_id: null,
     tasks: [],
     assignees: [],
   })
   const pollRef = useRef(null)
+  const scanPollInFlightRef = useRef(false)
   const vulnerabilityPollRef = useRef(null)
   const vulnerabilityInFlightRef = useRef(false)
   const lastWorkflowErrorLogAtRef = useRef(0)
   const scanResultsByIdRef = useRef({})
   const scanResultsInFlightRef = useRef(new Set())
+  const autoExpandRef = useRef(false)
 
   const syncActiveDastStatuses = useCallback(async (scanList) => {
     const activeDast = (scanList || []).filter(
@@ -865,6 +878,22 @@ export default function ProjectDetail() {
   useEffect(() => {
     scanResultsByIdRef.current = scanResultsById
   }, [scanResultsById])
+
+  const focusScanId = searchParams.get('scan')
+
+  useEffect(() => {
+    if (!focusScanId || autoExpandRef.current) return
+    const target = scans.find((scan) => String(scan.id) === String(focusScanId))
+    if (!target) return
+    setAutoExpandScanId(target.id)
+    autoExpandRef.current = true
+    if (typeof document !== 'undefined') {
+      const node = document.getElementById(`scan-row-${target.id}`)
+      if (node?.scrollIntoView) {
+        node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }
+  }, [focusScanId, scans])
 
   const loadScans = useCallback(async () => {
     try {
@@ -885,6 +914,16 @@ export default function ProjectDetail() {
       return list
     } catch { return [] }
   }, [id])
+
+  const refreshScans = useCallback(async () => {
+    if (scanPollInFlightRef.current) return scans
+    scanPollInFlightRef.current = true
+    try {
+      return await loadScans()
+    } finally {
+      scanPollInFlightRef.current = false
+    }
+  }, [loadScans, scans])
 
   const fetchScanResults = useCallback(async (scanId) => {
     if (!scanId) return null
@@ -966,7 +1005,7 @@ export default function ProjectDetail() {
     // If redirected from a newly completed scan, refresh after a short delay
     // Increased to 3500ms to allow DAST scans to be persisted to database
     const refreshTimer = setTimeout(() => {
-      loadScans()
+      refreshScans()
     }, 3500)
     
     return () => clearTimeout(refreshTimer)
@@ -974,18 +1013,18 @@ export default function ProjectDetail() {
 
   // Polling: refresh scans every 5s while any scan is pending/running
   useEffect(() => {
-    const hasActive = scans.some(
-      (s) =>
-        s.status === 'pending' ||
-        s.status === 'running' ||
-        ['PENDING', 'QUEUED', 'RUNNING', 'RETRYING'].includes(String(s.job_state || ''))
-    )
+    const hasActive = scans.some((scan) => {
+      const jobState = String(scan.job_state || '')
+      return scan.status === 'pending'
+        || scan.status === 'running'
+        || ['PENDING', 'QUEUED', 'RUNNING', 'RETRYING'].includes(jobState)
+    })
     if (hasActive && !pollRef.current) {
       pollRef.current = setInterval(async () => {
-        const list = await loadScans()
+        const list = await refreshScans()
         const syncedDast = await syncActiveDastStatuses(list)
         if (syncedDast) {
-          await loadScans()
+          await refreshScans()
         }
       }, isWebSocketConnected() ? 20000 : 5000)
     }
@@ -996,24 +1035,24 @@ export default function ProjectDetail() {
     return () => {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     }
-  }, [scans, loadScans, syncActiveDastStatuses])
+  }, [scans, refreshScans, syncActiveDastStatuses])
 
   // Realtime scan lifecycle (socket events) — reduce polling load
   useEffect(() => {
     const cleanupState = onScanStateChange((evt) => {
       if (!evt || String(evt.project_id) !== String(id)) return
-      loadScans()
+      refreshScans()
     })
     const cleanupProgress = onScanProgressUpdate((evt) => {
       if (!evt || String(evt.project_id) !== String(id)) return
       // Keep lightweight: refresh list, UI derives status from job_state/scan.status
-      loadScans()
+      refreshScans()
     })
     return () => {
       cleanupState?.()
       cleanupProgress?.()
     }
-  }, [id, loadScans])
+  }, [id, refreshScans])
 
   useEffect(() => {
     const completed = scans.filter((s) => s.status === 'completed')
@@ -1086,13 +1125,67 @@ export default function ProjectDetail() {
     { label: 'Total Scans',      value: scans.length },
     { label: 'Completed',        value: scans.filter(s => s.status === 'completed').length },
     { label: 'Failed',           value: scans.filter(s => s.status === 'failed').length },
-    { label: 'Pending / Running', value: scans.filter(s => ['pending', 'running'].includes(s.status)).length },
+    { label: 'Pending / Running', value: scans.filter((scan) => {
+      const jobState = String(scan.job_state || '')
+      return ['pending', 'running'].includes(scan.status)
+        || ['PENDING', 'QUEUED', 'RUNNING', 'RETRYING'].includes(jobState)
+    }).length },
   ]
 
-  const hasActive = scans.some(s => s.status === 'pending' || s.status === 'running')
+  const isScanActive = (scan) => {
+    const jobState = String(scan.job_state || '')
+    return scan.status === 'pending'
+      || scan.status === 'running'
+      || ['PENDING', 'QUEUED', 'RUNNING', 'RETRYING'].includes(jobState)
+  }
+
+  const hasActive = scans.some(isScanActive)
   const isSecurityManagerView = user?.role_name === 'Security Manager'
-  const hasActiveCli = scans.some(s => (s.status === 'pending' || s.status === 'running') && s.method === 'cli')
-  const hasActiveNonCli = scans.some(s => (s.status === 'pending' || s.status === 'running') && s.method !== 'cli')
+
+  const latestScan = scans[0] || null
+  const latestScanResultsJson = latestScan
+    ? (scanResultsById[latestScan.id] ?? latestScan.results_json)
+    : null
+  const latestHasPendingToken = typeof latestScanResultsJson === 'string'
+    && latestScanResultsJson.startsWith('__pending_token:')
+  const latestJobState = String(latestScan?.job_state || '')
+  const latestJobFailed = latestJobState === 'FAILED'
+
+  const unifiedScanState = (() => {
+    if (!latestScan) return null
+    if (latestScan.status === 'failed' || latestJobFailed) {
+      return {
+        label: 'Echec du scan',
+        tone: 'error',
+        detail: latestScan.error_message || 'Le scan a echoue. Veuillez relancer une analyse.',
+      }
+    }
+    if (latestScan.status === 'completed') {
+      return {
+        label: 'Resultats disponibles',
+        tone: 'success',
+        detail: 'Le dernier scan est termine. Consultez les resultats ci-dessous.',
+      }
+    }
+    if ((latestScan.method === 'cli' && latestHasPendingToken)
+      || (latestScan.method === 'exe' && latestScan.status === 'pending')) {
+      return {
+        label: 'Upload recu',
+        tone: 'info',
+        detail: 'En attente des resultats du scanner local.',
+      }
+    }
+    if (isScanActive(latestScan)) {
+      return {
+        label: 'Analyse en cours',
+        tone: 'warning',
+        detail: latestScan.method === 'github'
+          ? 'Analyse GitHub en cours. Actualisation automatique toutes les 5s.'
+          : 'Scan en cours. Actualisation automatique toutes les 5s.',
+      }
+    }
+    return null
+  })()
 
   const isOwner = project?.user_role === 'owner'
   const canEdit = isOwner || project?.user_role === 'editor'
@@ -1377,22 +1470,32 @@ export default function ProjectDetail() {
             </div>
           )}
 
-          {/* Active scan banner */}
-          {hasActive && (
-            <div className="mb-4 px-4 py-3 rounded-xl flex items-center gap-3 animate-slide-up"
-              style={{ background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.15)' }}>
-              <div className="w-4 h-4 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-yellow-400/80">
-                  {hasActiveCli && !hasActiveNonCli
-                    ? 'A scan is waiting for results. Run the CLI in your project directory to upload them. Status refreshes automatically every 5s.'
-                    : hasActiveNonCli && !hasActiveCli
-                      ? 'A scan is currently running in the background. Status refreshes automatically every 5s.'
-                      : 'Some scans are running and/or waiting for CLI upload. Status refreshes automatically every 5s.'}
-                </p>
+          {/* Unified scan status */}
+          {unifiedScanState && (() => {
+            const toneMap = {
+              info: { bg: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.2)', color: '#93c5fd' },
+              warning: { bg: 'rgba(234,179,8,0.08)', border: 'rgba(234,179,8,0.2)', color: '#facc15' },
+              success: { bg: 'rgba(34,197,94,0.08)', border: 'rgba(34,197,94,0.2)', color: '#4ade80' },
+              error: { bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.2)', color: '#f87171' },
+            }
+            const tone = toneMap[unifiedScanState.tone] || toneMap.info
+            const showSpinner = latestScan && isScanActive(latestScan)
+            return (
+              <div className="mb-4 px-4 py-3 rounded-xl flex items-center gap-3 animate-slide-up"
+                style={{ background: tone.bg, border: `1px solid ${tone.border}` }}>
+                {showSpinner ? (
+                  <div className="w-4 h-4 border-2 rounded-full animate-spin flex-shrink-0"
+                    style={{ borderColor: `${tone.color}40`, borderTopColor: tone.color }} />
+                ) : (
+                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: tone.color }} />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold" style={{ color: tone.color }}>{unifiedScanState.label}</p>
+                  <p className="text-xs text-white/45 mt-0.5">{unifiedScanState.detail}</p>
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Stats row */}
           <div className="grid grid-cols-4 gap-3 mb-6 animate-slide-up" style={{ animationDelay: '0.05s' }}>
@@ -1557,6 +1660,7 @@ export default function ProjectDetail() {
                   resultsJson={scanResultsById[scan.id] ?? scan.results_json ?? null}
                   resultsSummary={scan.results_summary}
                   onLoadResults={fetchScanResults}
+                  autoExpand={scan.id === autoExpandScanId}
                 />
               ))
             )}
