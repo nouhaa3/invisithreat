@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import api from '../services/api'
-import { getProjects, createProject, createScan, getCLIToken, getScanResults } from '../services/projectService'
+import { getProjects, createProject, createScan, getCLIToken, getScanResults, getScans } from '../services/projectService'
 import { listApiKeys, createApiKey } from '../services/apiKeyService'
 import { getGitHubAppInstallUrl, getGitHubOAuthStart, exchangeGitHubOAuthCode } from '../services/integrationService'
 import AnalysisTypeSelector from '../components/AnalysisTypeSelector'
@@ -97,6 +97,50 @@ function SectionCard({ children, className = '' }) {
   )
 }
 
+function useScanPolling({ enabled, intervalMs = 5000, onStart, poll, onComplete, onFailed }) {
+  const inFlightRef = useRef(false)
+  const startedRef = useRef(false)
+
+  useEffect(() => {
+    if (!enabled) {
+      startedRef.current = false
+      return
+    }
+
+    let active = true
+    if (!startedRef.current) {
+      onStart?.()
+      startedRef.current = true
+    }
+
+    const tick = async () => {
+      if (!active || inFlightRef.current) return
+      inFlightRef.current = true
+      try {
+        const status = await poll()
+        if (!active || !status) return
+        if (status === 'completed') {
+          active = false
+          onComplete?.()
+        } else if (status === 'failed') {
+          active = false
+          onFailed?.()
+        }
+      } finally {
+        inFlightRef.current = false
+      }
+    }
+
+    const intervalId = setInterval(tick, intervalMs)
+    tick()
+
+    return () => {
+      active = false
+      clearInterval(intervalId)
+    }
+  }, [enabled, intervalMs, onStart, poll, onComplete, onFailed])
+}
+
 export default function NewScanPage() {
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
@@ -147,6 +191,12 @@ export default function NewScanPage() {
   const [cliToken, setCliToken] = useState(null)
   const [cliAwaitingResults, setCliAwaitingResults] = useState(false)
   const [cliUploadStatus, setCliUploadStatus] = useState('')
+  const [githubAwaitingResults, setGithubAwaitingResults] = useState(false)
+  const [githubScanStatus, setGithubScanStatus] = useState('')
+  const [exeAwaitingResults, setExeAwaitingResults] = useState(false)
+  const [exeScanStatus, setExeScanStatus] = useState('')
+  const [exeScanAnchorAt, setExeScanAnchorAt] = useState(null)
+  const [exeDetectedScanId, setExeDetectedScanId] = useState(null)
   const [loading, setLoading] = useState(false)
 
   const isNewProject = projectMode === 'new'
@@ -189,40 +239,114 @@ export default function NewScanPage() {
     return () => window.removeEventListener('message', handleMessage)
   }, [])
 
-  // CLI scan polling: auto-open project when results arrive
   useEffect(() => {
-    if (method !== 'cli') return
-    if (!cliToken || !createdProject?.id || !createdScan?.id) return
-
-    let active = true
-    setCliAwaitingResults(true)
+    setCliAwaitingResults(false)
     setCliUploadStatus('')
+    setGithubAwaitingResults(false)
+    setGithubScanStatus('')
+    setExeAwaitingResults(false)
+    setExeScanStatus('')
+    setExeScanAnchorAt(null)
+    setExeDetectedScanId(null)
+  }, [method])
 
-    const poll = async () => {
-      try {
-        const result = await getScanResults(createdProject.id, createdScan.id)
-        if (!active) return
-        const status = result?.status
-        if (status === 'completed') {
-          setCliAwaitingResults(false)
-          setCliUploadStatus('completed')
-          navigate(`/projects/${createdProject.id}`)
-        } else if (status === 'failed') {
-          setCliAwaitingResults(false)
-          setCliUploadStatus('failed')
-        }
-      } catch {
-        // Ignore transient errors while waiting for upload.
-      }
-    }
+  const pollScanById = useCallback(async (projectId, scanId) => {
+    const result = await getScanResults(projectId, scanId)
+    return result?.status || null
+  }, [])
 
-    const intervalId = setInterval(poll, 5000)
-    poll()
-    return () => {
-      active = false
-      clearInterval(intervalId)
+  const pollExeScan = useCallback(async () => {
+    if (!createdProject?.id || !exeScanAnchorAt) return null
+    const list = await getScans(createdProject.id, { includeResults: false })
+    const anchorMs = exeScanAnchorAt
+    const exeScan = list.find((scan) => {
+      if (scan.method !== 'exe') return false
+      if (!scan.created_at) return false
+      const createdMs = new Date(scan.created_at).getTime()
+      return Number.isFinite(createdMs) && createdMs >= anchorMs - 5000
+    })
+    if (!exeScan) return null
+    if (exeDetectedScanId !== exeScan.id) {
+      setExeDetectedScanId(exeScan.id)
     }
-  }, [cliToken, createdProject?.id, createdScan?.id, method, navigate])
+    return exeScan.status || null
+  }, [createdProject?.id, exeScanAnchorAt, exeDetectedScanId])
+
+  const cliPollingEnabled = Boolean(
+    method === 'cli' &&
+    cliToken &&
+    createdProject?.id &&
+    createdScan?.id &&
+    !['completed', 'failed'].includes(cliUploadStatus)
+  )
+
+  const githubPollingEnabled = Boolean(
+    method === 'github' &&
+    createdProject?.id &&
+    createdScan?.id &&
+    !['completed', 'failed'].includes(githubScanStatus)
+  )
+
+  const exePollingEnabled = Boolean(
+    method === 'exe' &&
+    createdProject?.id &&
+    exeAwaitingResults &&
+    !['completed', 'failed'].includes(exeScanStatus)
+  )
+
+  useScanPolling({
+    enabled: cliPollingEnabled,
+    onStart: () => {
+      setCliAwaitingResults(true)
+      setCliUploadStatus('')
+    },
+    poll: () => pollScanById(createdProject.id, createdScan.id),
+    onComplete: () => {
+      setCliAwaitingResults(false)
+      setCliUploadStatus('completed')
+      navigate(`/projects/${createdProject.id}?scan=${createdScan.id}`)
+    },
+    onFailed: () => {
+      setCliAwaitingResults(false)
+      setCliUploadStatus('failed')
+    },
+  })
+
+  useScanPolling({
+    enabled: githubPollingEnabled,
+    onStart: () => {
+      setGithubAwaitingResults(true)
+      setGithubScanStatus('')
+    },
+    poll: () => pollScanById(createdProject.id, createdScan.id),
+    onComplete: () => {
+      setGithubAwaitingResults(false)
+      setGithubScanStatus('completed')
+      navigate(`/projects/${createdProject.id}`)
+    },
+    onFailed: () => {
+      setGithubAwaitingResults(false)
+      setGithubScanStatus('failed')
+    },
+  })
+
+  useScanPolling({
+    enabled: exePollingEnabled,
+    onStart: () => {
+      setExeAwaitingResults(true)
+      setExeScanStatus('')
+    },
+    poll: pollExeScan,
+    onComplete: () => {
+      setExeAwaitingResults(false)
+      setExeScanStatus('completed')
+      navigate(`/projects/${createdProject.id}`)
+    },
+    onFailed: () => {
+      setExeAwaitingResults(false)
+      setExeScanStatus('failed')
+    },
+  })
 
   const handleExeGenerateKey = async () => {
     const name = exeNewKeyName.trim() || 'My Key'
@@ -486,6 +610,14 @@ export default function NewScanPage() {
         return
       }
 
+      if (method === 'exe') {
+        setExeAwaitingResults(true)
+        setExeScanStatus('')
+        setExeScanAnchorAt(Date.now())
+        setExeDetectedScanId(null)
+        return
+      }
+
       if (method !== 'exe') {
         const analysisType = projectMode === 'new'
           ? newProjectAnalysis
@@ -503,6 +635,12 @@ export default function NewScanPage() {
         if (method === 'cli') {
           const tokenData = await getCLIToken(project.id, scan.id)
           setCliToken(tokenData)
+          return
+        }
+
+        if (method === 'github') {
+          setGithubAwaitingResults(true)
+          setGithubScanStatus('')
           return
         }
       }
@@ -949,11 +1087,29 @@ export default function NewScanPage() {
                     </p>
                   </div>
                 </div>
+
+                {exeAwaitingResults && (
+                  <div className="mt-4 rounded-xl px-4 py-3"
+                    style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}>
+                    <p className="text-xs text-blue-300">
+                      Waiting for the EXE upload... this page will open your project as soon as the scan finishes.
+                    </p>
+                  </div>
+                )}
+
+                {exeScanStatus === 'failed' && (
+                  <div className="mt-4 rounded-xl px-4 py-3"
+                    style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <p className="text-xs text-red-300">
+                      EXE scan failed. Review the scanner output and try again.
+                    </p>
+                  </div>
+                )}
               </SectionCard>
 
               <button
                 onClick={handleConfigure}
-                disabled={loading || (exeKeys.length === 0 && !exeNewKeyData)}
+                disabled={loading || exeAwaitingResults || (exeKeys.length === 0 && !exeNewKeyData)}
                 className="w-full mt-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}
               >
@@ -962,6 +1118,8 @@ export default function NewScanPage() {
                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     Creating project...
                   </>
+                ) : exeAwaitingResults ? (
+                  'Waiting for EXE upload...'
                 ) : (
                   'Finish'
                 )}
@@ -1174,7 +1332,7 @@ export default function NewScanPage() {
                         <div className="mt-4 rounded-xl px-4 py-3"
                           style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}>
                           <p className="text-xs text-blue-300">
-                            Waiting for results upload... this page will open your project as soon as the scan is saved.
+                            Waiting for results upload... this page will open the scan as soon as the results are saved.
                           </p>
                         </div>
                       )}
@@ -1363,13 +1521,31 @@ export default function NewScanPage() {
                       </p>
                     </div>
 
+                    {githubAwaitingResults && (
+                      <div className="mt-4 rounded-xl px-4 py-3"
+                        style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}>
+                        <p className="text-xs text-blue-300">
+                          GitHub scan in progress... you will be redirected once results are ready.
+                        </p>
+                      </div>
+                    )}
+
+                    {githubScanStatus === 'failed' && (
+                      <div className="mt-4 rounded-xl px-4 py-3"
+                        style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                        <p className="text-xs text-red-300">
+                          GitHub scan failed. Check the repository settings and try again.
+                        </p>
+                      </div>
+                    )}
+
                     <button
                       onClick={handleConfigure}
-                      disabled={loading}
+                      disabled={loading || githubAwaitingResults}
                       className="w-full mt-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                       style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)', boxShadow: '0 4px 16px rgba(255,107,43,0.25)' }}
                     >
-                      {loading ? 'Starting GitHub scan...' : 'Start GitHub Scan'}
+                      {loading ? 'Starting GitHub scan...' : githubAwaitingResults ? 'Waiting for results...' : 'Start GitHub Scan'}
                     </button>
                   </SectionCard>
                 </>
