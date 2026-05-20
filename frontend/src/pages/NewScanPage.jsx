@@ -118,6 +118,7 @@ export default function NewScanPage() {
 
   // DAST Configuration
   const isDast = newProjectAnalysis === 'DAST'
+  const isFull = newProjectAnalysis === 'Full'
   const [dastTargetUrl, setDastTargetUrl] = useState('')
   const [dastScanRunning, setDastScanRunning] = useState(false)
   const [dastProgress, setDastProgress] = useState(null)
@@ -486,11 +487,16 @@ export default function NewScanPage() {
       }
 
       if (method !== 'exe') {
+        const analysisType = projectMode === 'new'
+          ? newProjectAnalysis
+          : (newProjectAnalysis || project.analysis_type || 'SAST')
         const scan = await createScan(project.id, {
           method,
+          analysis_type: analysisType,
           repo_url: method === 'github' ? repoUrl.trim() : null,
           repo_branch: method === 'github' ? (repoBranch.trim() || 'main') : null,
           repo_token: method === 'github' ? (githubToken.trim() || null) : null,
+          dast_target_url: analysisType === 'Full' ? (dastTargetUrl.trim() || null) : null,
         })
         setCreatedScan(scan)
 
@@ -1303,6 +1309,24 @@ export default function NewScanPage() {
                           Leave empty for public repositories.
                         </p>
                       </div>
+                      {isFull && (
+                        <div>
+                          <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">
+                            Live app URL for DAST (optional)
+                          </label>
+                          <input
+                            type="url"
+                            className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none transition-all"
+                            style={{ background: '#1c1c1c', border: '1px solid #2a2a2a' }}
+                            placeholder="https://staging.example.com"
+                            value={dastTargetUrl}
+                            onChange={e => setDastTargetUrl(e.target.value)}
+                          />
+                          <p className="text-xs text-white/30 mt-2">
+                            Full scans include SAST, secrets, and dependencies from the repo. Add a deployed URL to also run OWASP ZAP dynamic testing.
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     {configError && (

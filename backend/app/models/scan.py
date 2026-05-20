@@ -46,7 +46,7 @@ class ProjectAnalysisType(str, enum.Enum):
     sast = "SAST"
     secrets = "Secrets"
     dependencies = "Dependencies"
-    full = "Full (SAST + Secrets + Dependencies)"
+    full = "Full"
 
 
 class ProjectVisibility(str, enum.Enum):
@@ -90,6 +90,7 @@ class Scan(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)
     method = Column(Enum(ScanMethod), nullable=False)
+    analysis_type = Column(String, nullable=True, default="SAST")
     status = Column(Enum(ScanStatus), default=ScanStatus.pending, nullable=False, index=True)
 
     # For GitHub scans

@@ -4,6 +4,7 @@ from datetime import datetime
 import uuid
 
 
+
 # ─── Project Schemas ────────────────────────────────────────────────────────
 
 class ProjectCreate(BaseModel):
@@ -180,11 +181,21 @@ class SecurityWorkflowActionResponse(BaseModel):
 
 # ─── Scan Schemas ────────────────────────────────────────────────────────────
 
+_SCAN_ANALYSIS_TYPES = {
+    "sast": "SAST",
+    "secrets": "Secrets",
+    "dependencies": "Dependencies",
+    "full": "Full",
+}
+
+
 class ScanCreate(BaseModel):
     method: Literal["cli", "github"]
+    analysis_type: Optional[str] = "SAST"
     repo_url: Optional[str] = None
     repo_branch: Optional[str] = "main"
     repo_token: Optional[str] = None
+    dast_target_url: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -192,9 +203,26 @@ class ScanCreate(BaseModel):
     def _require_repo_url_for_github(self):
         if self.method == "github" and not (self.repo_url and self.repo_url.strip()):
             raise ValueError("repo_url is required when method is 'github'")
+        self.analysis_type = _normalize_analysis_type(self.analysis_type)
         if self.repo_token is not None:
             self.repo_token = self.repo_token.strip() or None
+        if self.dast_target_url is not None:
+            self.dast_target_url = self.dast_target_url.strip() or None
+        if self.analysis_type != "Full" and self.dast_target_url:
+            raise ValueError("dast_target_url is only supported for Full scans")
         return self
+
+
+def _normalize_analysis_type(value: Optional[str]) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return "SAST"
+    key = raw.lower()
+    if key in _SCAN_ANALYSIS_TYPES:
+        return _SCAN_ANALYSIS_TYPES[key]
+    if key.startswith("full"):
+        return "Full"
+    raise ValueError("analysis_type must be one of: SAST, Secrets, Dependencies, Full")
 
 
 class ScanSummary(BaseModel):
@@ -213,6 +241,7 @@ class ScanResponse(BaseModel):
     id: uuid.UUID
     project_id: uuid.UUID
     method: Optional[str] = None
+    analysis_type: Optional[str] = None
     status: str
     job_id: Optional[str] = None
     job_state: Optional[str] = None
