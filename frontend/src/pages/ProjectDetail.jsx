@@ -1169,6 +1169,7 @@ export default function ProjectDetail() {
 
       const scan = await createScan(id, {
         method: prevScan.method,
+        analysis_type: prevScan.analysis_type || undefined,
         repo_url: prevScan.repo_url || null,
         repo_branch: prevScan.repo_branch || 'main',
       })

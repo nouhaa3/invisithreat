@@ -3,6 +3,7 @@ GitHub Scanner Background Service
 Clones a GitHub repository into a temp directory, runs the InvisiThreat
 security rules against it, stores results in the database, then cleans up.
 """
+import asyncio
 import json
 import re
 import shutil
@@ -28,6 +29,17 @@ from app.services.risk_score import upsert_scan_risk_score
 from app.services.vulnerability_workflow import sync_vulnerability_tasks_for_scan
 from app.core.encryption import decrypt_token
 from app.core.scan_sanitizer import sanitize_scan_results
+from app.services.dependency_scanner import scan_dependencies
+from app.services.scan_analysis import (
+    normalize_analysis_type,
+    filter_findings,
+    build_summary,
+    should_run_sast,
+    should_run_secrets,
+    should_run_dependencies,
+    should_run_dast,
+    finding_kind,
+)
 
 # Try to import new modular rules system, fall back to legacy rules if unavailable
 try:
@@ -684,9 +696,129 @@ def _scrub_token(value: str, token: str | None) -> str:
     return text
 
 
+def _dedupe_findings(findings: list[dict]) -> list[dict]:
+    deduped: list[dict] = []
+    seen: set[tuple] = set()
+    for finding in findings:
+        key = (
+            finding.get("rule_id", ""),
+            finding.get("file", ""),
+            finding.get("line", 0),
+            finding.get("title", ""),
+            finding.get("source_tool", ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(finding)
+    deduped.sort(key=lambda item: _severity_order(item.get("severity", "info")))
+    return deduped
+
+
+def _run_dast_for_full_scan(target_url: str) -> tuple[list[dict], dict]:
+    from app.services.dast_scanner import run_dast_scan_async
+
+    run_info = {
+        "tool": "owasp_zap",
+        "status": "skipped",
+        "findings": 0,
+        "error": "",
+        "target_url": target_url,
+    }
+    try:
+        result = asyncio.run(run_dast_scan_async(target_url.strip()))
+    except (RuntimeError, OSError, ValueError) as exc:
+        run_info["status"] = "failed"
+        run_info["error"] = str(exc)[:500]
+        return [], run_info
+
+    if not result.get("completed"):
+        run_info["status"] = "failed"
+        run_info["error"] = (result.get("error") or "DAST scan did not complete")[:500]
+        return [], run_info
+
+    findings = result.get("vulnerabilities", []) or []
+    run_info["status"] = "completed"
+    run_info["findings"] = len(findings)
+    return findings, run_info
+
+
+def _analyze_cloned_repo(base_path: Path, analysis_type: str, dast_target_url: str | None = None) -> dict:
+    """Run scanners for the requested analysis type and return normalized results."""
+    normalized = normalize_analysis_type(analysis_type)
+    tool_runs: list[dict] = []
+    merged_findings: list[dict] = []
+    scanned_files = 0
+
+    if should_run_sast(normalized) or should_run_secrets(normalized):
+        regex_results = _scan_directory(base_path)
+        regex_findings = regex_results.get("findings", [])
+        scanned_files = regex_results.get("summary", {}).get("scanned_files", 0)
+        tool_runs.append({
+            "tool": "regex_rules",
+            "status": "completed",
+            "findings": len(regex_findings),
+        })
+
+        if should_run_sast(normalized):
+            semgrep_findings, semgrep_run = _run_semgrep_scan(base_path)
+            bandit_findings, bandit_run = _run_bandit_scan(base_path)
+            tool_runs.extend([semgrep_run, bandit_run])
+            merged_findings.extend(regex_findings + semgrep_findings + bandit_findings)
+        else:
+            merged_findings.extend(
+                [f for f in regex_findings if finding_kind(f) == "secret"]
+            )
+
+    if should_run_dependencies(normalized):
+        dep_findings, dep_summary = scan_dependencies(base_path)
+        merged_findings.extend(dep_findings)
+        tool_runs.append({
+            "tool": dep_summary.get("tool", "osv"),
+            "status": "completed",
+            "findings": dep_summary.get("total_findings", 0),
+        })
+        scanned_files = max(scanned_files, dep_summary.get("scanned_files", 0) or 0)
+
+    dast_meta: dict | None = None
+    if should_run_dast(normalized, dast_target_url):
+        dast_findings, dast_meta = _run_dast_for_full_scan(dast_target_url or "")
+        merged_findings.extend(dast_findings)
+        tool_runs.append(dast_meta)
+    elif normalized == "Full":
+        dast_meta = {
+            "tool": "owasp_zap",
+            "status": "skipped",
+            "findings": 0,
+            "error": "",
+            "reason": "No dast_target_url provided",
+        }
+
+    deduped = _dedupe_findings(merged_findings)
+    filtered = filter_findings(deduped, normalized)
+
+    return {
+        "findings": filtered,
+        "summary": build_summary(
+            filtered,
+            scanned_files=scanned_files,
+            tools=tool_runs,
+            analysis_type=normalized,
+            dast=dast_meta,
+        ),
+    }
+
+
 # ─── Background Task Entry Point ─────────────────────────────────────────────
 
-def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str, github_token: str | None = None) -> None:
+def run_github_scan(
+    scan_id: str,
+    repo_url: str,
+    branch: str,
+    db_url: str,
+    github_token: str | None = None,
+    dast_target_url: str | None = None,
+) -> None:
     """
     Runs in a FastAPI BackgroundTask (separate thread).
     Creates its own DB session to avoid cross-thread SQLAlchemy issues.
@@ -736,49 +868,9 @@ def run_github_scan(scan_id: str, repo_url: str, branch: str, db_url: str, githu
 
         # ── 3. Scan cloned repo ─────────────────────────────────────────────
         base_path = Path(tmpdir)
-        regex_results = _scan_directory(base_path)
-        semgrep_findings, semgrep_run = _run_semgrep_scan(base_path)
-        bandit_findings, bandit_run = _run_bandit_scan(base_path)
-
-        merged_findings = regex_results.get("findings", []) + semgrep_findings + bandit_findings
-        deduped: list[dict] = []
-        seen = set()
-        for finding in merged_findings:
-            key = (
-                finding.get("rule_id", ""),
-                finding.get("file", ""),
-                finding.get("line", 0),
-                finding.get("title", ""),
-                finding.get("source_tool", ""),
-            )
-            if key in seen:
-                continue
-            seen.add(key)
-            deduped.append(finding)
-
-        deduped.sort(key=lambda item: _severity_order(item.get("severity", "info")))
-        counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-        for finding in deduped:
-            sev = (finding.get("severity") or "info").lower()
-            counts[sev] = counts.get(sev, 0) + 1
-
-        results = {
-            "findings": deduped,
-            "summary": {
-                "total_findings": len(deduped),
-                "scanned_files": regex_results.get("summary", {}).get("scanned_files", 0),
-                **counts,
-                "tools": [
-                    {
-                        "tool": "regex_rules",
-                        "status": "completed",
-                        "findings": len(regex_results.get("findings", [])),
-                    },
-                    semgrep_run,
-                    bandit_run,
-                ],
-            },
-        }
+        analysis_type = normalize_analysis_type(scan.analysis_type)
+        effective_dast_url = (dast_target_url or "").strip() or None
+        results = _analyze_cloned_repo(base_path, analysis_type, effective_dast_url)
 
         # ── 4. Save results ─────────────────────────────────────────────────
         scan.status = ScanStatus.completed

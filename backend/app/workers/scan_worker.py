@@ -60,7 +60,7 @@ def _project_user_ids(db, scan: Scan) -> list[str]:
     soft_time_limit=900,
     time_limit=1200,
 )
-def run_github_scan_job(self, scan_id: str) -> dict:
+def run_github_scan_job(self, scan_id: str, dast_target_url: str | None = None) -> dict:
     if not acquire_scan_lock(scan_id, ttl_seconds=1800):
         return {"status": "skipped", "reason": "locked"}
 
@@ -93,6 +93,7 @@ def run_github_scan_job(self, scan_id: str) -> dict:
             branch=scan.repo_branch or "main",
             db_url=settings.DATABASE_URL,
             github_token=None,
+            dast_target_url=dast_target_url,
         )
         # Note: run_github_scan persists results itself using db_url parameter in current implementation.
         # We still update progress for UI parity.

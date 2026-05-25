@@ -8,6 +8,7 @@ from app.models.user import User
 from app.models.member import ProjectMember
 from app.schemas.scan import ProjectCreate, ProjectUpdate
 from app.services.scan_summary_cache import get_scan_summary
+from app.services.scan_analysis import normalize_analysis_type
 import uuid
 import json
 
@@ -24,7 +25,7 @@ def create_project(db: Session, owner: User, data: ProjectCreate) -> Project:
         description=data.description,
         project_type=data.project_type or "Other",
         language=data.language or "Other",
-        analysis_type=data.analysis_type or "SAST",
+        analysis_type=normalize_analysis_type(data.analysis_type),
         visibility=data.visibility or "private",
         owner_id=owner.id,
     )
@@ -147,11 +148,19 @@ def get_scans_for_projects_batch(db: Session, project_ids: list[uuid.UUID]) -> d
     return scans_by_project
 
 
-def create_scan(db: Session, project: Project, method: str, repo_url: str = None, repo_branch: str = "main") -> Scan:
+def create_scan(
+    db: Session,
+    project: Project,
+    method: str,
+    repo_url: str = None,
+    repo_branch: str = "main",
+    analysis_type: str | None = None,
+) -> Scan:
     scan = Scan(
         id=uuid.uuid4(),
         project_id=project.id,
         method=method,
+        analysis_type=normalize_analysis_type(analysis_type),
         status=ScanStatus.pending,
         repo_url=repo_url,
         repo_branch=repo_branch,

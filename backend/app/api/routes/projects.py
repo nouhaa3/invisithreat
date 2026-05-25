@@ -1008,7 +1008,18 @@ async def create_new_scan(
         current_user.trial_scans_remaining -= 1
         db.commit()
     
-    scan = create_scan(db, project, data.method, data.repo_url, data.repo_branch)
+    if data.analysis_type == "DAST":
+        raise HTTPException(status_code=400, detail="Use the DAST endpoint to run dynamic scans")
+
+    resolved_analysis_type = data.analysis_type or project.analysis_type or "SAST"
+    scan = create_scan(
+        db,
+        project,
+        data.method,
+        data.repo_url,
+        data.repo_branch,
+        analysis_type=resolved_analysis_type,
+    )
     create_audit_log(db, current_user.id, "scan_created", f"Created {data.method} scan for project {project.id}")
 
     if data.method == "github":
@@ -1053,10 +1064,15 @@ async def create_new_scan(
                 branch=scan.repo_branch or "main",
                 db_url=settings.DATABASE_URL,
                 github_token=None,
+                dast_target_url=data.dast_target_url,
             )
         else:
             try:
-                job = run_github_scan_job.apply_async(args=[str(scan.id)], headers=headers)
+                job = run_github_scan_job.apply_async(
+                    args=[str(scan.id)],
+                    kwargs={"dast_target_url": data.dast_target_url},
+                    headers=headers,
+                )
             except Exception as exc:
                 scan.status = ScanStatus.failed
                 scan.error_message = f"Failed to enqueue scan job: {exc}"
