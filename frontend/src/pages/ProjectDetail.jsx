@@ -257,7 +257,7 @@ function PulseDot({ color }) {
 
 // ─── Findings Panel ──────────────────────────────────────────────────────────
 
-function FindingsPanel({ results, workflowTaskByFingerprint, aiEnabled, onAskAi }) {
+function FindingsPanel({ results }) {
   const [filter, setFilter] = useState('all')
   const summary = results.summary || {}
   const findings = results.findings || []
@@ -312,19 +312,8 @@ function FindingsPanel({ results, workflowTaskByFingerprint, aiEnabled, onAskAi 
       <div className="flex flex-col gap-2">
         {filtered.map((f, i) => {
           const cfg = SEVERITY_CONFIG[f.severity] || SEVERITY_CONFIG.info
-          const fingerprint = buildFindingFingerprint(f)
-          const workflowTask = workflowTaskByFingerprint?.[fingerprint] || null
-          const recommendation = f.recommendation || RECOMMENDATIONS[f.rule_id]
           return (
-            <FindingRow
-              key={f.id || i}
-              finding={f}
-              cfg={cfg}
-              workflowTask={workflowTask}
-              recommendation={recommendation}
-              aiEnabled={aiEnabled}
-              onAskAi={onAskAi}
-            />
+            <FindingRow key={f.id || i} finding={f} cfg={cfg} />
           )
         })}
       </div>
@@ -740,18 +729,7 @@ function CurrentFindingRow({
 
 // ─── Scan Row ────────────────────────────────────────────────────────────────
 
-const ScanRow = memo(function ScanRow({
-  scan,
-  onRescan,
-  rescanning,
-  resultsJson,
-  resultsSummary,
-  onLoadResults,
-  autoExpand,
-  workflowTaskByFingerprint,
-  aiEnabled,
-  onAskAi,
-}) {
+const ScanRow = memo(function ScanRow({ scan, onRescan, rescanning, resultsJson, resultsSummary, onLoadResults, autoExpand }) {
   const [expanded, setExpanded] = useState(false)
   const status = STATUS_CONFIG[scan.status] || STATUS_CONFIG.pending
   const method = METHOD_CONFIG[scan.method] || METHOD_CONFIG.cli
@@ -896,12 +874,7 @@ const ScanRow = memo(function ScanRow({
       {/* Expanded results */}
       {expanded && results && (
         <div className="px-5 pb-5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-          <FindingsPanel
-            results={results}
-            workflowTaskByFingerprint={workflowTaskByFingerprint}
-            aiEnabled={aiEnabled}
-            onAskAi={onAskAi}
-          />
+          <FindingsPanel results={results} />
         </div>
       )}
       {isLoadingResults && (
@@ -2274,9 +2247,6 @@ export default function ProjectDetail() {
                   resultsSummary={scan.results_summary}
                   onLoadResults={fetchScanResults}
                   autoExpand={scan.id === autoExpandScanId}
-                  workflowTaskByFingerprint={workflowTaskByFingerprint}
-                  aiEnabled={aiEnabled}
-                  onAskAi={handleAskAi}
                 />
               ))
             )}
