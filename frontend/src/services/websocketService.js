@@ -71,18 +71,28 @@ export const initializeWebSocket = () => {
 
   const socketBaseUrl = getSocketBaseUrl()
 
-  socket = io(socketBaseUrl, {
-    path: '/socket.io',
-    transports: ['websocket'],
-    upgrade: false,
-    reconnection: true,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
-    reconnectionAttempts: Infinity,
-    timeout: 20000,
-  })
+  try {
+    socket = io(socketBaseUrl, {
+      path: '/socket.io',
+      // allow polling fallback so connections succeed even when websocket handshake fails
+      transports: ['polling', 'websocket'],
+      // send cookies for authenticated websocket handshake
+      withCredentials: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: Infinity,
+      timeout: 20000,
+    })
+  } catch (err) {
+    // Fail gracefully: do not throw to avoid blocking app boot
+    console.debug('WebSocket init failed', err)
+    socket = null
+    return null
+  }
 
   socket.on('connect', () => {
+    // Connected successfully
   })
 
   socket.on('connected', () => {})
@@ -106,8 +116,13 @@ export const initializeWebSocket = () => {
   })
 
   socket.on('disconnect', () => {})
-  socket.on('connect_error', () => {})
-  socket.on('error', () => {})
+  socket.on('connect_error', (err) => {
+    // suppress noisy errors but keep a lightweight log for debugging
+    console.debug('Socket connect_error', err && err.message ? err.message : err)
+  })
+  socket.on('error', (err) => {
+    console.debug('Socket error', err && err.message ? err.message : err)
+  })
   socket.io.on('reconnect_attempt', () => {})
 
   socket.io.on('reconnect', () => {})

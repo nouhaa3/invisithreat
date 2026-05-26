@@ -156,6 +156,8 @@ export default function NewScanPage() {
   const [newProjectVisibility, setNewProjectVisibility] = useState('private')
   const [projectError, setProjectError] = useState('')
   const [projectTypeError, setProjectTypeError] = useState('')
+  const [existingScanConfig, setExistingScanConfig] = useState(null)
+  const [existingConfigLoading, setExistingConfigLoading] = useState(false)
 
   // Step 1 - Method (skip for DAST)
   const [method, setMethod] = useState(null) // 'cli' | 'github' | 'exe'
@@ -201,17 +203,59 @@ export default function NewScanPage() {
 
   const isNewProject = projectMode === 'new'
   const configLabel = isDast ? 'Target URL' : method === 'exe' ? 'Setup' : 'Configure'
+  const requiresDastTarget = newProjectAnalysis === 'DAST' || newProjectAnalysis === 'Full'
+  const hasDastTarget = Boolean(dastTargetUrl.trim())
+  const hasExistingConfig = projectMode === 'existing' && existingScanConfig
+  const existingQuickStart = projectMode === 'existing' && hasExistingConfig && (!requiresDastTarget || hasDastTarget)
+
   const steps = isNewProject
     ? isDast
       ? ['Project', 'Project Type', 'Analysis', 'Target URL']
       : ['Project', 'Project Type', 'Analysis', 'Method', configLabel]
-    : isDast
-      ? ['Project', 'Analysis', 'Target URL']
-      : ['Project', 'Analysis', 'Method', configLabel]
+    : existingQuickStart
+      ? ['Project', 'Analysis', 'Start']
+      : isDast
+        ? ['Project', 'Analysis', 'Target URL']
+        : ['Project', 'Analysis', 'Method', configLabel]
 
   useEffect(() => {
     getProjects().then(setProjects).catch(() => setProjects([]))
   }, [])
+
+  useEffect(() => {
+    if (projectMode !== 'existing' || !selectedProject?.id) {
+      setExistingScanConfig(null)
+      return
+    }
+    let active = true
+    setExistingConfigLoading(true)
+    getScans(selectedProject.id, { includeResults: false })
+      .then((list) => {
+        if (!active) return
+        const latest = Array.isArray(list) ? list[0] : null
+        setExistingScanConfig(latest || null)
+        if (latest?.method) {
+          setMethod(latest.method)
+        }
+        if (latest?.method === 'github') {
+          setRepoUrl(latest.repo_url || '')
+          setRepoBranch(latest.repo_branch || 'main')
+        }
+        if (latest?.method === 'dast') {
+          setDastTargetUrl(latest.repo_url || '')
+        }
+      })
+      .catch(() => {
+        if (!active) return
+        setExistingScanConfig(null)
+      })
+      .finally(() => {
+        if (active) setExistingConfigLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [projectMode, selectedProject?.id])
 
   useEffect(() => {
     const isConfigureStep = projectMode === 'new' ? step === 4 : step === 2
@@ -506,6 +550,10 @@ export default function NewScanPage() {
 
   // ─── Step 2 (new): Analysis type ───────────────────────────────────────────
   const handleStepAnalysis = () => {
+    if (projectMode === 'existing' && existingQuickStart) {
+      setStep(2)
+      return
+    }
     const nextStep = projectMode === 'new' ? 3 : 2
     setStep(nextStep)
   }
@@ -582,7 +630,10 @@ export default function NewScanPage() {
 
   // ─── Configure / Setup step ────────────────────────────────────────────────
   const handleConfigure = async () => {
-    if (method === 'github' && !repoUrl.trim()) {
+    const resolvedMethod = projectMode === 'existing' && existingScanConfig?.method
+      ? existingScanConfig.method
+      : method
+    if (resolvedMethod === 'github' && !repoUrl.trim()) {
       setConfigError('Repository URL is required')
       return
     }
@@ -610,7 +661,7 @@ export default function NewScanPage() {
         return
       }
 
-      if (method === 'exe') {
+      if (resolvedMethod === 'exe') {
         setExeAwaitingResults(true)
         setExeScanStatus('')
         setExeScanAnchorAt(Date.now())
@@ -618,27 +669,27 @@ export default function NewScanPage() {
         return
       }
 
-      if (method !== 'exe') {
+      if (resolvedMethod !== 'exe') {
         const analysisType = projectMode === 'new'
           ? newProjectAnalysis
           : (newProjectAnalysis || project.analysis_type || 'SAST')
         const scan = await createScan(project.id, {
-          method,
+          method: resolvedMethod,
           analysis_type: analysisType,
-          repo_url: method === 'github' ? repoUrl.trim() : null,
-          repo_branch: method === 'github' ? (repoBranch.trim() || 'main') : null,
-          repo_token: method === 'github' ? (githubToken.trim() || null) : null,
+          repo_url: resolvedMethod === 'github' ? repoUrl.trim() : null,
+          repo_branch: resolvedMethod === 'github' ? (repoBranch.trim() || 'main') : null,
+          repo_token: resolvedMethod === 'github' ? (githubToken.trim() || null) : null,
           dast_target_url: analysisType === 'Full' ? (dastTargetUrl.trim() || null) : null,
         })
         setCreatedScan(scan)
 
-        if (method === 'cli') {
+        if (resolvedMethod === 'cli') {
           const tokenData = await getCLIToken(project.id, scan.id)
           setCliToken(tokenData)
           return
         }
 
-        if (method === 'github') {
+        if (resolvedMethod === 'github') {
           setGithubAwaitingResults(true)
           setGithubScanStatus('')
           return
@@ -843,8 +894,48 @@ export default function NewScanPage() {
             </div>
           )}
 
+          {/* ─── EXISTING PROJECT: QUICK START ─────────────────────────── */}
+          {!isNewProject && existingQuickStart && step === 2 && (
+            <div className="animate-slide-up">
+              <SectionCard>
+                <h2 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
+                  <div className="w-1 h-5 rounded" style={{ background: '#FF8C5A' }} />
+                  Ready to launch
+                </h2>
+                <p className="text-xs text-white/40 mb-4">We will reuse the latest scan configuration for this project.</p>
+
+                {existingConfigLoading && (
+                  <p className="text-xs text-white/40">Loading previous scan settings...</p>
+                )}
+
+                {existingScanConfig && (
+                  <div className="rounded-xl px-4 py-3"
+                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-white/50">
+                      <span>Method: <span className="text-white/80">{existingScanConfig.method}</span></span>
+                      {existingScanConfig.repo_url && (
+                        <span>Repo/Target: <span className="text-white/80">{existingScanConfig.repo_url}</span></span>
+                      )}
+                      {existingScanConfig.repo_branch && (
+                        <span>Branch: <span className="text-white/80">{existingScanConfig.repo_branch}</span></span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </SectionCard>
+
+              <button
+                onClick={handleConfigure}
+                disabled={loading || existingConfigLoading}
+                className={`w-full mt-4 ${primaryButtonClasses} ${primaryButtonDisabled}`}
+              >
+                {loading ? 'Starting...' : 'Start Scan'}
+              </button>
+            </div>
+          )}
+
           {/* ─── METHOD STEP (skip for DAST) ──────────────────────────────────────────────── */}
-          {!isDast && ((isNewProject && step === 3) || (!isNewProject && step === 2)) && (
+          {!isDast && !existingQuickStart && ((isNewProject && step === 3) || (!isNewProject && step === 2)) && (
             <div className="animate-slide-up">
               <div className="mb-8">
                 <h2 className="text-base font-semibold text-white mb-6 flex items-center gap-2">

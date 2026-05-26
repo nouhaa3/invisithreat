@@ -83,6 +83,14 @@ export const getScanResults = async (projectId, scanId) => {
   return res.data
 }
 
+export const generateScanSummary = async (scanId, maxFindings = 12) => {
+  const res = await api.post('/api/llm/scan-summary', {
+    scan_id: scanId,
+    max_findings: maxFindings,
+  })
+  return res.data
+}
+
 export const createScan = async (projectId, { method, analysis_type, repo_url, repo_branch, repo_token, dast_target_url }) => {
   const res = await api.post(`/api/projects/${projectId}/scans`, {
     method,

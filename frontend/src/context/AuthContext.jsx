@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { saveAuthData, clearAuthData, getStoredUser, getMe, refreshSessionIfNeeded } from '../services/authService'
 import api from '../services/api'
 
@@ -55,22 +55,11 @@ export const AuthProvider = ({ children }) => {
     const elapsed = Date.now() - lastActivityAt
     
     // User has been inactive too long → logout
-    if (elapsed >= IDLE_TIMEOUT_MS) { 
+    if (elapsed >= IDLE_TIMEOUT_MS) {
       logout()
-      const value = useMemo(() => ({
-        user,
-        isLoading,
-        loginSuccess,
-        logout,
-        updateUser,
-        isAuthenticated: !!user,
-      }), [isLoading, loginSuccess, logout, updateUser, user])
-
-      return (
-        <AuthContext.Provider value={value}>
-          {children}
-        </AuthContext.Provider>
-      )
+      return
+    }
+    if (elapsed >= IDLE_WARNING_MS && !inactivityWarning) {
       setInactivityWarning(true)
     } else if (elapsed < IDLE_WARNING_MS && inactivityWarning) {
       setInactivityWarning(false)

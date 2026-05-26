@@ -28,6 +28,7 @@ export default function usePermissions() {
     canRunScan:                  can(role, PERMISSIONS.RUN_SCAN),
     canManageGithubRepos:        can(role, PERMISSIONS.MANAGE_GITHUB_REPOS),
     canMarkFalsePositive:        can(role, PERMISSIONS.MARK_FALSE_POSITIVE),
+    canUseAiSummaries:           can(role, PERMISSIONS.USE_AI_SUMMARIES),
     canViewScanResults:          can(role, PERMISSIONS.VIEW_SCAN_RESULTS),
     canViewVulnerabilities:      can(role, PERMISSIONS.VIEW_VULNERABILITIES),
     canGenerateReports:          can(role, PERMISSIONS.GENERATE_REPORTS),

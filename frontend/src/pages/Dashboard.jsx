@@ -6,6 +6,7 @@ import AdminDashboardStats from '../components/AdminDashboardStats'
 import RoleRequestModal from '../components/RoleRequestModal'
 import { getDashboardStats, getSecurityManagerProjects } from '../services/projectService'
 import { getAdminDashboardStats } from '../services/adminDashboardService'
+import { listAllSummaries } from '../services/summaryService'
 import { can, PERMISSIONS } from '../utils/permissions'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -48,6 +49,22 @@ function downloadCsv(filename, headers, rows) {
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+}
+
+function formatBriefingDate(value) {
+  if (!value) return '—'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return '—'
+  return parsed.toLocaleString()
+}
+
+function getLatestSummary(items) {
+  return items.reduce((latest, item) => {
+    if (!latest) return item
+    const latestTime = new Date(latest.generated_at || 0).getTime()
+    const currentTime = new Date(item.generated_at || 0).getTime()
+    return currentTime > latestTime ? item : latest
+  }, null)
 }
 
 // ─── Score ring ───────────────────────────────────────────────────────────────
@@ -400,7 +417,14 @@ function SecurityManagerDashboard({
           </div>
         </div>
 
-        <div className="rounded-2xl p-5 flex flex-col gap-3"
+        <div
+          className="rounded-2xl p-5 flex flex-col gap-3 cursor-pointer"
+          role="button"
+          tabIndex={0}
+          onClick={onOpenProjects}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') onOpenProjects()
+          }}
           style={{ background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))', border: '1px solid rgba(255,255,255,0.06)' }}>
           <p className="text-xs font-semibold uppercase tracking-widest text-white/25">Findings Distribution</p>
           <div className="flex-1 flex items-center justify-center">
@@ -492,11 +516,17 @@ export default function Dashboard() {
   const navigate  = useNavigate()
   const isAdmin = user?.role_name === 'Admin'
   const isSecurityManager = user?.role_name === 'Security Manager'
+  const canUseAiSummaries = can(user?.role_name, PERMISSIONS.USE_AI_SUMMARIES)
 
   const [stats,         setStats]         = useState(null)
   const [securityPortfolio, setSecurityPortfolio] = useState({ summary: null, projects: [] })
   const [loading,       setLoading]       = useState(true)
   const [showRoleModal, setShowRoleModal] = useState(false)
+  const [briefing, setBriefing] = useState(null)
+  const [briefingOpen, setBriefingOpen] = useState(false)
+  const [briefingLoading, setBriefingLoading] = useState(false)
+  const [briefingError, setBriefingError] = useState('')
+  const [briefingEmpty, setBriefingEmpty] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -580,6 +610,30 @@ export default function Dashboard() {
     ], rows)
   }
 
+  const handleBriefingRequest = async () => {
+    setBriefingLoading(true)
+    setBriefingError('')
+    setBriefingEmpty(false)
+    try {
+      const data = await listAllSummaries()
+      const list = Array.isArray(data) ? data : []
+      if (list.length === 0) {
+        setBriefing(null)
+        setBriefingEmpty(true)
+        setBriefingOpen(false)
+        return
+      }
+      const latest = getLatestSummary(list)
+      setBriefing(latest)
+      setBriefingOpen(true)
+    } catch (err) {
+      setBriefingError(err.response?.data?.detail || err.message || 'Failed to load AI briefing')
+      setBriefingOpen(false)
+    } finally {
+      setBriefingLoading(false)
+    }
+  }
+
   return (
     <>
     <AppLayout>
@@ -646,13 +700,60 @@ export default function Dashboard() {
           </div>
 
           {/* ── KPI row ────────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6 animate-slide-up" style={{ animationDelay: '0.04s' }}>
-            <KpiCard label="Projects"      value={loading || !stats ? '—' : stats?.total_projects ?? 0}  sub="in workspace" />
-            <KpiCard label="Total Scans"   value={loading || !stats ? '—' : stats?.total_scans ?? 0}     sub="all time" />
-            <KpiCard label="Active Scans"  value={loading || !stats ? '—' : stats?.active_scans ?? 0}    sub="running / pending" accent={stats?.active_scans > 0 ? '#eab308' : undefined} />
-            <KpiCard label="Findings"      value={loading || !stats ? '—' : stats?.total_findings ?? 0}  sub="latest scans" accent={stats?.total_findings > 0 ? '#fb923c' : undefined} />
-            <KpiCard label="Max Risk"      value={loading || !stats ? '—' : `${maxRisk.toFixed(1)}/10`}   sub={maxRiskSub} accent={maxRiskColor} />
-          </div>
+          <div className="grid grid-cols-6 gap-4 mb-6 animate-slide-up" style={{ animationDelay: '0.04s' }}>
+            <KpiCard label="Projects" value={loading || !stats ? '—' : stats?.total_projects ?? 0} sub="in workspace" />
+            <KpiCard label="Total Scans" value={loading || !stats ? '—' : stats?.total_scans ?? 0} sub="all time" />
+            <KpiCard label="Active Scans" value={loading || !stats ? '—' : stats?.active_scans ?? 0} sub="running / pending" accent={stats?.active_scans > 0 ? '#eab308' : undefined} />
+            <KpiCard label="Findings" value={loading || !stats ? '—' : stats?.total_findings ?? 0} sub="latest scans" accent={stats?.total_findings > 0 ? '#fb923c' : undefined} />
+            <KpiCard label="Max Risk" value={loading || !stats ? '—' : `${maxRisk.toFixed(1)}/10`} sub={maxRiskSub} accent={maxRiskColor} />
+            <KpiCard label="Security Score" value={loading || !stats ? '—' : stats?.security_score ?? 0} sub="overall posture" accent={scoreColor} />
+            </div>
+
+          {canUseAiSummaries && (
+            <div className="mb-6 animate-slide-up" style={{ animationDelay: '0.06s' }}>
+              <div className="ui-card ui-card-sheen px-5 py-4 flex flex-col gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-9 h-9 rounded-xl flex items-center justify-center"
+                        style={{ background: 'rgba(255,107,43,0.12)', border: '1px solid rgba(255,107,43,0.28)' }}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF8C5A" strokeWidth="2">
+                          <path d="M12 2l1.6 4.7 4.9 1.3-4.1 3 1.6 4.7-4-2.9-4 2.9 1.6-4.7-4.1-3 4.9-1.3L12 2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-white">AI Security Insights</p>
+                        <p className="text-sm text-white/45 mt-1">Powered by InvisiThreat AI</p>
+                      </div>
+                    </div>
+                    {briefingEmpty && (
+                      <p className="text-sm text-white/45 mt-3">
+                        No briefing yet. Click to generate your first AI security briefing.
+                      </p>
+                    )}
+                    {!briefingEmpty && briefing && (
+                      <p className="text-sm text-white/60 mt-3">
+                        Latest briefing ready • {formatBriefingDate(briefing.generated_at)}
+                      </p>
+                    )}
+                    {briefingError && (
+                      <p className="text-sm text-red-300 mt-3">{briefingError}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleBriefingRequest}
+                    disabled={briefingLoading}
+                    className="px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
+                    style={{ background: 'linear-gradient(135deg,#FF6B2B,#C13A00)' }}
+                  >
+                    {briefingLoading ? 'Loading...' : 'Generate Daily Briefing'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* VIEWER Trial Info Banner */}
           {user?.role_name === 'Viewer' && (user?.trial_scans_remaining ?? 0) > 0 && (
@@ -679,23 +780,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="mb-6 animate-slide-up rounded-2xl p-4 sm:p-5"
-            style={{ background: '#101010', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                ['Security score', loading || !stats ? '—' : stats?.security_score ?? 0, scoreColor],
-                ['Average risk', loading || !stats ? '—' : `${avgRisk.toFixed(1)}/10`, riskColor],
-                ['Critical', bySev.critical || 0, '#f87171'],
-                ['High', bySev.high || 0, '#fb923c'],
-              ].map(([label, value, color]) => (
-                <div key={label} className="rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-white/35">{label}</p>
-                  <p className="text-xl font-bold mt-1" style={{ color }}>{value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
           {/* ── Charts row ─────────────────────────────────────────────────── */}
           {!loading && stats && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 animate-slide-up" style={{ animationDelay: '0.08s' }}>
@@ -715,7 +799,14 @@ export default function Dashboard() {
               </div>
 
               {/* Severity breakdown */}
-              <div className="rounded-2xl p-5 flex flex-col gap-3"
+              <div
+                className="rounded-2xl p-5 flex flex-col gap-3 cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate('/projects')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') navigate('/projects')
+                }}
                 style={{ background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <p className="text-xs font-semibold uppercase tracking-widest text-white/25">Findings by Severity</p>
                 <div className="flex-1 flex items-center justify-center">
@@ -761,30 +852,51 @@ export default function Dashboard() {
           )}
 
           {/* ── Top risky projects ─────────────────────────────────────────── */}
-          {!loading && stats?.top_risky_projects?.length > 0 && (
+          {!loading && (
             <div className="mb-6 animate-slide-up" style={{ animationDelay: '0.12s' }}>
               <h2 className="text-xs font-semibold uppercase tracking-widest text-white/30 mb-3">Top Risky Projects</h2>
               <div className="rounded-2xl overflow-hidden"
                 style={{ background: 'linear-gradient(170deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))', border: '1px solid rgba(255,255,255,0.06)' }}>
-                {stats.top_risky_projects.map((p, i) => (
-                  <div key={p.id}
-                    onClick={() => navigate(`/projects/${p.id}`)}
-                    className="flex items-center gap-4 px-5 py-3 cursor-pointer transition-colors hover:bg-white/[0.02]"
-                    style={{ borderBottom: i < stats.top_risky_projects.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
-                    <span className="text-xs text-white/20 w-4 flex-shrink-0">{i + 1}</span>
-                    <span className="flex-1 text-sm font-medium text-white truncate">{p.name}</span>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {typeof p.risk_score === 'number' && <SevPill n={p.risk_score.toFixed(1)} c="#f87171" label="risk" />}
-                      {p.critical > 0 && <SevPill n={p.critical} c="#f87171" label="crit" />}
-                      {p.high     > 0 && <SevPill n={p.high}     c="#fb923c" label="high" />}
-                      {p.medium   > 0 && <SevPill n={p.medium}   c="#eab308" label="med"  />}
-                      {p.low      > 0 && <SevPill n={p.low}      c="#60a5fa" label="low"  />}
-                    </div>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2">
-                      <polyline points="9 18 15 12 9 6" />
-                    </svg>
+                {stats?.top_risky_projects?.length > 0 ? (
+                  stats.top_risky_projects.map((p, i) => {
+                    const isHighRisk = Number(p?.risk_score || 0) > 7
+                    return (
+                      <div key={p.id}
+                        onClick={() => navigate(`/projects/${p.id}`)}
+                        className="flex items-center gap-4 px-5 py-3 cursor-pointer transition-colors hover:bg-white/[0.02]"
+                        style={{ borderBottom: i < stats.top_risky_projects.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                        <span className="text-xs text-white/20 w-4 flex-shrink-0">{i + 1}</span>
+                        <span className="flex-1 text-sm font-medium text-white truncate flex items-center gap-2">
+                          {p.name}
+                          {isHighRisk && (
+                            <span title="AI detected high risk — review recommended" className="flex items-center">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF8C5A" strokeWidth="2">
+                                <path d="M12 3l9 16H3l9-16z" />
+                                <path d="M12 9v4" />
+                                <path d="M12 17h.01" />
+                              </svg>
+                            </span>
+                          )}
+                        </span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {typeof p.risk_score === 'number' && <SevPill n={p.risk_score.toFixed(1)} c="#f87171" label="risk" />}
+                          {p.critical > 0 && <SevPill n={p.critical} c="#f87171" label="crit" />}
+                          {p.high     > 0 && <SevPill n={p.high}     c="#fb923c" label="high" />}
+                          {p.medium   > 0 && <SevPill n={p.medium}   c="#eab308" label="med"  />}
+                          {p.low      > 0 && <SevPill n={p.low}      c="#60a5fa" label="low"  />}
+                        </div>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="px-6 py-8 text-center">
+                    <p className="text-white/75 text-sm font-medium">No risky projects yet</p>
+                    <p className="text-white/35 text-xs mt-1">Run more scans to populate risk insights.</p>
                   </div>
-                ))}
+                )}
               </div>
             </div>
           )}
@@ -798,6 +910,9 @@ export default function Dashboard() {
       onClose={() => setShowRoleModal(false)}
       currentRole={user?.role_name}
     />
+    {briefingOpen && briefing && (
+      <AiBriefingModal summary={briefing} onClose={() => setBriefingOpen(false)} />
+    )}
     </>
   )
 }
@@ -810,5 +925,52 @@ function SevPill({ n, c, label }) {
       style={{ background: `${c}15`, color: c, border: `1px solid ${c}30` }}>
       {n} {label}
     </span>
+  )
+}
+
+function AiBriefingModal({ summary, onClose }) {
+  if (!summary) return null
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+      <div
+        className="rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto"
+        style={{
+          background: 'linear-gradient(170deg, rgba(20,20,20,0.96), rgba(15,15,15,0.93))',
+          border: '1px solid rgba(255,107,43,0.3)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 60px rgba(255,107,43,0.2)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-6 border-b border-white/10 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-white">AI Security Briefing</h3>
+            <p className="text-sm text-white/45 mt-1">Generated {formatBriefingDate(summary.generated_at)}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="p-6 flex flex-col gap-4">
+          <div className="flex flex-wrap gap-2">
+            <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">Model</span>
+            <span className="text-xs text-white/70">{summary.model || 'AI Summary'}</span>
+            {summary.scan_id && (
+              <span className="text-xs text-white/35">Scan {String(summary.scan_id).slice(0, 8)}</span>
+            )}
+          </div>
+          <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="text-sm text-white/75 whitespace-pre-wrap leading-relaxed">
+              {summary.summary}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

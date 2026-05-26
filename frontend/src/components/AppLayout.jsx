@@ -183,6 +183,16 @@ export default function AppLayout({ children }) {
             </NavItem>
           )}
 
+          {check('use_ai_summaries') && (
+            <NavItem to="/summaries" icon={
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            } label="Summaries" collapsed={!sidebarOpen} onNavigate={() => setMobileOpen(false)}>
+              Summaries
+            </NavItem>
+          )}
+
           {/* ── Activity ──────────────────────────────── */}
           <SectionLabel collapsed={!sidebarOpen}>Activity</SectionLabel>
 

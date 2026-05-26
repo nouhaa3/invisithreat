@@ -30,6 +30,7 @@ class P:
     RUN_SCAN                   = "run_scan"
     MANAGE_GITHUB_REPOS        = "manage_github_repos"
     MARK_FALSE_POSITIVE        = "mark_false_positive"
+    USE_AI_SUMMARIES           = "use_ai_summaries"
 
     # Results visible to Developer + Security Manager + Admin
     VIEW_SCAN_RESULTS          = "view_scan_results"
@@ -65,6 +66,7 @@ ROLE_PERMISSIONS: dict = {
         P.RUN_SCAN,
         P.MANAGE_GITHUB_REPOS,
         P.MARK_FALSE_POSITIVE,
+        P.USE_AI_SUMMARIES,
         P.VIEW_SCAN_RESULTS,
         P.VIEW_VULNERABILITIES,
     ],

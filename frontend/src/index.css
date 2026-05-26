@@ -36,7 +36,8 @@
   }
 
   body {
-    @apply text-white font-body antialiased;
+    @apply text-white font-body antialiased text-sm;
+    line-height: 1.6;
     background:
       radial-gradient(1200px 600px at 12% -20%, rgba(255,107,43,0.2), transparent 60%),
       radial-gradient(900px 540px at 90% 0%, rgba(255,156,110,0.12), transparent 55%),

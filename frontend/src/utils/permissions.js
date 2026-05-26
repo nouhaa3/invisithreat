@@ -21,6 +21,7 @@ export const PERMISSIONS = {
   RUN_SCAN:                   'run_scan',
   MANAGE_GITHUB_REPOS:        'manage_github_repos',
   MARK_FALSE_POSITIVE:        'mark_false_positive',
+  USE_AI_SUMMARIES:           'use_ai_summaries',
 
   // Results (Developer + Security Manager + Admin)
   VIEW_SCAN_RESULTS:          'view_scan_results',
@@ -54,6 +55,7 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.RUN_SCAN,
     PERMISSIONS.MANAGE_GITHUB_REPOS,
     PERMISSIONS.MARK_FALSE_POSITIVE,
+    PERMISSIONS.USE_AI_SUMMARIES,
     PERMISSIONS.VIEW_SCAN_RESULTS,
     PERMISSIONS.VIEW_VULNERABILITIES,
   ],

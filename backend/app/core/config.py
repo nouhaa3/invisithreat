@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     FEATURE_AI_TRIAGE: bool = False
     FEATURE_AI_REPORTING: bool = False
 
+    # LLM (Ollama)
+    OLLAMA_URL: str = "http://host.docker.internal:11434"
+    OLLAMA_MODEL: str = "mistral"
+    OLLAMA_TIMEOUT_SECONDS: int = 300
+    OLLAMA_MAX_RETRIES: int = 2
+    OLLAMA_RETRY_DELAY_SECONDS: float = 0.75
+
     @property
     def DATABASE_URL(self) -> str:
         """Return DB URL from DATABASE_URL when set, otherwise build from POSTGRES_* values."""

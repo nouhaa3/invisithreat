@@ -5,6 +5,7 @@ import {
   getProject,
   getScans,
   getScanResults,
+  generateScanSummary,
   deleteProject,
   createScan,
   startDastScan,
@@ -17,7 +18,10 @@ import {
 } from '../services/projectService'
 import { useAuth } from '../context/AuthContext'
 import { useUiFeedback } from '../context/UiFeedbackContext'
+import usePermissions from '../hooks/usePermissions'
 import { onScanStateChange, onScanProgressUpdate, isWebSocketConnected } from '../services/websocketService'
+import SummaryModal from '../components/SummaryModal'
+import { listAllSummaries, listProjectSummaries } from '../services/summaryService'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -25,6 +29,12 @@ const getApiBase = () => {
   const env = import.meta.env.VITE_API_URL
   if (env && !env.includes('localhost')) return env
   return `${window.location.protocol}//${window.location.hostname}:8000`
+}
+
+const getApiUrl = (path) => {
+  const base = getApiBase().replace(/\/$/, '')
+  const normalized = base.endsWith('/api') ? base : `${base}/api`
+  return `${normalized}${path}`
 }
 
 const toInt = (value) => {
@@ -43,6 +53,47 @@ const normalizeFindingLine = (value) => {
 const buildFindingFingerprint = (finding) => {
   const key = `${normalizeFindingText(finding?.rule_id || 'rule')}|${normalizeFindingText(finding?.title || 'untitled')}|${normalizeFindingText(finding?.file || finding?.path || '')}|${normalizeFindingLine(finding?.line)}`
   return key.length <= 190 ? key : key.slice(0, 190)
+}
+
+const isUuid = (value) => (
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    .test(String(value || '').trim())
+)
+
+const buildVulnerabilityPrompt = (finding, recommendation) => {
+  const severity = String(finding?.severity || 'info').toUpperCase()
+  const title = finding?.title || 'Untitled vulnerability'
+  const description = finding?.description || 'No description provided.'
+  const location = finding?.file
+    ? `Location: ${finding.file}${finding.line ? ` at line ${finding.line}` : ''}`
+    : null
+  const tool = finding?.source_tool ? `Tool that detected it: ${finding.source_tool}` : null
+  const recommendationLine = recommendation ? `Current recommendation: ${recommendation}` : null
+  const lines = [
+    `I need help with a ${severity} severity vulnerability found in my code.`,
+    `Title: ${title}`,
+    `Description: ${description}`,
+    location,
+    tool,
+    recommendationLine,
+    'Please explain this vulnerability clearly and provide',
+    'step-by-step remediation instructions.',
+  ].filter(Boolean)
+  return lines.join('\n')
+}
+
+const buildVulnerabilityContextPayload = (finding, recommendation) => {
+  const lineNumber = Number(finding?.line)
+  return {
+    title: finding?.title || null,
+    description: finding?.description || null,
+    severity: finding?.severity || null,
+    file_path: finding?.file || finding?.path || null,
+    line_number: Number.isFinite(lineNumber) ? Math.trunc(lineNumber) : null,
+    recommendation: recommendation || null,
+    source_tool: finding?.source_tool || null,
+    rule_id: finding?.rule_id || null,
+  }
 }
 
 const parseScanResults = (resultsJson) => {
@@ -206,7 +257,7 @@ function PulseDot({ color }) {
 
 // ─── Findings Panel ──────────────────────────────────────────────────────────
 
-function FindingsPanel({ results }) {
+function FindingsPanel({ results, workflowTaskByFingerprint, aiEnabled, onAskAi }) {
   const [filter, setFilter] = useState('all')
   const summary = results.summary || {}
   const findings = results.findings || []
@@ -261,8 +312,19 @@ function FindingsPanel({ results }) {
       <div className="flex flex-col gap-2">
         {filtered.map((f, i) => {
           const cfg = SEVERITY_CONFIG[f.severity] || SEVERITY_CONFIG.info
+          const fingerprint = buildFindingFingerprint(f)
+          const workflowTask = workflowTaskByFingerprint?.[fingerprint] || null
+          const recommendation = f.recommendation || RECOMMENDATIONS[f.rule_id]
           return (
-            <FindingRow key={f.id || i} finding={f} cfg={cfg} />
+            <FindingRow
+              key={f.id || i}
+              finding={f}
+              cfg={cfg}
+              workflowTask={workflowTask}
+              recommendation={recommendation}
+              aiEnabled={aiEnabled}
+              onAskAi={onAskAi}
+            />
           )
         })}
       </div>
@@ -277,8 +339,9 @@ function FindingsPanel({ results }) {
   )
 }
 
-function FindingRow({ finding, cfg }) {
+function FindingRow({ finding, cfg, workflowTask, recommendation, aiEnabled, onAskAi }) {
   const [expanded, setExpanded] = useState(false)
+  const aiTargetId = workflowTask?.id || (isUuid(finding?.id) ? finding.id : null)
   return (
     <div className="rounded-xl overflow-hidden transition-all"
       style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid rgba(255,255,255,0.05)` }}>
@@ -324,14 +387,30 @@ function FindingRow({ finding, cfg }) {
           )}
 
           {/* Recommendation */}
-          {(finding.recommendation || RECOMMENDATIONS[finding.rule_id]) && (
+          {recommendation && (
             <div className="mt-3 rounded-lg px-3 py-2.5"
               style={{ background: 'rgba(255,107,43,0.05)', border: '1px solid rgba(255,107,43,0.15)' }}>
               <p className="text-[11px] font-semibold uppercase tracking-widest mb-1.5"
                 style={{ color: 'rgba(255,107,43,0.6)' }}>Recommendation</p>
               <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                {finding.recommendation || RECOMMENDATIONS[finding.rule_id]}
+                {recommendation}
               </p>
+            </div>
+          )}
+
+          {aiEnabled && onAskAi && (
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => onAskAi(finding, aiTargetId, recommendation)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all"
+                style={{ background: 'transparent', border: '1px solid rgba(255,107,43,0.4)', color: '#FF8C5A' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2l1.6 4.7 4.9 1.3-4.1 3 1.6 4.7-4-2.9-4 2.9 1.6-4.7-4.1-3 4.9-1.3L12 2z" />
+                </svg>
+                Ask AI for help
+              </button>
             </div>
           )}
 
@@ -357,6 +436,8 @@ function CurrentFindingRow({
   onSaveTask,
   onSendComment,
   currentUserId,
+  aiEnabled,
+  onAskAi,
 }) {
   const [expanded, setExpanded] = useState(false)
   const [localStatus, setLocalStatus] = useState(workflowTask?.status || 'open')
@@ -378,6 +459,7 @@ function CurrentFindingRow({
   const taskStatusCfg = TASK_STATUS_CONFIG[taskStatus] || TASK_STATUS_CONFIG.open
   const comments = Array.isArray(workflowTask?.comments) ? workflowTask.comments : []
   const hasWorkflowTask = Boolean(workflowTask?.id)
+  const aiTargetId = workflowTask?.id || (isUuid(finding?.id) ? finding.id : null)
   const statusLabel = hasWorkflowTask ? taskStatusCfg.label : 'Syncing'
   const statusStyle = hasWorkflowTask
     ? { background: taskStatusCfg.bg, border: `1px solid ${taskStatusCfg.border}`, color: taskStatusCfg.color }
@@ -514,6 +596,22 @@ function CurrentFindingRow({
             </div>
           )}
 
+          {aiEnabled && onAskAi && (
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => onAskAi(finding, aiTargetId, recommendation)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all"
+                style={{ background: 'transparent', border: '1px solid rgba(255,107,43,0.4)', color: '#FF8C5A' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2l1.6 4.7 4.9 1.3-4.1 3 1.6 4.7-4-2.9-4 2.9 1.6-4.7-4.1-3 4.9-1.3L12 2z" />
+                </svg>
+                Ask AI for help
+              </button>
+            </div>
+          )}
+
           <div className="mt-3 rounded-lg px-3 py-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-white/30 mb-2">Action Tracking</p>
             {hasWorkflowTask ? (
@@ -642,14 +740,28 @@ function CurrentFindingRow({
 
 // ─── Scan Row ────────────────────────────────────────────────────────────────
 
-const ScanRow = memo(function ScanRow({ scan, onRescan, rescanning, resultsJson, resultsSummary, onLoadResults, autoExpand }) {
+const ScanRow = memo(function ScanRow({
+  scan,
+  onRescan,
+  rescanning,
+  resultsJson,
+  resultsSummary,
+  onLoadResults,
+  autoExpand,
+  workflowTaskByFingerprint,
+  aiEnabled,
+  onAskAi,
+}) {
   const [expanded, setExpanded] = useState(false)
   const status = STATUS_CONFIG[scan.status] || STATUS_CONFIG.pending
   const method = METHOD_CONFIG[scan.method] || METHOD_CONFIG.cli
   const jobState = String(scan.job_state || '')
-  const isActive = scan.status === 'pending'
-    || scan.status === 'running'
-    || ['PENDING', 'QUEUED', 'RUNNING', 'RETRYING'].includes(jobState)
+  const isActive = (scan.status !== 'completed' && scan.status !== 'failed')
+    && (
+      scan.status === 'pending'
+      || scan.status === 'running'
+      || ['PENDING', 'QUEUED', 'RUNNING', 'RETRYING'].includes(jobState)
+    )
 
   const isPendingToken = typeof resultsJson === 'string' && resultsJson.startsWith('__pending_token:')
   const canExpandResults = scan.status === 'completed' && !isPendingToken
@@ -784,7 +896,12 @@ const ScanRow = memo(function ScanRow({ scan, onRescan, rescanning, resultsJson,
       {/* Expanded results */}
       {expanded && results && (
         <div className="px-5 pb-5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-          <FindingsPanel results={results} />
+          <FindingsPanel
+            results={results}
+            workflowTaskByFingerprint={workflowTaskByFingerprint}
+            aiEnabled={aiEnabled}
+            onAskAi={onAskAi}
+          />
         </div>
       )}
       {isLoadingResults && (
@@ -830,6 +947,178 @@ function RescanCmd({ label, children }) {
   )
 }
 
+function AiAssistPanel({
+  open,
+  finding,
+  messages,
+  input,
+  onInputChange,
+  onSend,
+  onClose,
+  loading,
+  quickActions,
+  onQuickAction,
+  wide,
+  onToggleSize,
+}) {
+  const cfg = SEVERITY_CONFIG[finding?.severity] || SEVERITY_CONFIG.info
+  const title = finding?.title || 'Vulnerability'
+  const subtitle = finding?.file ? `${finding.file}${finding.line ? `:${finding.line}` : ''}` : null
+
+  return (
+    <div className={`fixed inset-0 z-50 ${open ? '' : 'pointer-events-none'}`}>
+      <div
+        className={`absolute inset-0 transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0'}`}
+        style={{ background: 'rgba(0,0,0,0.6)' }}
+        onClick={onClose}
+      />
+      <aside
+        className={`absolute right-0 top-0 h-full w-full ${wide ? 'sm:w-[640px]' : 'sm:w-[360px]'} flex flex-col transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}
+        style={{ background: '#121212', borderLeft: '1px solid rgba(255,255,255,0.08)' }}
+      >
+        <div className="px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] uppercase tracking-widest text-white/40">AI Assistant</p>
+              <p className="text-sm text-white/85 mt-1">{title}</p>
+              {subtitle && <p className="text-xs text-white/35 mt-1">{subtitle}</p>}
+              <span
+                className="inline-flex mt-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase"
+                style={{ background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color }}
+              >
+                {cfg.label}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onToggleSize}
+                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                aria-label={wide ? 'Reduce panel' : 'Expand panel'}
+                title={wide ? 'Reduce panel' : 'Expand panel'}
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)' }}
+              >
+                {wide ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2">
+                    <path d="M7 7h10v10H7z" />
+                    <path d="M3 3h6v2H5v4H3z" />
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2">
+                    <path d="M3 3h7v2H5v5H3z" />
+                    <path d="M21 21h-7v-2h5v-5h2z" />
+                    <path d="M8 8h8v8H8z" />
+                  </svg>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                aria-label="Close panel"
+                title="Close panel"
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-auto px-5 py-4 space-y-3">
+          {(messages || []).length === 0 && (
+            <div className="text-xs text-white/35">
+              Ask anything about this vulnerability and I will help with remediation steps.
+            </div>
+          )}
+          {(messages || []).map((msg, idx) => {
+            const isUser = msg.role === 'user'
+            const bubbleStyle = isUser
+              ? { background: 'rgba(255,107,43,0.18)', border: '1px solid rgba(255,107,43,0.3)' }
+              : msg.isError
+                ? { background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)' }
+                : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }
+            return (
+              <div key={`${msg.role}-${idx}`} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                <div className="max-w-[85%] px-3 py-2 rounded-xl text-xs leading-relaxed" style={bubbleStyle}>
+                  {!isUser && (
+                    <div className="flex items-center gap-1.5 text-[10px] text-white/45 mb-1">
+                      <span className="w-4 h-4 rounded-full flex items-center justify-center"
+                        style={{ background: 'rgba(255,107,43,0.18)', color: '#FF8C5A' }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M12 2l1.6 4.7 4.9 1.3-4.1 3 1.6 4.7-4-2.9-4 2.9 1.6-4.7-4.1-3 4.9-1.3L12 2z" />
+                        </svg>
+                      </span>
+                      AI
+                    </div>
+                  )}
+                  <p
+                    className="text-white/85 whitespace-pre-wrap break-words"
+                    style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+                  >
+                    {msg.content}
+                    {msg.isStreaming && (
+                      <span
+                        className="inline-block w-1.5 h-3 ml-1 align-middle rounded-sm animate-pulse"
+                        style={{ background: '#FF8C5A' }}
+                      />
+                    )}
+                  </p>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="px-5 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {(quickActions || []).map((action) => (
+              <button
+                key={action.label}
+                type="button"
+                onClick={() => onQuickAction(action.prompt)}
+                disabled={loading}
+                className="px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all disabled:opacity-60"
+                style={{ background: 'rgba(255,107,43,0.08)', border: '1px solid rgba(255,107,43,0.2)', color: '#FF8C5A' }}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              onSend(input)
+            }}
+            className="flex items-center gap-2"
+          >
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => onInputChange(e.target.value)}
+              placeholder="Ask a follow-up question"
+              className="flex-1 px-3 py-2 rounded-lg text-xs text-white placeholder:text-white/30 focus:outline-none"
+              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
+            />
+            <button
+              type="submit"
+              disabled={loading || !input.trim()}
+              className="px-3 py-2 rounded-lg text-xs font-semibold text-white disabled:opacity-55"
+              style={{ background: 'linear-gradient(135deg, #FF6B2B, #C13A00)' }}
+            >
+              Send
+            </button>
+          </form>
+        </div>
+      </aside>
+    </div>
+  )
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function ProjectDetail() {
@@ -837,6 +1126,7 @@ export default function ProjectDetail() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user } = useAuth()
+  const { canUseAiSummaries } = usePermissions()
   const { toast } = useUiFeedback()
   const [project, setProject] = useState(null)
   const [scans, setScans] = useState([])
@@ -850,6 +1140,18 @@ export default function ProjectDetail() {
   const [workflowNote, setWorkflowNote] = useState('')
   const [workflowSubmitting, setWorkflowSubmitting] = useState(null)
   const [workflowFeedback, setWorkflowFeedback] = useState(null)
+  const [aiSummary, setAiSummary] = useState(null)
+  const [aiSummaryError, setAiSummaryError] = useState(null)
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false)
+  const [showAiModal, setShowAiModal] = useState(false)
+  const [aiEnabled, setAiEnabled] = useState(canUseAiSummaries)
+  const [aiPanelOpen, setAiPanelOpen] = useState(false)
+  const [aiPanelWide, setAiPanelWide] = useState(false)
+  const [aiTarget, setAiTarget] = useState(null)
+  const [aiMessages, setAiMessages] = useState([])
+  const [aiInput, setAiInput] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiStreaming, setAiStreaming] = useState(false)
   const [autoExpandScanId, setAutoExpandScanId] = useState(null)
   const [vulnerabilityWorkflow, setVulnerabilityWorkflow] = useState({
     scan_id: null,
@@ -864,6 +1166,8 @@ export default function ProjectDetail() {
   const scanResultsByIdRef = useRef({})
   const scanResultsInFlightRef = useRef(new Set())
   const autoExpandRef = useRef(false)
+  const aiRequestIdRef = useRef(0)
+  const aiAbortRef = useRef(null)
 
   const syncActiveDastStatuses = useCallback(async (scanList) => {
     const activeDast = (scanList || []).filter(
@@ -1122,6 +1426,184 @@ export default function ProjectDetail() {
     }
   }
 
+  const handleGenerateAiSummary = async () => {
+    // open modal to allow user to pick which completed scan to analyze
+    if (!canUseAiSummaries) {
+      return
+    }
+    setShowAiModal(true)
+  }
+
+  const handleModalGenerate = async (scanId, maxFindings = 12) => {
+    setShowAiModal(false)
+    if (!scanId) {
+      toast({ type: 'error', message: 'No scan selected.' })
+      return
+    }
+    if (aiSummaryLoading) return
+    setAiSummaryLoading(true)
+    setAiSummaryError(null)
+    try {
+      const result = await generateScanSummary(scanId, maxFindings)
+      setAiSummary(result)
+      // attempt to refresh summaries in background
+      try { await listProjectSummaries(project.id) } catch (e) { /* ignore */ }
+    } catch (err) {
+      setAiSummaryError(err.response?.data?.detail || 'Failed to generate AI summary.')
+    } finally {
+      setAiSummaryLoading(false)
+    }
+  }
+
+  const aiQuickActions = [
+    { label: 'Explain in plain language', prompt: 'Explain this vulnerability in plain language.' },
+    { label: 'Step-by-step fix plan', prompt: 'Provide a step-by-step remediation plan with code-level guidance.' },
+    { label: 'Validation checklist', prompt: 'How can I validate the fix and prevent regressions?' },
+  ]
+
+  const closeAiPanel = () => {
+    aiRequestIdRef.current += 1
+    if (aiAbortRef.current) {
+      aiAbortRef.current.abort()
+      aiAbortRef.current = null
+    }
+    setAiPanelOpen(false)
+    setAiPanelWide(false)
+    setAiTarget(null)
+    setAiMessages([])
+    setAiInput('')
+    setAiLoading(false)
+    setAiStreaming(false)
+  }
+
+  const sendAiRequest = async (conversation, target) => {
+    if (!project?.id && !id) return
+    const requestId = ++aiRequestIdRef.current
+    if (aiAbortRef.current && aiStreaming) {
+      aiAbortRef.current.abort()
+    }
+    const controller = new AbortController()
+    aiAbortRef.current = controller
+    setAiLoading(true)
+    setAiStreaming(true)
+
+    const payload = {
+      vulnerability_id: target?.vulnerabilityId || undefined,
+      project_id: project?.id || id,
+      context: target?.context || undefined,
+      conversation: (conversation || []).map(({ role, content }) => ({ role, content })),
+    }
+
+    try {
+      const response = await fetch(getApiUrl('/llm/vulnerability-assist'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      })
+
+      if (!response.ok || !response.body) {
+        const message = response.status === 403
+          ? 'AI features are disabled.'
+          : 'AI assistant is temporarily unavailable. Please try again.'
+        if (response.status === 403) {
+          setAiEnabled(false)
+        }
+        setAiMessages((prev) => [...prev, { role: 'assistant', content: message, isError: true }])
+        return
+      }
+
+      setAiMessages((prev) => [...prev, { role: 'assistant', content: '', isStreaming: true }])
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (aiRequestIdRef.current !== requestId) return
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed.startsWith('data:')) continue
+          const chunk = trimmed.replace(/^data:\s?/, '')
+          if (!chunk) continue
+          if (aiRequestIdRef.current !== requestId) return
+          setAiMessages((prev) => {
+            if (!prev.length) return prev
+            const updated = [...prev]
+            const last = updated[updated.length - 1]
+            if (last.role !== 'assistant') {
+              updated.push({ role: 'assistant', content: chunk, isStreaming: true })
+            } else {
+              updated[updated.length - 1] = {
+                ...last,
+                content: `${last.content || ''}${chunk}`,
+              }
+            }
+            return updated
+          })
+        }
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') return
+      if (aiRequestIdRef.current !== requestId) return
+      setAiMessages((prev) => [...prev, { role: 'assistant', content: 'AI assistant is temporarily unavailable. Please try again.', isError: true }])
+    } finally {
+      if (aiRequestIdRef.current === requestId) {
+        setAiLoading(false)
+        setAiStreaming(false)
+        if (aiAbortRef.current === controller) {
+          aiAbortRef.current = null
+        }
+        setAiMessages((prev) => {
+          if (!prev.length) return prev
+          const updated = [...prev]
+          const last = updated[updated.length - 1]
+          if (last.role === 'assistant' && last.isStreaming) {
+            updated[updated.length - 1] = { ...last, isStreaming: false }
+          }
+          return updated
+        })
+      }
+    }
+  }
+
+  const handleAskAi = (finding, vulnerabilityId, recommendation) => {
+    if (!aiEnabled || !finding) return
+    const context = buildVulnerabilityContextPayload(finding, recommendation)
+    const initialMessages = []
+    setAiTarget({ finding, vulnerabilityId, context })
+    setAiMessages(initialMessages)
+    setAiInput('')
+    setAiPanelOpen(true)
+    sendAiRequest(initialMessages, { vulnerabilityId, context })
+  }
+
+  const handleAiSend = (message) => {
+    const trimmed = (message || '').trim()
+    if (!trimmed || aiLoading || aiStreaming || !aiTarget) return
+    setAiMessages((prev) => {
+      const next = [...prev, { role: 'user', content: trimmed }]
+      sendAiRequest(next, {
+        vulnerabilityId: aiTarget.vulnerabilityId,
+        context: null,
+      })
+      return next
+    })
+    setAiInput('')
+  }
+
+  const handleAiQuickAction = (prompt) => {
+    if (aiLoading) return
+    handleAiSend(prompt)
+  }
+
   const statsData = [
     { label: 'Total Scans',      value: scans.length },
     { label: 'Completed',        value: scans.filter(s => s.status === 'completed').length },
@@ -1135,6 +1617,9 @@ export default function ProjectDetail() {
 
   const isScanActive = (scan) => {
     const jobState = String(scan.job_state || '')
+    if (scan.status === 'completed' || scan.status === 'failed') {
+      return false
+    }
     return scan.status === 'pending'
       || scan.status === 'running'
       || ['PENDING', 'QUEUED', 'RUNNING', 'RETRYING'].includes(jobState)
@@ -1159,13 +1644,6 @@ export default function ProjectDetail() {
         label: 'Echec du scan',
         tone: 'error',
         detail: latestScan.error_message || 'Le scan a echoue. Veuillez relancer une analyse.',
-      }
-    }
-    if (latestScan.status === 'completed') {
-      return {
-        label: 'Resultats disponibles',
-        tone: 'success',
-        detail: 'Le dernier scan est termine. Consultez les resultats ci-dessous.',
       }
     }
     if ((latestScan.method === 'cli' && latestHasPendingToken)
@@ -1194,10 +1672,48 @@ export default function ProjectDetail() {
   const completedScans = scans.filter(s => s.status === 'completed')
   const latestCompletedScan = completedScans[0] || null
   const previousCompletedScan = completedScans[1] || null
+  const canGenerateAiSummary = canUseAiSummaries && Boolean(latestCompletedScan?.id)
   const latestResultsJson = latestCompletedScan ? scanResultsById[latestCompletedScan.id] : null
   const previousResultsJson = previousCompletedScan ? scanResultsById[previousCompletedScan.id] : null
   const latestSummary = summarizeScan(latestCompletedScan, latestResultsJson, latestCompletedScan?.results_summary)
   const previousSummary = summarizeScan(previousCompletedScan, previousResultsJson, previousCompletedScan?.results_summary)
+
+  useEffect(() => {
+    setAiSummary(null)
+    setAiSummaryError(null)
+  }, [latestCompletedScan?.id])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const checkAiAvailability = async () => {
+      if (!canUseAiSummaries) {
+        if (isMounted) {
+          setAiEnabled(false)
+        }
+        return
+      }
+
+      try {
+        await listAllSummaries()
+        if (isMounted) {
+          setAiEnabled(true)
+        }
+      } catch (err) {
+        if (isMounted) {
+          if (err.response?.status === 403) {
+            setAiEnabled(false)
+          }
+        }
+      }
+    }
+
+    checkAiAvailability()
+
+    return () => {
+      isMounted = false
+    }
+  }, [canUseAiSummaries])
 
   const hasTrendBaseline = Boolean(latestCompletedScan && previousCompletedScan)
   const findingsDelta = hasTrendBaseline ? latestSummary.total - previousSummary.total : 0
@@ -1354,6 +1870,29 @@ export default function ProjectDetail() {
     <AppLayout>
       <main className="flex-1 overflow-auto">
         <div className="px-8 py-8">
+          {canUseAiSummaries && (
+            <SummaryModal
+              open={Boolean(showAiModal)}
+              onClose={() => setShowAiModal(false)}
+              scans={scans.filter(s => s.status === 'completed')}
+              onGenerate={handleModalGenerate}
+            />
+          )}
+
+          <AiAssistPanel
+            open={aiPanelOpen}
+            finding={aiTarget?.finding}
+            messages={aiMessages}
+            input={aiInput}
+            onInputChange={setAiInput}
+            onSend={handleAiSend}
+            onClose={closeAiPanel}
+            loading={aiLoading}
+            quickActions={aiQuickActions}
+            onQuickAction={handleAiQuickAction}
+            wide={aiPanelWide}
+            onToggleSize={() => setAiPanelWide((prev) => !prev)}
+          />
 
           {/* Header */}
           <div className="mb-8 animate-slide-up">
@@ -1509,6 +2048,79 @@ export default function ProjectDetail() {
             ))}
           </div>
 
+          {/* AI Summary */}
+          {canUseAiSummaries && (
+            <div className="rounded-2xl px-5 py-5 mb-6 animate-slide-up"
+              style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)', animationDelay: '0.055s' }}>
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <p className="text-xs font-semibold text-white/35 uppercase tracking-widest">AI Summary</p>
+                  <p className="text-xs text-white/28 mt-1">Powered by {aiSummary?.model || 'mistral'} via Ollama</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleGenerateAiSummary}
+                  disabled={!canGenerateAiSummary || aiSummaryLoading}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                  style={{ background: 'rgba(255,107,43,0.1)', border: '1px solid rgba(255,107,43,0.25)', color: '#ff8c5a' }}
+                >
+                  {aiSummaryLoading ? 'Generating...' : 'Generate AI Summary'}
+                </button>
+              </div>
+
+              {!canGenerateAiSummary && (
+                <p className="text-xs text-white/30">Complete a scan to enable AI summary generation.</p>
+              )}
+
+              {aiSummaryError && (
+                <p className="text-xs text-red-300/80 mt-2">{aiSummaryError}</p>
+              )}
+
+              {!aiSummary && !aiSummaryError && canGenerateAiSummary && (
+                <p className="text-xs text-white/30">No AI summary yet. Generate one from the latest completed scan.</p>
+              )}
+
+              {aiSummary && (
+                <div className="mt-3 flex flex-col gap-3">
+                  <div>
+                    <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Summary</p>
+                    <p className="text-sm text-white/80">{aiSummary.summary}</p>
+                  </div>
+                  {aiSummary.priorities?.length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Priorities</p>
+                      <ul className="text-xs text-white/70 space-y-1">
+                        {aiSummary.priorities.slice(0, 5).map((item, idx) => (
+                          <li key={`priority-${idx}`}>• {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {aiSummary.remediation_steps?.length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Remediation Steps</p>
+                      <ul className="text-xs text-white/70 space-y-1">
+                        {aiSummary.remediation_steps.slice(0, 5).map((item, idx) => (
+                          <li key={`remediation-${idx}`}>• {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {aiSummary.references?.length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">References</p>
+                      <ul className="text-xs text-white/70 space-y-1">
+                        {aiSummary.references.slice(0, 5).map((item, idx) => (
+                          <li key={`ref-${idx}`}>• {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Security manager workflow */}
           {isSecurityManagerView && (
             <div className="rounded-2xl px-5 py-5 mb-6 animate-slide-up"
@@ -1662,6 +2274,9 @@ export default function ProjectDetail() {
                   resultsSummary={scan.results_summary}
                   onLoadResults={fetchScanResults}
                   autoExpand={scan.id === autoExpandScanId}
+                  workflowTaskByFingerprint={workflowTaskByFingerprint}
+                  aiEnabled={aiEnabled}
+                  onAskAi={handleAskAi}
                 />
               ))
             )}
@@ -1749,6 +2364,8 @@ export default function ProjectDetail() {
                           onSaveTask={saveVulnerabilityTask}
                           onSendComment={sendVulnerabilityComment}
                           currentUserId={user?.id}
+                          aiEnabled={aiEnabled}
+                          onAskAi={handleAskAi}
                         />
                       )
                     })}
