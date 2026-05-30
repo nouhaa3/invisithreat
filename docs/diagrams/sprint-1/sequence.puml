@@ -1,0 +1,94 @@
+@startuml
+title Sprint 1 - Securite et gouvernance (login, 2FA, RBAC, audit)
+actor "Utilisateur" as U
+actor "Admin" as A
+boundary "IHM Auth" as UI
+boundary "IHM Admin" as AUI
+control "AuthController" as AC
+control "TOTPController" as TC
+control "AuthService" as AS
+control "TOTPService" as TS
+control "SessionManager" as SM
+control "AuditLogService" as ALS
+control "NotificationService" as NS
+entity "UserModel" as UM
+entity "RoleModel" as RM
+entity "AuthTokenModel" as ATM
+entity "AuditLogModel" as ALM
+database "Base de donnees" as DB
+participant "EmailService" as EMAIL
+participant "SocketIO" as WS
+
+U -> UI: saisir email + mot de passe
+UI -> AC: POST /auth/login
+AC -> AS: authenticate_user(email, password)
+AS -> UM: charger user
+UM -> DB: SELECT user
+DB --> UM: user
+AS --> AC: user ok
+
+alt TOTP active
+    AC -> AC: create_totp_token()
+    AC --> UI: totp_required + token
+    U -> UI: saisir code TOTP
+    UI -> TC: POST /auth/2fa/verify-login
+    TC -> TS: verify_totp(secret, code)
+    TS -> UM: charger secret
+    UM -> DB: SELECT user
+    DB --> UM: secret
+    TS --> TC: ok
+    TC -> SM: create_refresh_session()
+    SM -> ATM: insert refresh token
+    ATM -> DB: INSERT auth_token
+    DB --> ATM: ok
+    TC --> UI: access + refresh tokens
+else TOTP inactive
+    AC -> SM: create_refresh_session()
+    SM -> ATM: insert refresh token
+    ATM -> DB: INSERT auth_token
+    DB --> ATM: ok
+    AC -> ALS: create_audit_log("login", ip)
+    ALS -> ALM: new AuditLog
+    ALM -> DB: INSERT audit_log
+    DB --> ALM: ok
+    AC --> UI: access + refresh tokens
+end
+UI --> U: session ouverte
+
+opt role upgrade request (RBAC)
+    U -> UI: demander role
+    UI -> AC: POST /auth/request-role
+    AC -> RM: trouver role cible
+    RM -> DB: SELECT role
+    DB --> RM: role
+    AC -> UM: set requested_role_id
+    UM -> DB: UPDATE user
+    AC -> ALS: create_audit_log("role_request")
+    ALS -> ALM: INSERT audit_log
+    ALM -> DB: ok
+    AC -> NS: create_notification(admins + user)
+    NS -> DB: INSERT notifications
+    NS -> WS: emit_notification_created
+    AC -> EMAIL: notify_admin_role_request + notify_user_role_request_received
+    AC --> UI: status pending
+end
+
+opt admin approval
+    A -> AUI: approuver role
+    AUI -> AC: POST /auth/admin/users/{id}/approve-role-request
+    AC -> UM: charger user + requested role
+    UM -> DB: SELECT user
+    AC -> RM: charger role
+    RM -> DB: SELECT role
+    AC -> UM: update role_id + clear request
+    UM -> DB: UPDATE user
+    AC -> ALS: create_audit_log("role_approved")
+    ALS -> ALM: INSERT audit_log
+    ALM -> DB: ok
+    AC -> NS: create_notification(user + admin)
+    NS -> DB: INSERT notifications
+    NS -> WS: emit_notification_created
+    AC -> EMAIL: notify_user_role_request_approved
+    AC --> AUI: OK
+end
+@enduml

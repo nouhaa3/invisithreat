@@ -1,0 +1,63 @@
+@startuml
+title Sprint 5 - Workflow et suivi (remediation + dashboard)
+actor "Security Manager" as SEC
+boundary "IHM Workflow" as UI
+control "WorkflowController" as WC
+control "ProjectService" as PS
+entity "ProjectModel" as PM
+entity "ScanModel" as SM
+control "VulnWorkflowService" as VWS
+entity "VulnerabilityTaskModel" as VTM
+entity "VulnerabilityTaskComment" as VTC
+control "NotificationService" as NS
+control "SocketIOManager" as WS
+database "Base de donnees" as DB
+control "DashboardController" as DC
+control "ScanSummaryCache" as SSC
+control "RiskScoreService" as RS
+entity "RiskScoreModel" as RSM
+
+SEC -> UI: ouvrir workflow vulnerabilities
+UI -> WC: GET /projects/{id}/security/vulnerability-tasks?sync=auto
+WC -> PS: get_project_accessible()
+PS -> PM: charger project
+PM -> DB: SELECT project
+DB --> PM: project
+WC -> SM: charger latest scan completed
+SM -> DB: SELECT scan
+DB --> SM: scan
+alt auto sync needed
+    WC -> VWS: sync_vulnerability_tasks_for_scan()
+    VWS -> VTM: UPSERT tasks
+    VTM -> DB: ok
+end
+WC --> UI: tasks + assignees
+
+SEC -> UI: assigner / changer statut
+UI -> WC: PATCH /projects/{id}/security/vulnerability-tasks/{task_id}
+WC -> VTM: update task + status
+VTM -> DB: UPDATE task
+WC -> VTC: create comment (optionnel)
+VTC -> DB: INSERT comment
+WC -> NS: create_notification(assignee, security)
+NS -> DB: INSERT notification
+NS -> WS: emit_notification_created
+WC --> UI: task updated
+
+SEC -> UI: demander fixes ou rescan
+UI -> WC: POST /projects/{id}/security/workflow-action
+WC -> NS: create_notification(owner + members)
+NS -> DB: INSERT notification
+NS -> WS: emit_notification_created
+WC --> UI: action OK
+
+opt dashboard stats
+    SEC -> UI: ouvrir dashboard
+    UI -> DC: GET /dashboard/stats
+    DC -> SSC: get_scan_summary()
+    DC -> RS: read risk score
+    RS -> RSM: SELECT risk_score
+    RSM -> DB: ok
+    DC --> UI: metrics + risk overview
+end
+@enduml
