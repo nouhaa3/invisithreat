@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
+import Pagination, { PAGE_SIZE } from '../components/Pagination'
 import {
   getProject,
   getScans,
@@ -293,11 +294,14 @@ function FindingsPanel({
   onAskAi,
 }) {
   const [filter, setFilter] = useState('all')
+  const [findingsPage, setFindingsPage] = useState(0)
   const summary = results.summary || {}
   const findings = results.findings || []
 
   const filtered = filter === 'all' ? findings : findings.filter(f => f.severity === filter)
   const severities = ['critical', 'high', 'medium', 'low']
+
+  useEffect(() => { setFindingsPage(0) }, [filter])
 
   return (
     <div className="mt-4">
@@ -344,7 +348,7 @@ function FindingsPanel({
 
       {/* Finding rows */}
       <div className="flex flex-col gap-2">
-        {filtered.map((f, i) => {
+        {filtered.slice(findingsPage * PAGE_SIZE, (findingsPage + 1) * PAGE_SIZE).map((f, i) => {
           const cfg = SEVERITY_CONFIG[f.severity] || SEVERITY_CONFIG.info
           const recommendation = f.recommendation || RECOMMENDATIONS[f.rule_id]
 
@@ -398,6 +402,7 @@ function FindingsPanel({
           {summary.scanned_files} files scanned — {summary.tool} v{summary.version}
         </p>
       )}
+      <Pagination page={findingsPage} totalPages={Math.ceil(filtered.length / PAGE_SIZE)} onPageChange={setFindingsPage} />
     </div>
   )
 }
@@ -1345,6 +1350,8 @@ export default function ProjectDetail() {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiStreaming, setAiStreaming] = useState(false)
   const [autoExpandScanId, setAutoExpandScanId] = useState(null)
+  const [scansPage, setScansPage] = useState(0)
+  const [vulnPage, setVulnPage] = useState(0)
   const [vulnerabilityWorkflow, setVulnerabilityWorkflow] = useState({
     scan_id: null,
     tasks: [],
@@ -2506,7 +2513,7 @@ export default function ProjectDetail() {
                 )}
               </div>
             ) : (
-              scans.map((scan) => {
+              scans.slice(scansPage * PAGE_SIZE, (scansPage + 1) * PAGE_SIZE).map((scan) => {
                 const workflowEnabled = Boolean(
                   vulnerabilityWorkflow.scan_id &&
                   String(scan.id) === String(vulnerabilityWorkflow.scan_id)
@@ -2535,6 +2542,7 @@ export default function ProjectDetail() {
                 )
               })
             )}
+            <Pagination page={scansPage} totalPages={Math.ceil(scans.length / PAGE_SIZE)} onPageChange={setScansPage} />
           </div>
 
           {/* Current Vulnerabilities — always visible, latest completed scan */}
@@ -2592,7 +2600,7 @@ export default function ProjectDetail() {
                 {/* Findings list */}
                 <div className="px-5 py-4">
                   <div className="flex flex-col gap-2">
-                    {findings.map((f, i) => {
+                    {findings.slice(vulnPage * PAGE_SIZE, (vulnPage + 1) * PAGE_SIZE).map((f, i) => {
                       const isRecurring = prev && prevKeys.has(`${f.rule_id}:${f.file}:${f.line}`)
                       const cfg = SEVERITY_CONFIG[f.severity] || SEVERITY_CONFIG.info
                       const rec = f.recommendation || RECOMMENDATIONS[f.rule_id]
@@ -2625,6 +2633,7 @@ export default function ProjectDetail() {
                       )
                     })}
                   </div>
+                  <Pagination page={vulnPage} totalPages={Math.ceil(findings.length / PAGE_SIZE)} onPageChange={setVulnPage} />
                 </div>
               </div>
             )

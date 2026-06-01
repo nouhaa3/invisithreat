@@ -10,6 +10,7 @@ import { listApiKeys, createApiKey, revokeApiKey } from '../services/apiKeyServi
 import { getMyAuditLogs } from '../services/auditLogService'
 import * as totpService from '../services/totpService'
 import ImageCropper from '../components/ImageCropper'
+import Pagination, { PAGE_SIZE } from '../components/Pagination'
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
@@ -766,6 +767,7 @@ function ApiKeysTab() {
   }
 
   const activeCount  = keys.filter(k => k.is_active).length
+  const [keysPage, setKeysPage] = useState(0)
 
   return (
     <div>
@@ -831,7 +833,7 @@ function ApiKeysTab() {
           </div>
         ) : keys.length === 0 ? (
           <div className="text-center py-12 text-white/20 text-sm">No API keys yet. Generate one above.</div>
-        ) : keys.map(k => (
+        ) : keys.slice(keysPage * PAGE_SIZE, (keysPage + 1) * PAGE_SIZE).map(k => (
           <div key={k.id} className="flex items-center gap-4 px-4 py-3.5 rounded-xl"
             style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -859,6 +861,7 @@ function ApiKeysTab() {
             )}
           </div>
         ))}
+        {!loading && <Pagination page={keysPage} totalPages={Math.ceil(keys.length / PAGE_SIZE)} onPageChange={setKeysPage} />}
       </div>
     </div>
   )
@@ -996,6 +999,7 @@ function IntegrationsTab() {
 function LogsTab({ user }) {
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [logsPage, setLogsPage] = useState(0)
 
   useEffect(() => {
     getMyAuditLogs()
@@ -1047,7 +1051,7 @@ function LogsTab({ user }) {
         <p className="text-sm text-white/30 py-8 text-center">No activity recorded yet.</p>
       ) : (
         <div className="flex flex-col gap-2">
-          {logs.map(log => {
+          {logs.slice(logsPage * PAGE_SIZE, (logsPage + 1) * PAGE_SIZE).map(log => {
             const mapped = ACTION_MAP[log.action] ?? { label: log.action, type: 'auth' }
             const cfg = TYPE_CFG[mapped.type] ?? TYPE_CFG.auth
             const col = BAD_CFG[cfg.color] ?? '#9ca3af'
@@ -1066,6 +1070,7 @@ function LogsTab({ user }) {
               </div>
             )
           })}
+          <Pagination page={logsPage} totalPages={Math.ceil(logs.length / PAGE_SIZE)} onPageChange={setLogsPage} />
         </div>
       )}
     </div>

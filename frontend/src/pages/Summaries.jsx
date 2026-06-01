@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import AppLayout from '../components/AppLayout'
+import Pagination, { PAGE_SIZE } from '../components/Pagination'
 import { listAllSummaries } from '../services/summaryService'
 
 export default function Summaries() {
   const [summaries, setSummaries] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [summariesPage, setSummariesPage] = useState(0)
 
   const formatDate = (value) => {
     if (!value) return '—'
@@ -93,7 +95,7 @@ export default function Summaries() {
 
             {!loading && summaries.length > 0 && (
               <div className="mt-6 flex flex-col gap-3">
-                {summaries.map((s) => (
+                {summaries.slice(summariesPage * PAGE_SIZE, (summariesPage + 1) * PAGE_SIZE).map((s) => (
                   <div key={s.id} className="ui-row p-5">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0 flex-1">
@@ -123,6 +125,13 @@ export default function Summaries() {
                   </div>
                 ))}
               </div>
+            )}
+            {!loading && summaries.length > 0 && (
+              <Pagination
+                page={summariesPage}
+                totalPages={Math.ceil(summaries.length / PAGE_SIZE)}
+                onPageChange={setSummariesPage}
+              />
             )}
           </div>
         </section>
