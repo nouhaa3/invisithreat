@@ -243,10 +243,10 @@ async def stream_vulnerability_assist(
         "system": system_prompt,
         "prompt": prompt,
         "stream": True,
-        "keep_alive": "5m",
+        "keep_alive": "15m",
         "options": {
             "temperature": 0.3,
-            "num_predict": 1024,
+            "num_predict": 600,
         },
     }
 

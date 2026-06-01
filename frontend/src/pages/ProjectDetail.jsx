@@ -1178,33 +1178,36 @@ function AiAssistPanel({
               <button
                 type="button"
                 onClick={onToggleSize}
-                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10"
                 aria-label={wide ? 'Reduce panel' : 'Expand panel'}
                 title={wide ? 'Reduce panel' : 'Expand panel'}
-                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)' }}
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)' }}
               >
                 {wide ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2">
-                    <path d="M7 7h10v10H7z" />
-                    <path d="M3 3h6v2H5v4H3z" />
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="2">
+                    <polyline points="15 3 21 3 21 9" />
+                    <polyline points="9 21 3 21 3 15" />
+                    <line x1="21" y1="3" x2="14" y2="10" />
+                    <line x1="3" y1="21" x2="10" y2="14" />
                   </svg>
                 ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2">
-                    <path d="M3 3h7v2H5v5H3z" />
-                    <path d="M21 21h-7v-2h5v-5h2z" />
-                    <path d="M8 8h8v8H8z" />
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="2">
+                    <polyline points="15 3 21 3 21 9" />
+                    <polyline points="9 21 3 21 3 15" />
+                    <line x1="21" y1="3" x2="14" y2="10" />
+                    <line x1="3" y1="21" x2="10" y2="14" />
                   </svg>
                 )}
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
                 aria-label="Close panel"
                 title="Close panel"
-                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)' }}
+                style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.35)' }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(239,100,100,0.9)" strokeWidth="2.5">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -1232,9 +1235,12 @@ function AiAssistPanel({
                 <div className="max-w-[85%] px-3 py-2.5 rounded-xl" style={bubbleStyle}>
                   {isUser && isAuto && (
                     <div className="flex items-center gap-1.5 mb-1.5">
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-                        style={{ background: 'rgba(255,107,43,0.25)', color: '#FF8C5A', border: '1px solid rgba(255,107,43,0.4)' }}>
-                        ✦ Auto-generated
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                        style={{ background: 'rgba(255,107,43,0.22)', color: '#FF8C5A', border: '1px solid rgba(255,107,43,0.4)' }}>
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="#FF8C5A" stroke="none">
+                          <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+                        </svg>
+                        Auto-generated
                       </span>
                     </div>
                   )}
