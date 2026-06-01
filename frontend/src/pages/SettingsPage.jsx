@@ -1241,9 +1241,11 @@ export default function SettingsPage() {
                 <p className="text-[10px] font-bold uppercase tracking-widest px-3 mb-1.5"
                   style={{ color: 'rgba(255,255,255,0.2)' }}>{g.label}</p>
                 <div className="flex flex-col gap-0.5">
-                  {g.items.map(item => (
-                    <SidebarItem key={item.id} item={item} active={tab === item.id} onClick={setTab} />
-                  ))}
+                  {g.items
+                    .filter(item => !(item.id === 'logs' && user?.role_name !== 'Admin'))
+                    .map(item => (
+                      <SidebarItem key={item.id} item={item} active={tab === item.id} onClick={setTab} />
+                    ))}
                 </div>
               </div>
             ))}
@@ -1252,7 +1254,7 @@ export default function SettingsPage() {
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-8 lg:px-16 py-8" style={{ minWidth: 0 }}>
             <div className="ui-card p-5 sm:p-7" style={{ maxWidth: 860 }}>
-              {PANELS[tab]}
+              {PANELS[tab === 'logs' && user?.role_name !== 'Admin' ? 'general' : tab]}
             </div>
           </div>
         </div>

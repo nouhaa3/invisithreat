@@ -1,91 +1,89 @@
-@startuml
-title Sprint 3 - SAST et SCA (GitHub scan + OSV)
-actor "Utilisateur" as U
-actor "Scanner CLI" as CLI
-boundary "IHM Scans" as UI
-control "ScanController" as SC
-control "ProjectService" as PS
-entity "ProjectModel" as PM
-entity "ScanModel" as SM
-entity "GitHubRepositoryModel" as GR
-database "Base de donnees" as DB
+﻿@startuml DS-3a
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 160
+title DS-3a : Moteur SAST\n(Lancement scan · Exécution Celery · Suivi Socket.IO temps réel)
 
-control "CeleryWorker" as CW
-control "GitHubScannerService" as GS
-participant "GitHub Repo" as GH
-participant "Git CLI" as GIT
-control "DependencyScanner" as DS
-participant "OSV API" as OSV
-control "RiskScoreService" as RS
-entity "RiskScoreModel" as RSM
-control "VulnWorkflowService" as VWS
-entity "VulnerabilityTaskModel" as VTM
-control "SocketIOManager" as WS
-control "AuditLogService" as ALS
-control "NotificationService" as NS
-control "CLIController" as CLC
+actor       "Developer"                         as DEV
+boundary    "ScanForm\n(NewScanPage)"            as SCAN_UI
+boundary    "ScanProgressUI\n(ProjectDetail)"    as SIO_CLIENT
+control     "ScanController"                     as SCAN_CTRL
+control     "CeleryWorker\n(run_github_scan_job)" as WORKER
+control     "SocketIOGateway"                    as SIO_GW
+control     "NotificationService"                as NOTIF
+entity      "Scan"                               as SCAN_E
+entity      "Vulnerability"                      as VULN_E
+database    "PostgreSQL"                         as DB
+queue       "Redis Queue"                        as REDIS
 
-U -> UI: lancer scan GitHub
-UI -> SC: POST /projects/{id}/scans (method=github)
-SC -> PS: get_project_accessible()
-PS -> PM: charger project
-PM -> DB: SELECT project
-DB --> PM: project
-SC -> PS: create_scan()
-PS -> SM: new Scan(pending)
-SM -> DB: INSERT scan
-DB --> SM: scan id
-SC -> GR: upsert repo + token
-GR -> DB: INSERT/UPDATE github_repository
-DB --> GR: ok
-SC -> ALS: create_audit_log("scan_created")
-ALS -> DB: INSERT audit_log
-
-alt Celery disponible
-    SC -> CW: run_github_scan_job.apply_async
-    CW -> SM: set job_id + job_state queued
-    SM -> DB: UPDATE scan
-    CW -> WS: emit_scan_state_change(queued)
-else dev fallback
-    SC -> GS: background run_github_scan()
+== Lancement du scan SAST ==
+DEV      ->  SCAN_UI   : soumettre(projectId, type="sast", branch)
+SCAN_UI  ->  SCAN_CTRL : POST /projects/{id}/scans(ScanCreate)
+activate SCAN_CTRL
+SCAN_CTRL -> SCAN_CTRL : checkPermission(user, projectId): None
+alt permission refusée
+    SCAN_CTRL --> SCAN_UI : 403 "Accès refusé"
+    SCAN_UI   --> DEV     : afficher(erreur)
+else permission accordée
+    SCAN_CTRL -> SCAN_E   : save(scan{type:"sast", status:"pending"}): Scan
+    activate SCAN_E
+    SCAN_E    -> DB       : INSERT INTO scans
+    DB        --> SCAN_E  : scanId
+    SCAN_E    --> SCAN_CTRL : pendingScan
+    deactivate SCAN_E
+    SCAN_CTRL -> REDIS    : enqueue(run_github_scan_job, scanId): taskId
+    activate REDIS
+    REDIS     --> SCAN_CTRL : taskId
+    deactivate REDIS
+    SCAN_CTRL --> SCAN_UI : 201 ScanResponse(id, status="pending")
+    SCAN_UI   --> DEV     : rediriger("/project/{id}")
 end
+deactivate SCAN_CTRL
 
-CW -> GS: run_github_scan(scan_id, repo_url, branch)
-GS -> SM: set status running
-SM -> DB: UPDATE scan
-GS -> GIT: git clone repo
-GIT -> GH: clone
-GH --> GIT: repo content
-GIT --> GS: working tree
-
-GS -> GS: run SAST rules + secrets rules
-GS -> DS: scan_dependencies(lockfiles)
-DS -> OSV: query batch
-OSV --> DS: vulnerabilities
-DS --> GS: dependency findings
-GS -> SM: save results_json + status completed
-SM -> DB: UPDATE scan
-GS -> RS: upsert_scan_risk_score()
-RS -> RSM: INSERT/UPDATE risk_score
-RSM -> DB: ok
-GS -> VWS: sync_vulnerability_tasks_for_scan()
-VWS -> VTM: UPSERT tasks
-VTM -> DB: ok
-GS -> WS: emit_scan_state_change(completed)
-
-opt scan via CLI
-    CLI -> CLC: POST /cli/scan (api key)
-    CLC -> PM: verifier acces projet
-    PM -> DB: SELECT project
-    CLC -> SM: create scan + mark running
-    SM -> DB: INSERT/UPDATE scan
-    CLC -> RS: get_or_create_scan_risk_score()
-    RS -> RSM: INSERT/UPDATE
-    CLC -> VWS: sync_vulnerability_tasks_for_scan()
-    VWS -> VTM: UPSERT tasks
-    CLC -> NS: create_notification(scan_complete)
-    NS -> DB: INSERT notification
-    NS -> WS: emit_notification_created
-    CLC --> CLI: scan_id + url
+== Exécution asynchrone (Celery Worker) ==
+REDIS -> WORKER : dequeue(scanId): void
+activate WORKER
+WORKER -> SCAN_E : updateStatus(scanId, status="running"): Scan
+activate SCAN_E
+SCAN_E -> DB     : UPDATE scans SET status="running"
+DB     --> SCAN_E : ok
+SCAN_E --> WORKER : ok
+deactivate SCAN_E
+WORKER -> SIO_GW : emit("scan_progress", {scanId, step:"clone", pct:10})
+activate SIO_GW
+SIO_GW --> SIO_CLIENT : broadcast("scan_progress", payload)
+SIO_CLIENT --> DEV    : afficher(barre 10%)
+deactivate SIO_GW
+WORKER -> WORKER : cloneRepository(repoUrl, decryptedToken): Path
+WORKER -> SIO_GW : emit("scan_progress", {scanId, step:"analyze", pct:50})
+activate SIO_GW
+SIO_GW --> SIO_CLIENT : broadcast("scan_progress", payload)
+SIO_CLIENT --> DEV    : afficher(barre 50%)
+deactivate SIO_GW
+WORKER -> WORKER : runSASTTools(path): List[Finding]
+WORKER -> WORKER : normalizeFindings(findings): List[Vulnerability]
+loop pour chaque vulnérabilité normalisée
+    WORKER -> VULN_E : save(vuln{scanId, severity, file, line}): Vulnerability
+    activate VULN_E
+    VULN_E -> DB     : INSERT INTO vulnerabilities
+    DB     --> VULN_E : ok
+    VULN_E --> WORKER : ok
+    deactivate VULN_E
 end
+WORKER -> SCAN_E : updateStatus(scanId, "completed", vulnCount): Scan
+activate SCAN_E
+SCAN_E -> DB     : UPDATE scans SET status="completed"
+DB     --> SCAN_E : ok
+SCAN_E --> WORKER : ok
+deactivate SCAN_E
+WORKER -> SIO_GW : emit("scan_completed", {scanId, vulnCount})
+activate SIO_GW
+SIO_GW --> SIO_CLIENT : broadcast("scan_completed", payload)
+SIO_CLIENT --> DEV    : notification("Scan terminé — N vulnérabilités")
+deactivate SIO_GW
+WORKER -> NOTIF  : notifyScanCompleted(userId, scanId): void
+activate NOTIF
+NOTIF  --> WORKER : ok
+deactivate NOTIF
+deactivate WORKER
+
 @enduml

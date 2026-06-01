@@ -1,0 +1,90 @@
+﻿@startuml DS-3b
+skinparam sequenceMessageAlign left
+skinparam maxMessageSize 160
+title DS-3b : Moteur DAST\n(Lancement scan · OWASP ZAP · Score de risque)
+
+actor       "Developer"                          as DEV
+boundary    "DASTScanForm\n(NewScanPage)"         as DAST_UI
+control     "ScanController"                      as SCAN_CTRL
+control     "CeleryWorker\n(run_dast_scan_job)"   as WORKER
+control     "RiskScoreService"                    as RSS
+entity      "Scan"                                as SCAN_E
+entity      "Vulnerability"                       as VULN_E
+entity      "RiskScore"                           as RISK_E
+database    "PostgreSQL"                          as DB
+queue       "Redis Queue"                         as REDIS
+collections "OWASP ZAP"                           as ZAP
+
+== Lancement du scan DAST ==
+DEV      ->  DAST_UI   : soumettre(projectId, type="dast", targetUrl)
+DAST_UI  ->  SCAN_CTRL : POST /projects/{id}/scans(type="dast", targetUrl)
+activate SCAN_CTRL
+SCAN_CTRL -> SCAN_CTRL : validateUrl(targetUrl): bool
+alt URL invalide ou inaccessible
+    SCAN_CTRL --> DAST_UI : 422 "URL cible invalide"
+    DAST_UI   --> DEV     : afficher(erreur)
+else URL valide
+    SCAN_CTRL -> SCAN_E   : save(scan{type:"dast", status:"pending"}): Scan
+    activate SCAN_E
+    SCAN_E    -> DB       : INSERT INTO scans
+    DB        --> SCAN_E  : scanId
+    SCAN_E    --> SCAN_CTRL : pendingScan
+    deactivate SCAN_E
+    SCAN_CTRL -> REDIS    : enqueue(run_dast_scan_job, scanId, targetUrl)
+    activate REDIS
+    REDIS     --> SCAN_CTRL : taskId
+    deactivate REDIS
+    SCAN_CTRL --> DAST_UI : 201 ScanResponse(id, status="pending")
+    DAST_UI   --> DEV     : "Scan DAST lancé"
+end
+deactivate SCAN_CTRL
+
+== Exécution DAST (Celery Worker + OWASP ZAP) ==
+REDIS  ->  WORKER : dequeue(scanId, targetUrl): void
+activate WORKER
+WORKER ->  SCAN_E : updateStatus(scanId, "running"): Scan
+activate SCAN_E
+SCAN_E ->  DB     : UPDATE scans SET status="running"
+DB     --> SCAN_E : ok
+SCAN_E --> WORKER : ok
+deactivate SCAN_E
+WORKER ->  ZAP    : startActiveScan(targetUrl): zapScanId
+activate ZAP
+alt ZAP disponible et accessible
+    loop polling jusqu'à completion
+        WORKER -> ZAP : getScanProgress(zapScanId): int
+        ZAP    --> WORKER : progress%
+    end
+    ZAP    --> WORKER : List[ZAPAlert]
+    deactivate ZAP
+    WORKER ->  WORKER : normalizeZAPAlerts(alerts): List[Vulnerability]
+else ZAP non disponible
+    WORKER ->  WORKER : runMinimalHTTPProbe(targetUrl): List[Vulnerability]
+end
+loop pour chaque alerte normalisée
+    WORKER -> VULN_E : save(vuln{scanId, cweId, severity, url}): Vulnerability
+    activate VULN_E
+    VULN_E -> DB     : INSERT INTO vulnerabilities
+    DB     --> VULN_E : ok
+    VULN_E --> WORKER : ok
+    deactivate VULN_E
+end
+WORKER ->  SCAN_E : updateStatus(scanId, "completed"): Scan
+activate SCAN_E
+SCAN_E ->  DB     : UPDATE scans SET status="completed"
+DB     --> SCAN_E : ok
+SCAN_E --> WORKER : ok
+deactivate SCAN_E
+WORKER ->  RSS    : compute(scanId): RiskScore
+activate RSS
+RSS    ->  RISK_E : save(riskScore{scanId, score, level}): RiskScore
+activate RISK_E
+RISK_E ->  DB     : INSERT INTO risk_scores
+DB     --> RISK_E : ok
+RISK_E --> RSS    : savedScore
+deactivate RISK_E
+RSS    --> WORKER : riskScore
+deactivate RSS
+deactivate WORKER
+
+@enduml
