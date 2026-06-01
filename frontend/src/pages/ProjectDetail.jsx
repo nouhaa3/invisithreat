@@ -1352,6 +1352,7 @@ export default function ProjectDetail() {
   const [autoExpandScanId, setAutoExpandScanId] = useState(null)
   const [scansPage, setScansPage] = useState(0)
   const [vulnPage, setVulnPage] = useState(0)
+  const [vulnOpen, setVulnOpen] = useState(false)
   const [vulnerabilityWorkflow, setVulnerabilityWorkflow] = useState({
     scan_id: null,
     tasks: [],
@@ -2574,8 +2575,11 @@ export default function ProjectDetail() {
               <div className="rounded-2xl overflow-hidden mb-4 animate-slide-up"
                 style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)', animationDelay: '0.08s' }}>
                 {/* Header */}
-                <div className="flex items-center justify-between px-5 py-4"
-                  style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <button
+                  onClick={() => setVulnOpen(v => !v)}
+                  className="w-full flex items-center justify-between px-5 py-4 text-left"
+                  style={{ borderBottom: vulnOpen ? '1px solid rgba(255,255,255,0.05)' : 'none' }}
+                >
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-semibold text-white/40 uppercase tracking-widest">Current Vulnerabilities</span>
                     {hasNewScanRunning && (
@@ -2594,11 +2598,18 @@ export default function ProjectDetail() {
                       {summary.low > 0 && <SevChip label={`${summary.low} low`} color="#60a5fa" />}
                       {findings.length === 0 && <SevChip label="Clean" color="#22c55e" />}
                     </div>
+                    <svg
+                      width="14" height="14" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" strokeWidth="2"
+                      className={`text-white/30 transition-transform duration-200 flex-shrink-0 ${vulnOpen ? 'rotate-180' : ''}`}
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
                   </div>
-                </div>
+                </button>
 
                 {/* Findings list */}
-                <div className="px-5 py-4">
+                {vulnOpen && <div className="px-5 py-4">
                   <div className="flex flex-col gap-2">
                     {findings.slice(vulnPage * PAGE_SIZE, (vulnPage + 1) * PAGE_SIZE).map((f, i) => {
                       const isRecurring = prev && prevKeys.has(`${f.rule_id}:${f.file}:${f.line}`)
@@ -2634,7 +2645,7 @@ export default function ProjectDetail() {
                     })}
                   </div>
                   <Pagination page={vulnPage} totalPages={Math.ceil(findings.length / PAGE_SIZE)} onPageChange={setVulnPage} />
-                </div>
+                </div>}
               </div>
             )
           })()}
