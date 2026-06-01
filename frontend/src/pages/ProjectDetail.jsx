@@ -1941,6 +1941,7 @@ export default function ProjectDetail() {
     { label: 'Failed',           value: scans.filter(s => s.status === 'failed').length },
     { label: 'Pending / Running', value: scans.filter((scan) => {
       const jobState = String(scan.job_state || '')
+      if (scan.status === 'completed' || scan.status === 'failed') return false
       return ['pending', 'running'].includes(scan.status)
         || ['PENDING', 'QUEUED', 'RUNNING', 'RETRYING'].includes(jobState)
     }).length },
