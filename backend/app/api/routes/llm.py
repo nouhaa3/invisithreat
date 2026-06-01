@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime, UTC
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,10 @@ from app.models.vulnerability import Vulnerability as VulnerabilityModel
 from app.models.vulnerability_workflow import VulnerabilityTask as VulnerabilityTaskModel
 from app.models.recommendation import Recommendation as RecommendationModel
 from app.schemas.llm import (
+    LLMChatThreadCreateRequest,
+    LLMChatThreadResponse,
+    LLMChatThreadSummaryResponse,
+    LLMChatThreadUpdateRequest,
     ScanSummaryRequest,
     ScanSummaryResponse,
     VulnerabilityAssistRequest,
@@ -24,6 +28,7 @@ from app.schemas.llm import (
 from app.services.llm_client import generate_scan_summary, stream_vulnerability_assist, LLMError
 from app.services.project import get_project_accessible
 from app.models.scan_summary import ScanSummary as ScanSummaryModel
+from app.models.llm_chat_thread import LLMChatThread as LLMChatThreadModel
 
 
 router = APIRouter(prefix="/llm", tags=["llm"])
@@ -136,6 +141,92 @@ def _row_to_response(row: ScanSummaryModel):
     )
 
 
+def _as_uuid(value: str, field_name: str) -> uuid.UUID:
+    try:
+        return uuid.UUID(str(value))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid {field_name}") from exc
+
+
+def _messages_to_payload(messages: list[dict]) -> str:
+    return json.dumps(messages or [], ensure_ascii=False)
+
+
+def _messages_from_payload(raw: str | None) -> list[dict]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, list) else []
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+
+
+def _thread_title_from_messages(messages: list[dict], fallback: str = "New chat") -> str:
+    for msg in messages:
+        if (msg.get("role") or "").lower() == "user":
+            content = (msg.get("content") or "").strip()
+            if content:
+                compact = " ".join(content.split())
+                return compact[:80]
+    return fallback
+
+
+def _thread_preview(messages: list[dict]) -> str:
+    for msg in reversed(messages or []):
+        content = (msg.get("content") or "").strip()
+        if content:
+            compact = " ".join(content.split())
+            return compact[:140]
+    return ""
+
+
+def _thread_summary_response(row: LLMChatThreadModel) -> LLMChatThreadSummaryResponse:
+    messages = _messages_from_payload(row.messages)
+    target_payload = None
+    if row.target_payload:
+        try:
+            parsed = json.loads(row.target_payload)
+            if isinstance(parsed, dict):
+                target_payload = parsed
+        except (TypeError, ValueError, json.JSONDecodeError):
+            target_payload = None
+    return LLMChatThreadSummaryResponse(
+        id=row.id,
+        project_id=row.project_id,
+        title=row.title or "New chat",
+        preview=_thread_preview(messages),
+        message_count=len(messages),
+        target_payload=target_payload,
+        updated_at=row.updated_at,
+        last_message_at=row.last_message_at,
+    )
+
+
+def _thread_full_response(row: LLMChatThreadModel) -> LLMChatThreadResponse:
+    messages = _messages_from_payload(row.messages)
+    target_payload = None
+    if row.target_payload:
+        try:
+            parsed = json.loads(row.target_payload)
+            if isinstance(parsed, dict):
+                target_payload = parsed
+        except (TypeError, ValueError, json.JSONDecodeError):
+            target_payload = None
+    summary = _thread_summary_response(row)
+    return LLMChatThreadResponse(
+        id=summary.id,
+        project_id=summary.project_id,
+        title=summary.title,
+        preview=summary.preview,
+        message_count=summary.message_count,
+        updated_at=summary.updated_at,
+        last_message_at=summary.last_message_at,
+        target_payload=target_payload,
+        messages=messages,
+    )
+
+
 def _build_vulnerability_context(
     *,
     title: str | None,
@@ -204,6 +295,151 @@ def list_all_summaries(db: Session = Depends(get_db), _current_user=Depends(requ
     return [_row_to_response(s) for s in summaries]
 
 
+@router.get('/projects/{project_id}/assist-threads', response_model=list[LLMChatThreadSummaryResponse])
+def list_assist_threads(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission(P.USE_AI_SUMMARIES)),
+):
+    project_uuid = _as_uuid(project_id, "project_id")
+    get_project_accessible(db, project_uuid, current_user)
+    rows = (
+        db.query(LLMChatThreadModel)
+        .filter(
+            LLMChatThreadModel.project_id == project_uuid,
+            LLMChatThreadModel.user_id == current_user.id,
+            LLMChatThreadModel.archived.is_(False),
+        )
+        .order_by(LLMChatThreadModel.last_message_at.desc())
+        .limit(40)
+        .all()
+    )
+    return [_thread_summary_response(row) for row in rows]
+
+
+@router.post('/projects/{project_id}/assist-threads', response_model=LLMChatThreadResponse)
+def create_assist_thread(
+    project_id: str,
+    payload: LLMChatThreadCreateRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission(P.USE_AI_SUMMARIES)),
+):
+    project_uuid = _as_uuid(project_id, "project_id")
+    get_project_accessible(db, project_uuid, current_user)
+
+    messages = [{"role": msg.role, "content": msg.content} for msg in (payload.messages or [])]
+    title = (payload.title or "").strip() or _thread_title_from_messages(messages)
+    now = datetime.now(UTC)
+    row = LLMChatThreadModel(
+        project_id=project_uuid,
+        user_id=current_user.id,
+        title=title,
+        messages=_messages_to_payload(messages),
+        target_payload=json.dumps(payload.target_payload or {}, ensure_ascii=False) if payload.target_payload is not None else None,
+        updated_at=now,
+        last_message_at=now,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _thread_full_response(row)
+
+
+@router.get('/assist-threads/{thread_id}', response_model=LLMChatThreadResponse)
+def get_assist_thread(
+    thread_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission(P.USE_AI_SUMMARIES)),
+):
+    thread_uuid = _as_uuid(thread_id, "thread_id")
+    row = (
+        db.query(LLMChatThreadModel)
+        .filter(
+            LLMChatThreadModel.id == thread_uuid,
+            LLMChatThreadModel.user_id == current_user.id,
+            LLMChatThreadModel.archived.is_(False),
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat thread not found")
+
+    get_project_accessible(db, row.project_id, current_user)
+    return _thread_full_response(row)
+
+
+@router.patch('/assist-threads/{thread_id}', response_model=LLMChatThreadResponse)
+def update_assist_thread(
+    thread_id: str,
+    payload: LLMChatThreadUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission(P.USE_AI_SUMMARIES)),
+):
+    thread_uuid = _as_uuid(thread_id, "thread_id")
+    row = (
+        db.query(LLMChatThreadModel)
+        .filter(
+            LLMChatThreadModel.id == thread_uuid,
+            LLMChatThreadModel.user_id == current_user.id,
+            LLMChatThreadModel.archived.is_(False),
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat thread not found")
+
+    get_project_accessible(db, row.project_id, current_user)
+
+    now = datetime.now(UTC)
+    if payload.archived is not None:
+        row.archived = bool(payload.archived)
+    if payload.target_payload is not None:
+        row.target_payload = json.dumps(payload.target_payload, ensure_ascii=False)
+
+    updated_messages = None
+    if payload.messages is not None:
+        updated_messages = [{"role": msg.role, "content": msg.content} for msg in (payload.messages or [])]
+        row.messages = _messages_to_payload(updated_messages)
+        if updated_messages:
+            row.last_message_at = now
+
+    if payload.title is not None:
+        row.title = payload.title.strip() or "New chat"
+    elif updated_messages is not None and (not row.title or row.title == "New chat"):
+        row.title = _thread_title_from_messages(updated_messages)
+
+    row.updated_at = now
+    db.commit()
+    db.refresh(row)
+    return _thread_full_response(row)
+
+
+@router.delete('/assist-threads/{thread_id}', status_code=status.HTTP_204_NO_CONTENT)
+def delete_assist_thread(
+    thread_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission(P.USE_AI_SUMMARIES)),
+):
+    thread_uuid = _as_uuid(thread_id, "thread_id")
+    row = (
+        db.query(LLMChatThreadModel)
+        .filter(
+            LLMChatThreadModel.id == thread_uuid,
+            LLMChatThreadModel.user_id == current_user.id,
+            LLMChatThreadModel.archived.is_(False),
+        )
+        .first()
+    )
+    if not row:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    get_project_accessible(db, row.project_id, current_user)
+    row.archived = True
+    row.updated_at = datetime.now(UTC)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post("/vulnerability-assist")
 async def llm_vulnerability_assist(
     payload: VulnerabilityAssistRequest,
@@ -239,7 +475,7 @@ async def llm_vulnerability_assist(
         )
 
     context_payload = payload.context
-    if not vulnerability and not task and not context_payload:
+    if not vulnerability and not task and not context_payload and not payload.project_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vulnerability not found")
 
     project_id = None

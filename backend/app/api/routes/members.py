@@ -34,12 +34,14 @@ async def invite_project_member(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(P.MANAGE_PROJECT_MEMBERS)),
 ):
-    if not email_is_configured():
-        raise HTTPException(status_code=503, detail="Email service is not configured. Contact an administrator.")
-
     result = invite_member(db, project_id, data, current_user)
 
     if result["status"] == "not_found":
+        if not email_is_configured():
+            raise HTTPException(
+                status_code=503,
+                detail=f"No account found for {data.email} and email service is not configured — cannot send an invitation. Ask them to register first.",
+            )
         project = db.query(Project).filter(Project.id == project_id).first()
         project_name = project.name if project else "the project"
         background_tasks.add_task(
@@ -54,16 +56,18 @@ async def invite_project_member(
         )
         return {"status": "invited", "message": f"No account found for {data.email}. An invitation email has been sent."}
 
-    background_tasks.add_task(
-        notify_project_invitation,
-        invitee_email=result["member"]["email"],
-        invitee_nom=result["member"]["nom"],
-        inviter_nom=result["inviter_name"],
-        project_name=result["project_name"],
-        role=result["member"]["role_projet"],
-        registered=True,
-        frontend_url=settings.FRONTEND_URL,
-    )
+    # Email notification is optional — don't block the invite if email isn't configured
+    if email_is_configured():
+        background_tasks.add_task(
+            notify_project_invitation,
+            invitee_email=result["member"]["email"],
+            invitee_nom=result["member"]["nom"],
+            inviter_nom=result["inviter_name"],
+            project_name=result["project_name"],
+            role=result["member"]["role_projet"],
+            registered=True,
+            frontend_url=settings.FRONTEND_URL,
+        )
     # In-app notification for the invited user
     create_notification(
         db,

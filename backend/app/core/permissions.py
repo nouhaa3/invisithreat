@@ -58,6 +58,7 @@ ROLE_PERMISSIONS: dict = {
         P.GENERATE_REPORTS,
         P.PRIORITIZE_VULNERABILITIES,
         P.VIEW_SECURITY_METRICS,
+        P.USE_AI_SUMMARIES,
     ],
     "Developer": [
         P.MANAGE_OWN_PROJECTS,

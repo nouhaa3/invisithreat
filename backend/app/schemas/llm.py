@@ -62,3 +62,40 @@ class VulnerabilityAssistResponse(BaseModel):
     elapsed_ms: Optional[int] = None
 
     model_config = ConfigDict(extra="forbid")
+
+
+class LLMChatThreadCreateRequest(BaseModel):
+    title: Optional[str] = None
+    target_payload: Optional[dict] = None
+    messages: List[ChatMessage] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class LLMChatThreadUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    target_payload: Optional[dict] = None
+    messages: Optional[List[ChatMessage]] = None
+    archived: Optional[bool] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class LLMChatThreadSummaryResponse(BaseModel):
+    id: uuid.UUID
+    project_id: uuid.UUID
+    title: str
+    preview: str = ""
+    message_count: int = 0
+    target_payload: Optional[dict] = None
+    updated_at: datetime
+    last_message_at: datetime
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class LLMChatThreadResponse(LLMChatThreadSummaryResponse):
+    target_payload: Optional[dict] = None
+    messages: List[ChatMessage] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")

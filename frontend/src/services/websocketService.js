@@ -74,8 +74,8 @@ export const initializeWebSocket = () => {
   try {
     socket = io(socketBaseUrl, {
       path: '/socket.io',
-      // allow polling fallback so connections succeed even when websocket handshake fails
-      transports: ['polling', 'websocket'],
+      // Use websocket transport only to avoid noisy XHR polling failures.
+      transports: ['websocket'],
       // send cookies for authenticated websocket handshake
       withCredentials: true,
       reconnection: true,

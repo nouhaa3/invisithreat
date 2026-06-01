@@ -38,8 +38,9 @@ config = alembic_context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Override DB URL from runtime settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Override DB URL from runtime settings.
+# Alembic's ConfigParser treats '%' as interpolation markers, so escape them.
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 target_metadata = Base.metadata
 

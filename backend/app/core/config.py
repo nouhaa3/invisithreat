@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     # LLM (Ollama)
     OLLAMA_URL: str = "http://host.docker.internal:11434"
     OLLAMA_MODEL: str = "mistral"
-    OLLAMA_TIMEOUT_SECONDS: int = 300
+    OLLAMA_TIMEOUT_SECONDS: int = 900
     OLLAMA_MAX_RETRIES: int = 2
     OLLAMA_RETRY_DELAY_SECONDS: float = 0.75
 

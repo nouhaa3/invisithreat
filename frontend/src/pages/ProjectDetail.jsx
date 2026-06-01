@@ -5,7 +5,11 @@ import {
   getProject,
   getScans,
   getScanResults,
-  generateScanSummary,
+  listAssistThreads,
+  createAssistThread,
+  getAssistThread,
+  updateAssistThread,
+  deleteAssistThread,
   deleteProject,
   createScan,
   startDastScan,
@@ -20,8 +24,6 @@ import { useAuth } from '../context/AuthContext'
 import { useUiFeedback } from '../context/UiFeedbackContext'
 import usePermissions from '../hooks/usePermissions'
 import { onScanStateChange, onScanProgressUpdate, isWebSocketConnected } from '../services/websocketService'
-import SummaryModal from '../components/SummaryModal'
-import { listAllSummaries, listProjectSummaries } from '../services/summaryService'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -40,6 +42,19 @@ const getApiUrl = (path) => {
 const toInt = (value) => {
   const n = Number(value)
   return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0
+}
+
+const formatRelativeTime = (value) => {
+  if (!value) return 'now'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'now'
+  const diffMs = Date.now() - date.getTime()
+  const minutes = Math.max(1, Math.round(diffMs / 60000))
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.round(hours / 24)
+  return `${days}d ago`
 }
 
 const normalizeFindingText = (value) => String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
@@ -94,6 +109,13 @@ const buildVulnerabilityContextPayload = (finding, recommendation) => {
     source_tool: finding?.source_tool || null,
     rule_id: finding?.rule_id || null,
   }
+}
+
+const buildAiTargetKey = ({ finding, vulnerabilityId }) => {
+  if (isUuid(vulnerabilityId)) {
+    return `vuln:${String(vulnerabilityId).toLowerCase()}`
+  }
+  return `fp:${buildFindingFingerprint(finding || {})}`
 }
 
 const parseScanResults = (resultsJson) => {
@@ -257,7 +279,7 @@ function PulseDot({ color }) {
 
 // ─── Findings Panel ──────────────────────────────────────────────────────────
 
-function FindingsPanel({ results }) {
+function FindingsPanel({ results, aiEnabled, onAskAi }) {
   const [filter, setFilter] = useState('all')
   const summary = results.summary || {}
   const findings = results.findings || []
@@ -313,7 +335,7 @@ function FindingsPanel({ results }) {
         {filtered.map((f, i) => {
           const cfg = SEVERITY_CONFIG[f.severity] || SEVERITY_CONFIG.info
           return (
-            <FindingRow key={f.id || i} finding={f} cfg={cfg} />
+            <FindingRow key={f.id || i} finding={f} cfg={cfg} recommendation={f.recommendation || RECOMMENDATIONS[f.rule_id]} aiEnabled={aiEnabled} onAskAi={onAskAi} />
           )
         })}
       </div>
@@ -729,7 +751,7 @@ function CurrentFindingRow({
 
 // ─── Scan Row ────────────────────────────────────────────────────────────────
 
-const ScanRow = memo(function ScanRow({ scan, onRescan, rescanning, resultsJson, resultsSummary, onLoadResults, autoExpand }) {
+const ScanRow = memo(function ScanRow({ scan, onRescan, rescanning, resultsJson, resultsSummary, onLoadResults, autoExpand, aiEnabled, onAskAi }) {
   const [expanded, setExpanded] = useState(false)
   const status = STATUS_CONFIG[scan.status] || STATUS_CONFIG.pending
   const method = METHOD_CONFIG[scan.method] || METHOD_CONFIG.cli
@@ -874,7 +896,7 @@ const ScanRow = memo(function ScanRow({ scan, onRescan, rescanning, resultsJson,
       {/* Expanded results */}
       {expanded && results && (
         <div className="px-5 pb-5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-          <FindingsPanel results={results} />
+          <FindingsPanel results={results} aiEnabled={aiEnabled} onAskAi={onAskAi} />
         </div>
       )}
       {isLoadingResults && (
@@ -920,6 +942,109 @@ function RescanCmd({ label, children }) {
   )
 }
 
+// ─── Markdown renderer for AI responses ─────────────────────────────────────
+
+function renderInlineMd(text) {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g)
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**'))
+      return <strong key={i} className="font-semibold text-white/95">{part.slice(2, -2)}</strong>
+    if (part.startsWith('`') && part.endsWith('`'))
+      return (
+        <code key={i} className="px-1 py-0.5 rounded text-[11px] font-mono"
+          style={{ background: 'rgba(255,255,255,0.1)', color: '#fca5a5' }}>
+          {part.slice(1, -1)}
+        </code>
+      )
+    return part
+  })
+}
+
+function renderAiMarkdown(text) {
+  if (!text) return null
+  const blocks = text.split(/(```[\s\S]*?```)/g)
+  return blocks.map((block, bi) => {
+    if (block.startsWith('```')) {
+      const m = block.match(/^```(\w*)\n?([\s\S]*?)```$/)
+      const lang = m?.[1] || ''
+      const code = (m?.[2] ?? block.replace(/^```\w*\n?/, '').replace(/```$/, '')).trimEnd()
+      return (
+        <div key={bi} className="my-2 rounded-lg overflow-hidden"
+          style={{ background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)' }}>
+          {lang && (
+            <div className="px-3 py-1 text-[10px] font-mono tracking-wider border-b"
+              style={{ color: '#FF8C5A', borderColor: 'rgba(255,255,255,0.06)', background: 'rgba(255,107,43,0.07)' }}>
+              {lang}
+            </div>
+          )}
+          <pre className="px-3 py-2.5 text-xs font-mono text-white/70 overflow-x-auto leading-relaxed">
+            {code}
+          </pre>
+        </div>
+      )
+    }
+    const lines = block.split('\n')
+    const nodes = []
+    let i = 0
+    while (i < lines.length) {
+      const line = lines[i]
+      if (!line.trim()) { nodes.push(<div key={`${bi}-e${i}`} className="h-1" />); i++; continue }
+      const hm = line.match(/^(#{1,3})\s+(.+)/)
+      if (hm) {
+        const sz = ['text-sm font-bold text-white/95 mt-3 mb-1', 'text-xs font-bold text-white/90 mt-2 mb-0.5', 'text-xs font-semibold text-white/85 mt-2 mb-0.5']
+        nodes.push(<p key={`${bi}-h${i}`} className={sz[hm[1].length - 1] || sz[2]}>{renderInlineMd(hm[2])}</p>)
+        i++; continue
+      }
+      if (line.match(/^\d+\.\s+/)) {
+        const items = []
+        while (i < lines.length && lines[i].match(/^\d+\.\s+/)) {
+          items.push(lines[i].replace(/^\d+\.\s+/, '')); i++
+        }
+        nodes.push(
+          <ol key={`${bi}-ol${i}`} className="list-none space-y-1.5 my-2 pl-0">
+            {items.map((item, ii) => (
+              <li key={ii} className="text-xs text-white/80 leading-relaxed flex items-start gap-2">
+                <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5"
+                  style={{ background: 'rgba(255,107,43,0.18)', color: '#FF8C5A', minWidth: '1.25rem' }}>
+                  {ii + 1}
+                </span>
+                <span>{renderInlineMd(item)}</span>
+              </li>
+            ))}
+          </ol>
+        )
+        continue
+      }
+      if (line.match(/^[-*]\s+/)) {
+        const items = []
+        while (i < lines.length && lines[i].match(/^[-*]\s+/)) {
+          items.push(lines[i].replace(/^[-*]\s+/, '')); i++
+        }
+        nodes.push(
+          <ul key={`${bi}-ul${i}`} className="list-none space-y-1 my-1.5 pl-0">
+            {items.map((item, ii) => (
+              <li key={ii} className="text-xs text-white/80 leading-relaxed flex items-start gap-2">
+                <span className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#FF8C5A' }} />
+                <span>{renderInlineMd(item)}</span>
+              </li>
+            ))}
+          </ul>
+        )
+        continue
+      }
+      nodes.push(
+        <p key={`${bi}-p${i}`} className="text-xs text-white/80 leading-relaxed">
+          {renderInlineMd(line)}
+        </p>
+      )
+      i++
+    }
+    return <div key={bi} className="space-y-0.5">{nodes}</div>
+  })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function AiAssistPanel({
   open,
   finding,
@@ -935,7 +1060,7 @@ function AiAssistPanel({
   onToggleSize,
 }) {
   const cfg = SEVERITY_CONFIG[finding?.severity] || SEVERITY_CONFIG.info
-  const title = finding?.title || 'Vulnerability'
+  const title = finding?.title || 'Project security assistant'
   const subtitle = finding?.file ? `${finding.file}${finding.line ? `:${finding.line}` : ''}` : null
 
   return (
@@ -1009,6 +1134,7 @@ function AiAssistPanel({
           )}
           {(messages || []).map((msg, idx) => {
             const isUser = msg.role === 'user'
+            const isAuto = msg.isAuto
             const bubbleStyle = isUser
               ? { background: 'rgba(255,107,43,0.18)', border: '1px solid rgba(255,107,43,0.3)' }
               : msg.isError
@@ -1016,30 +1142,42 @@ function AiAssistPanel({
                 : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }
             return (
               <div key={`${msg.role}-${idx}`} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                <div className="max-w-[85%] px-3 py-2 rounded-xl text-xs leading-relaxed" style={bubbleStyle}>
+                <div className="max-w-[85%] px-3 py-2.5 rounded-xl" style={bubbleStyle}>
+                  {isUser && isAuto && (
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                        style={{ background: 'rgba(255,107,43,0.25)', color: '#FF8C5A', border: '1px solid rgba(255,107,43,0.4)' }}>
+                        ✦ Auto-generated
+                      </span>
+                    </div>
+                  )}
                   {!isUser && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-white/45 mb-1">
+                    <div className="flex items-center gap-1.5 text-[10px] text-white/45 mb-2">
                       <span className="w-4 h-4 rounded-full flex items-center justify-center"
                         style={{ background: 'rgba(255,107,43,0.18)', color: '#FF8C5A' }}>
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M12 2l1.6 4.7 4.9 1.3-4.1 3 1.6 4.7-4-2.9-4 2.9 1.6-4.7-4.1-3 4.9-1.3L12 2z" />
                         </svg>
                       </span>
-                      AI
+                      <span className="font-medium">AI Assistant</span>
                     </div>
                   )}
-                  <p
-                    className="text-white/85 whitespace-pre-wrap break-words"
-                    style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}
-                  >
-                    {msg.content}
-                    {msg.isStreaming && (
-                      <span
-                        className="inline-block w-1.5 h-3 ml-1 align-middle rounded-sm animate-pulse"
-                        style={{ background: '#FF8C5A' }}
-                      />
-                    )}
-                  </p>
+                  {isUser ? (
+                    <p className="text-xs text-white/85 leading-relaxed whitespace-pre-wrap break-words"
+                      style={{ overflowWrap: 'anywhere' }}>
+                      {msg.content}
+                    </p>
+                  ) : (
+                    <div className="space-y-0.5">
+                      {renderAiMarkdown(msg.content)}
+                      {msg.isStreaming && (
+                        <span
+                          className="inline-block w-1.5 h-3 ml-0.5 align-middle rounded-sm animate-pulse"
+                          style={{ background: '#FF8C5A' }}
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )
@@ -1098,7 +1236,7 @@ export default function ProjectDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { user } = useAuth()
+  const { user, recordActivity } = useAuth()
   const { canUseAiSummaries } = usePermissions()
   const { toast } = useUiFeedback()
   const [project, setProject] = useState(null)
@@ -1113,14 +1251,13 @@ export default function ProjectDetail() {
   const [workflowNote, setWorkflowNote] = useState('')
   const [workflowSubmitting, setWorkflowSubmitting] = useState(null)
   const [workflowFeedback, setWorkflowFeedback] = useState(null)
-  const [aiSummary, setAiSummary] = useState(null)
-  const [aiSummaryError, setAiSummaryError] = useState(null)
-  const [aiSummaryLoading, setAiSummaryLoading] = useState(false)
-  const [showAiModal, setShowAiModal] = useState(false)
   const [aiEnabled, setAiEnabled] = useState(canUseAiSummaries)
   const [aiPanelOpen, setAiPanelOpen] = useState(false)
   const [aiPanelWide, setAiPanelWide] = useState(false)
   const [aiTarget, setAiTarget] = useState(null)
+  const [aiThreads, setAiThreads] = useState([])
+  const [aiThreadsLoading, setAiThreadsLoading] = useState(false)
+  const [aiActiveThreadId, setAiActiveThreadId] = useState(null)
   const [aiMessages, setAiMessages] = useState([])
   const [aiInput, setAiInput] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
@@ -1399,40 +1536,119 @@ export default function ProjectDetail() {
     }
   }
 
-  const handleGenerateAiSummary = async () => {
-    // open modal to allow user to pick which completed scan to analyze
-    if (!canUseAiSummaries) {
-      return
-    }
-    setShowAiModal(true)
-  }
-
-  const handleModalGenerate = async (scanId, maxFindings = 12) => {
-    setShowAiModal(false)
-    if (!scanId) {
-      toast({ type: 'error', message: 'No scan selected.' })
-      return
-    }
-    if (aiSummaryLoading) return
-    setAiSummaryLoading(true)
-    setAiSummaryError(null)
-    try {
-      const result = await generateScanSummary(scanId, maxFindings)
-      setAiSummary(result)
-      // attempt to refresh summaries in background
-      try { await listProjectSummaries(project.id) } catch (e) { /* ignore */ }
-    } catch (err) {
-      setAiSummaryError(err.response?.data?.detail || 'Failed to generate AI summary.')
-    } finally {
-      setAiSummaryLoading(false)
-    }
-  }
-
   const aiQuickActions = [
     { label: 'Explain in plain language', prompt: 'Explain this vulnerability in plain language.' },
     { label: 'Step-by-step fix plan', prompt: 'Provide a step-by-step remediation plan with code-level guidance.' },
     { label: 'Validation checklist', prompt: 'How can I validate the fix and prevent regressions?' },
   ]
+
+  const aiProjectId = project?.id || id
+
+  const toThreadSummary = useCallback((thread) => ({
+    id: thread?.id,
+    title: thread?.title || 'Recommendation chat',
+    preview: thread?.preview || '',
+    message_count: Number(thread?.message_count || 0),
+    target_payload: thread?.target_payload || null,
+    last_message_at: thread?.last_message_at || thread?.updated_at || new Date().toISOString(),
+    updated_at: thread?.updated_at || thread?.last_message_at || new Date().toISOString(),
+  }), [])
+
+  const mergeThreadSummary = useCallback((threadLike) => {
+    const summary = toThreadSummary(threadLike)
+    setAiThreads((prev) => {
+      const rest = prev.filter((item) => String(item.id) !== String(summary.id))
+      return [summary, ...rest].sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime())
+    })
+  }, [toThreadSummary])
+
+  const loadAiThreads = useCallback(async () => {
+    if (!canUseAiSummaries || !aiProjectId) return
+    setAiThreadsLoading(true)
+    try {
+      const data = await listAssistThreads(aiProjectId)
+      setAiThreads(Array.isArray(data) ? data.map(toThreadSummary) : [])
+    } catch {
+      setAiThreads([])
+    } finally {
+      setAiThreadsLoading(false)
+    }
+  }, [aiProjectId, canUseAiSummaries, toThreadSummary])
+
+  useEffect(() => {
+    if (!aiPanelOpen) return
+    loadAiThreads()
+  }, [aiPanelOpen, loadAiThreads])
+
+  const persistAiThread = useCallback(async (threadId, messages, target, titleOverride) => {
+    if (!threadId) return
+    const payload = {
+      messages: (messages || []).map(({ role, content }) => ({ role, content })),
+      target_payload: target || null,
+    }
+    if (titleOverride) {
+      payload.title = titleOverride
+    }
+    try {
+      const updated = await updateAssistThread(threadId, payload)
+      mergeThreadSummary(updated)
+      if (String(aiActiveThreadId) === String(threadId)) {
+        setAiActiveThreadId(updated?.id || threadId)
+      }
+    } catch {
+      // non-blocking autosave
+    }
+  }, [aiActiveThreadId, mergeThreadSummary])
+
+  const createThreadIfNeeded = useCallback(async (target, initialMessages, titleOverride) => {
+    if (!aiProjectId) return null
+    if (aiActiveThreadId) return aiActiveThreadId
+    try {
+      const created = await createAssistThread(aiProjectId, {
+        title: titleOverride || null,
+        target_payload: target || null,
+        messages: (initialMessages || []).map(({ role, content }) => ({ role, content })),
+      })
+      const newId = created?.id
+      if (newId) {
+        setAiActiveThreadId(newId)
+        mergeThreadSummary(created)
+      }
+      return newId
+    } catch {
+      return null
+    }
+  }, [aiActiveThreadId, aiProjectId, mergeThreadSummary])
+
+  const handleSelectAiThread = useCallback(async (threadId) => {
+    if (!threadId || aiLoading || aiStreaming) return
+    try {
+      const data = await getAssistThread(threadId)
+      setAiActiveThreadId(data?.id || threadId)
+      setAiTarget(data?.target_payload || null)
+      setAiMessages(Array.isArray(data?.messages) ? data.messages : [])
+      setAiPanelOpen(true)
+      setAiInput('')
+      mergeThreadSummary(data)
+    } catch {
+      toast({ type: 'error', message: 'Could not load this chat history.' })
+    }
+  }, [aiLoading, aiStreaming, mergeThreadSummary, toast])
+
+  const handleDeleteAiThread = useCallback(async (threadId) => {
+    if (!threadId || aiLoading || aiStreaming) return
+    try {
+      await deleteAssistThread(threadId)
+      setAiThreads((prev) => prev.filter((thread) => String(thread.id) !== String(threadId)))
+      if (String(aiActiveThreadId) === String(threadId)) {
+        setAiActiveThreadId(null)
+        setAiTarget(null)
+        setAiMessages([])
+      }
+    } catch {
+      toast({ type: 'error', message: 'Failed to delete chat.' })
+    }
+  }, [aiActiveThreadId, aiLoading, aiStreaming, toast])
 
   const closeAiPanel = () => {
     aiRequestIdRef.current += 1
@@ -1443,13 +1659,14 @@ export default function ProjectDetail() {
     setAiPanelOpen(false)
     setAiPanelWide(false)
     setAiTarget(null)
+    setAiActiveThreadId(null)
     setAiMessages([])
     setAiInput('')
     setAiLoading(false)
     setAiStreaming(false)
   }
 
-  const sendAiRequest = async (conversation, target) => {
+  const sendAiRequest = async (conversation, target, threadId = null) => {
     if (!project?.id && !id) return
     const requestId = ++aiRequestIdRef.current
     if (aiAbortRef.current && aiStreaming) {
@@ -1459,6 +1676,7 @@ export default function ProjectDetail() {
     aiAbortRef.current = controller
     setAiLoading(true)
     setAiStreaming(true)
+    recordActivity?.() // prevent idle logout during AI streaming
 
     const payload = {
       vulnerability_id: target?.vulnerabilityId || undefined,
@@ -1529,8 +1747,10 @@ export default function ProjectDetail() {
       setAiMessages((prev) => [...prev, { role: 'assistant', content: 'AI assistant is temporarily unavailable. Please try again.', isError: true }])
     } finally {
       if (aiRequestIdRef.current === requestId) {
+        let finalizedMessages = null
         setAiLoading(false)
         setAiStreaming(false)
+        recordActivity?.() // reset idle timer after stream completes
         if (aiAbortRef.current === controller) {
           aiAbortRef.current = null
         }
@@ -1541,40 +1761,96 @@ export default function ProjectDetail() {
           if (last.role === 'assistant' && last.isStreaming) {
             updated[updated.length - 1] = { ...last, isStreaming: false }
           }
+          finalizedMessages = updated
           return updated
         })
+        if (threadId) {
+          setTimeout(() => {
+            persistAiThread(threadId, finalizedMessages || conversation, target)
+          }, 0)
+        }
       }
     }
   }
 
-  const handleAskAi = (finding, vulnerabilityId, recommendation) => {
+  const handleAskAi = async (finding, vulnerabilityId, recommendation) => {
     if (!aiEnabled || !finding) return
     const context = buildVulnerabilityContextPayload(finding, recommendation)
-    const initialMessages = []
-    setAiTarget({ finding, vulnerabilityId, context })
+    const targetKey = buildAiTargetKey({ finding, vulnerabilityId })
+    const title = finding.title || finding.rule_id || 'this vulnerability'
+    const sev = finding.severity ? ` (${finding.severity.toUpperCase()})` : ''
+    const recLine = recommendation ? `\n\nContext: ${recommendation}` : ''
+    const autoPrompt =
+      `How do I fix the "${title}"${sev} vulnerability, step by step? ` +
+      `Please include concrete code examples where applicable.${recLine}`
+    const initialMessages = [{ role: 'user', content: autoPrompt, isAuto: true }]
+    const targetPayload = { finding, vulnerabilityId, context, target_key: targetKey }
+
+    let availableThreads = aiThreads
+    if ((!availableThreads || availableThreads.length === 0) && aiProjectId) {
+      try {
+        const loaded = await listAssistThreads(aiProjectId)
+        availableThreads = Array.isArray(loaded) ? loaded.map(toThreadSummary) : []
+        setAiThreads(availableThreads)
+      } catch {
+        availableThreads = []
+      }
+    }
+
+    const existingThread = (availableThreads || []).find((thread) => {
+      const payload = thread?.target_payload || {}
+      if (payload?.target_key && payload.target_key === targetKey) return true
+      if (isUuid(vulnerabilityId) && String(payload?.vulnerabilityId || '').toLowerCase() === String(vulnerabilityId).toLowerCase()) {
+        return true
+      }
+      return false
+    })
+
+    if (existingThread?.id) {
+      await handleSelectAiThread(existingThread.id)
+      return
+    }
+
+    setAiTarget(targetPayload)
     setAiMessages(initialMessages)
     setAiInput('')
     setAiPanelOpen(true)
-    sendAiRequest(initialMessages, { vulnerabilityId, context })
+
+    let threadId = null
+    if (aiProjectId) {
+      try {
+        const created = await createAssistThread(aiProjectId, {
+          title: `Fix: ${title}`,
+          target_payload: targetPayload,
+          messages: initialMessages.map(({ role, content }) => ({ role, content })),
+        })
+        threadId = created?.id || null
+        if (threadId) {
+          setAiActiveThreadId(threadId)
+          mergeThreadSummary(created)
+        }
+      } catch {
+        threadId = null
+      }
+    }
+
+    sendAiRequest(initialMessages, targetPayload, threadId)
   }
 
-  const handleAiSend = (message) => {
+  const handleAiSend = async (message) => {
     const trimmed = (message || '').trim()
-    if (!trimmed || aiLoading || aiStreaming || !aiTarget) return
-    setAiMessages((prev) => {
-      const next = [...prev, { role: 'user', content: trimmed }]
-      sendAiRequest(next, {
-        vulnerabilityId: aiTarget.vulnerabilityId,
-        context: null,
-      })
-      return next
-    })
+    if (!trimmed || aiLoading || aiStreaming) return
+    const activeTarget = aiTarget || null
+    const nextMessages = [...(aiMessages || []), { role: 'user', content: trimmed }]
+    setAiMessages(nextMessages)
+    const resolvedThreadId = await createThreadIfNeeded(activeTarget, nextMessages)
+    sendAiRequest(nextMessages, activeTarget, resolvedThreadId)
     setAiInput('')
   }
 
   const handleAiQuickAction = (prompt) => {
     if (aiLoading) return
-    handleAiSend(prompt)
+    void handleAiSend(prompt)
   }
 
   const statsData = [
@@ -1645,16 +1921,10 @@ export default function ProjectDetail() {
   const completedScans = scans.filter(s => s.status === 'completed')
   const latestCompletedScan = completedScans[0] || null
   const previousCompletedScan = completedScans[1] || null
-  const canGenerateAiSummary = canUseAiSummaries && Boolean(latestCompletedScan?.id)
   const latestResultsJson = latestCompletedScan ? scanResultsById[latestCompletedScan.id] : null
   const previousResultsJson = previousCompletedScan ? scanResultsById[previousCompletedScan.id] : null
   const latestSummary = summarizeScan(latestCompletedScan, latestResultsJson, latestCompletedScan?.results_summary)
   const previousSummary = summarizeScan(previousCompletedScan, previousResultsJson, previousCompletedScan?.results_summary)
-
-  useEffect(() => {
-    setAiSummary(null)
-    setAiSummaryError(null)
-  }, [latestCompletedScan?.id])
 
   useEffect(() => {
     let isMounted = true
@@ -1668,15 +1938,13 @@ export default function ProjectDetail() {
       }
 
       try {
-        await listAllSummaries()
+        await listAssistThreads(id)
         if (isMounted) {
           setAiEnabled(true)
         }
       } catch (err) {
-        if (isMounted) {
-          if (err.response?.status === 403) {
-            setAiEnabled(false)
-          }
+        if (isMounted && err.response?.status === 403) {
+          setAiEnabled(false)
         }
       }
     }
@@ -1686,7 +1954,7 @@ export default function ProjectDetail() {
     return () => {
       isMounted = false
     }
-  }, [canUseAiSummaries])
+  }, [canUseAiSummaries, id])
 
   const hasTrendBaseline = Boolean(latestCompletedScan && previousCompletedScan)
   const findingsDelta = hasTrendBaseline ? latestSummary.total - previousSummary.total : 0
@@ -1843,15 +2111,6 @@ export default function ProjectDetail() {
     <AppLayout>
       <main className="flex-1 overflow-auto">
         <div className="px-8 py-8">
-          {canUseAiSummaries && (
-            <SummaryModal
-              open={Boolean(showAiModal)}
-              onClose={() => setShowAiModal(false)}
-              scans={scans.filter(s => s.status === 'completed')}
-              onGenerate={handleModalGenerate}
-            />
-          )}
-
           <AiAssistPanel
             open={aiPanelOpen}
             finding={aiTarget?.finding}
@@ -2021,79 +2280,6 @@ export default function ProjectDetail() {
             ))}
           </div>
 
-          {/* AI Summary */}
-          {canUseAiSummaries && (
-            <div className="rounded-2xl px-5 py-5 mb-6 animate-slide-up"
-              style={{ background: '#111111', border: '1px solid rgba(255,255,255,0.06)', animationDelay: '0.055s' }}>
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div>
-                  <p className="text-xs font-semibold text-white/35 uppercase tracking-widest">AI Summary</p>
-                  <p className="text-xs text-white/28 mt-1">Powered by {aiSummary?.model || 'mistral'} via Ollama</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleGenerateAiSummary}
-                  disabled={!canGenerateAiSummary || aiSummaryLoading}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
-                  style={{ background: 'rgba(255,107,43,0.1)', border: '1px solid rgba(255,107,43,0.25)', color: '#ff8c5a' }}
-                >
-                  {aiSummaryLoading ? 'Generating...' : 'Generate AI Summary'}
-                </button>
-              </div>
-
-              {!canGenerateAiSummary && (
-                <p className="text-xs text-white/30">Complete a scan to enable AI summary generation.</p>
-              )}
-
-              {aiSummaryError && (
-                <p className="text-xs text-red-300/80 mt-2">{aiSummaryError}</p>
-              )}
-
-              {!aiSummary && !aiSummaryError && canGenerateAiSummary && (
-                <p className="text-xs text-white/30">No AI summary yet. Generate one from the latest completed scan.</p>
-              )}
-
-              {aiSummary && (
-                <div className="mt-3 flex flex-col gap-3">
-                  <div>
-                    <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Summary</p>
-                    <p className="text-sm text-white/80">{aiSummary.summary}</p>
-                  </div>
-                  {aiSummary.priorities?.length > 0 && (
-                    <div>
-                      <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Priorities</p>
-                      <ul className="text-xs text-white/70 space-y-1">
-                        {aiSummary.priorities.slice(0, 5).map((item, idx) => (
-                          <li key={`priority-${idx}`}>• {item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {aiSummary.remediation_steps?.length > 0 && (
-                    <div>
-                      <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Remediation Steps</p>
-                      <ul className="text-xs text-white/70 space-y-1">
-                        {aiSummary.remediation_steps.slice(0, 5).map((item, idx) => (
-                          <li key={`remediation-${idx}`}>• {item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {aiSummary.references?.length > 0 && (
-                    <div>
-                      <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">References</p>
-                      <ul className="text-xs text-white/70 space-y-1">
-                        {aiSummary.references.slice(0, 5).map((item, idx) => (
-                          <li key={`ref-${idx}`}>• {item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Security manager workflow */}
           {isSecurityManagerView && (
             <div className="rounded-2xl px-5 py-5 mb-6 animate-slide-up"
@@ -2247,6 +2433,8 @@ export default function ProjectDetail() {
                   resultsSummary={scan.results_summary}
                   onLoadResults={fetchScanResults}
                   autoExpand={scan.id === autoExpandScanId}
+                  aiEnabled={aiEnabled}
+                  onAskAi={handleAskAi}
                 />
               ))
             )}

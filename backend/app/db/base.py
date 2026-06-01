@@ -25,6 +25,8 @@ MODEL_MODULES = (
     "vulnerability",
     "vulnerability_workflow",
     "recommendation",
+    "scan_summary",
+    "llm_chat_thread",
 )
 
 

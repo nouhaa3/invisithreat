@@ -5,6 +5,7 @@ import Select from '../components/Select'
 import { getProject } from '../services/projectService'
 import { getMembers, inviteMember, updateMemberRole, removeMember } from '../services/projectService'
 import { useUiFeedback } from '../context/UiFeedbackContext'
+import { useAuth } from '../context/AuthContext'
 
 const ROLES = ['Viewer', 'Editor']
 
@@ -42,6 +43,7 @@ export default function ProjectMembersPage() {
   const navigate = useNavigate()
   const { confirm, toast } = useUiFeedback()
 
+  const { user } = useAuth()
   const [project, setProject] = useState(null)
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -191,16 +193,29 @@ export default function ProjectMembersPage() {
                   '--tw-ring-color': '#FF6B2B',
                 }}
               />
-              <Select
-                value={role}
-                options={ROLES}
-                onChange={setRole}
-                size="md"
-              />
+              <div className="relative flex-shrink-0" style={{ minWidth: '130px' }}>
+                <select
+                  value={role}
+                  onChange={e => setRole(e.target.value)}
+                  className="w-full appearance-none pl-3 pr-8 py-2.5 rounded-xl text-sm font-semibold outline-none cursor-pointer transition-all"
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border: `1px solid ${role === 'Editor' ? 'rgba(255,107,43,0.4)' : 'rgba(255,255,255,0.14)'}`,
+                    color: role === 'Editor' ? '#FF6B2B' : 'rgba(255,255,255,0.75)',
+                    boxShadow: role === 'Editor' ? '0 0 0 2px rgba(255,107,43,0.08)' : 'none',
+                  }}
+                >
+                  <option value="Viewer" style={{ background: '#1a1a1a', color: '#ccc' }}>Viewer</option>
+                  <option value="Editor" style={{ background: '#1a1a1a', color: '#FF6B2B' }}>Editor</option>
+                </select>
+                <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2.5">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </div>
               <button
                 type="submit"
                 disabled={inviting || !email.trim()}
-                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.97] disabled:opacity-40"
+                className="self-end px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.97] disabled:opacity-40"
                 style={{ background: 'linear-gradient(135deg,#FF6B2B,#e85d1e)' }}
               >
                 {inviting ? (
@@ -225,7 +240,7 @@ export default function ProjectMembersPage() {
           </div>
 
           {/* Members list */}
-          <div className="ui-card ui-card-sheen overflow-hidden">
+          <div className="ui-card ui-card-sheen">
             <div className="px-6 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
               <span className="text-white/40 text-xs font-medium uppercase tracking-wide">
                 {members.length} member{members.length !== 1 ? 's' : ''}
@@ -244,7 +259,8 @@ export default function ProjectMembersPage() {
             ) : (
               <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
                 {members.map(member => {
-                  const isOwner = member.role_projet === 'Owner'
+                  const isMemberOwner = member.role_projet === 'Owner'
+                  const currentUserIsOwner = project?.owner_id === user?.id
                   return (
                     <div key={member.user_id}
                       className="flex items-center gap-4 px-6 py-4 hover:bg-white/[0.02] transition-colors">
@@ -252,7 +268,7 @@ export default function ProjectMembersPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-white text-sm font-medium truncate">{member.nom}</span>
-                          {isOwner && (
+                          {isMemberOwner && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
                               style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.2)' }}>
                               Owner
@@ -266,10 +282,10 @@ export default function ProjectMembersPage() {
                         {new Date(member.joined_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </span>
 
-                      {/* Role selector */}
-                      {isOwner ? (
+                      {/* Role — editable only by owner, otherwise read-only badge */}
+                      {isMemberOwner ? (
                         <RoleBadge role="Owner" />
-                      ) : (
+                      ) : currentUserIsOwner ? (
                         <Select
                           value={member.role_projet}
                           options={ROLES}
@@ -277,19 +293,28 @@ export default function ProjectMembersPage() {
                           onChange={v => handleRoleChange(member.user_id, v)}
                           size="sm"
                         />
+                      ) : (
+                        <RoleBadge role={member.role_projet} />
                       )}
 
-                      {/* Remove button */}
-                      {!isOwner && (
+                      {/* Remove — only owner can remove members */}
+                      {!isMemberOwner && currentUserIsOwner && (
                         <button
                           onClick={() => handleRemove(member.user_id, member.nom)}
                           disabled={removingId === member.user_id}
-                          className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:bg-red-500/10 text-white/20 hover:text-red-400 disabled:opacity-30 flex-shrink-0"
+                          className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:bg-red-500/10 text-white/25 hover:text-red-400 disabled:opacity-30 flex-shrink-0"
                           style={{ border: '1px solid rgba(255,255,255,0.06)' }}
                           title={`Remove ${member.nom}`}
                         >
-                          {removingId === member.user_id && (
+                          {removingId === member.user_id ? (
                             <span className="w-3 h-3 border border-red-400/50 border-t-red-400 rounded-full animate-spin" />
+                          ) : (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                              <path d="M10 11v6M14 11v6" />
+                              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                            </svg>
                           )}
                         </button>
                       )}

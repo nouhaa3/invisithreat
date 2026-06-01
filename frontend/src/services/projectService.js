@@ -91,6 +91,30 @@ export const generateScanSummary = async (scanId, maxFindings = 12) => {
   return res.data
 }
 
+export const listAssistThreads = async (projectId) => {
+  const res = await api.get(`/api/llm/projects/${projectId}/assist-threads`)
+  return res.data
+}
+
+export const createAssistThread = async (projectId, payload) => {
+  const res = await api.post(`/api/llm/projects/${projectId}/assist-threads`, payload)
+  return res.data
+}
+
+export const getAssistThread = async (threadId) => {
+  const res = await api.get(`/api/llm/assist-threads/${threadId}`)
+  return res.data
+}
+
+export const updateAssistThread = async (threadId, payload) => {
+  const res = await api.patch(`/api/llm/assist-threads/${threadId}`, payload)
+  return res.data
+}
+
+export const deleteAssistThread = async (threadId) => {
+  await api.delete(`/api/llm/assist-threads/${threadId}`)
+}
+
 export const createScan = async (projectId, { method, analysis_type, repo_url, repo_branch, repo_token, dast_target_url }) => {
   const res = await api.post(`/api/projects/${projectId}/scans`, {
     method,
