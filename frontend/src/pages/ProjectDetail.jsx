@@ -1047,27 +1047,65 @@ function renderInlineMd(text) {
   })
 }
 
+function AiCodeBlock({ lang, code }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    })
+  }
+  return (
+    <div className="my-2 rounded-lg overflow-hidden"
+      style={{ background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)' }}>
+      <div className="flex items-center justify-between px-3 py-1 border-b"
+        style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'rgba(255,107,43,0.07)' }}>
+        {lang
+          ? <span className="text-[10px] font-mono tracking-wider" style={{ color: '#FF8C5A' }}>{lang}</span>
+          : <span />
+        }
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1 text-[10px] font-medium transition-colors"
+          style={{ color: copied ? '#22c55e' : 'rgba(255,255,255,0.35)' }}
+          title="Copy code"
+        >
+          {copied ? (
+            <>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+              Copied
+            </>
+          ) : (
+            <>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copy
+            </>
+          )}
+        </button>
+      </div>
+      <pre className="px-3 py-2.5 text-xs font-mono text-white/70 overflow-x-auto leading-relaxed">
+        {code}
+      </pre>
+    </div>
+  )
+}
+
 function renderAiMarkdown(text) {
   if (!text) return null
-  const blocks = text.split(/(```[\s\S]*?```)/g)
+  // Normalize inline numbered steps: insert newline before "N." when it appears mid-sentence
+  // e.g. "...reference.2. Remove..." → "...reference.\n2. Remove..."
+  const normalized = text.replace(/([^\n])(\d+\.\s+)/g, (match, before, numPart) => {
+    // Only break if it looks like a list step (capital letter or common words after the number)
+    return `${before}\n${numPart}`
+  })
+  const blocks = normalized.split(/(```[\s\S]*?```)/g)
   return blocks.map((block, bi) => {
     if (block.startsWith('```')) {
       const m = block.match(/^```(\w*)\n?([\s\S]*?)```$/)
       const lang = m?.[1] || ''
       const code = (m?.[2] ?? block.replace(/^```\w*\n?/, '').replace(/```$/, '')).trimEnd()
       return (
-        <div key={bi} className="my-2 rounded-lg overflow-hidden"
-          style={{ background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)' }}>
-          {lang && (
-            <div className="px-3 py-1 text-[10px] font-mono tracking-wider border-b"
-              style={{ color: '#FF8C5A', borderColor: 'rgba(255,255,255,0.06)', background: 'rgba(255,107,43,0.07)' }}>
-              {lang}
-            </div>
-          )}
-          <pre className="px-3 py-2.5 text-xs font-mono text-white/70 overflow-x-auto leading-relaxed">
-            {code}
-          </pre>
-        </div>
+        <AiCodeBlock key={bi} lang={lang} code={code} />
       )
     }
     const lines = block.split('\n')
@@ -1085,7 +1123,9 @@ function renderAiMarkdown(text) {
       if (line.match(/^\d+\.\s+/)) {
         const items = []
         while (i < lines.length && lines[i].match(/^\d+\.\s+/)) {
-          items.push(lines[i].replace(/^\d+\.\s+/, '')); i++
+          const numMatch = lines[i].match(/^(\d+)\.\s+/)
+          items.push({ num: parseInt(numMatch[1], 10), text: lines[i].replace(/^\d+\.\s+/, '') })
+          i++
         }
         nodes.push(
           <ol key={`${bi}-ol${i}`} className="list-none space-y-1.5 my-2 pl-0">
@@ -1093,9 +1133,9 @@ function renderAiMarkdown(text) {
               <li key={ii} className="text-xs text-white/80 leading-relaxed flex items-start gap-2">
                 <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5"
                   style={{ background: 'rgba(255,107,43,0.18)', color: '#FF8C5A', minWidth: '1.25rem' }}>
-                  {ii + 1}
+                  {item.num}
                 </span>
-                <span>{renderInlineMd(item)}</span>
+                <span>{renderInlineMd(item.text)}</span>
               </li>
             ))}
           </ol>
