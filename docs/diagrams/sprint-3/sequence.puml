@@ -1,0 +1,91 @@
+@startuml
+title Sprint 3 - SAST et SCA (GitHub scan + OSV)
+actor "Utilisateur" as U
+actor "Scanner CLI" as CLI
+boundary "IHM Scans" as UI
+control "ScanController" as SC
+control "ProjectService" as PS
+entity "ProjectModel" as PM
+entity "ScanModel" as SM
+entity "GitHubRepositoryModel" as GR
+database "Base de donnees" as DB
+
+control "CeleryWorker" as CW
+control "GitHubScannerService" as GS
+participant "GitHub Repo" as GH
+participant "Git CLI" as GIT
+control "DependencyScanner" as DS
+participant "OSV API" as OSV
+control "RiskScoreService" as RS
+entity "RiskScoreModel" as RSM
+control "VulnWorkflowService" as VWS
+entity "VulnerabilityTaskModel" as VTM
+control "SocketIOManager" as WS
+control "AuditLogService" as ALS
+control "NotificationService" as NS
+control "CLIController" as CLC
+
+U -> UI: lancer scan GitHub
+UI -> SC: POST /projects/{id}/scans (method=github)
+SC -> PS: get_project_accessible()
+PS -> PM: charger project
+PM -> DB: SELECT project
+DB --> PM: project
+SC -> PS: create_scan()
+PS -> SM: new Scan(pending)
+SM -> DB: INSERT scan
+DB --> SM: scan id
+SC -> GR: upsert repo + token
+GR -> DB: INSERT/UPDATE github_repository
+DB --> GR: ok
+SC -> ALS: create_audit_log("scan_created")
+ALS -> DB: INSERT audit_log
+
+alt Celery disponible
+    SC -> CW: run_github_scan_job.apply_async
+    CW -> SM: set job_id + job_state queued
+    SM -> DB: UPDATE scan
+    CW -> WS: emit_scan_state_change(queued)
+else dev fallback
+    SC -> GS: background run_github_scan()
+end
+
+CW -> GS: run_github_scan(scan_id, repo_url, branch)
+GS -> SM: set status running
+SM -> DB: UPDATE scan
+GS -> GIT: git clone repo
+GIT -> GH: clone
+GH --> GIT: repo content
+GIT --> GS: working tree
+
+GS -> GS: run SAST rules + secrets rules
+GS -> DS: scan_dependencies(lockfiles)
+DS -> OSV: query batch
+OSV --> DS: vulnerabilities
+DS --> GS: dependency findings
+GS -> SM: save results_json + status completed
+SM -> DB: UPDATE scan
+GS -> RS: upsert_scan_risk_score()
+RS -> RSM: INSERT/UPDATE risk_score
+RSM -> DB: ok
+GS -> VWS: sync_vulnerability_tasks_for_scan()
+VWS -> VTM: UPSERT tasks
+VTM -> DB: ok
+GS -> WS: emit_scan_state_change(completed)
+
+opt scan via CLI
+    CLI -> CLC: POST /cli/scan (api key)
+    CLC -> PM: verifier acces projet
+    PM -> DB: SELECT project
+    CLC -> SM: create scan + mark running
+    SM -> DB: INSERT/UPDATE scan
+    CLC -> RS: get_or_create_scan_risk_score()
+    RS -> RSM: INSERT/UPDATE
+    CLC -> VWS: sync_vulnerability_tasks_for_scan()
+    VWS -> VTM: UPSERT tasks
+    CLC -> NS: create_notification(scan_complete)
+    NS -> DB: INSERT notification
+    NS -> WS: emit_notification_created
+    CLC --> CLI: scan_id + url
+end
+@enduml

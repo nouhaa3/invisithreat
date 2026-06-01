@@ -279,7 +279,19 @@ function PulseDot({ color }) {
 
 // ─── Findings Panel ──────────────────────────────────────────────────────────
 
-function FindingsPanel({ results, aiEnabled, onAskAi }) {
+function FindingsPanel({
+  results,
+  workflowEnabled = false,
+  workflowTaskByFingerprint = {},
+  assignees = [],
+  canManageWorkflowTask = false,
+  onSaveTask,
+  onSendComment,
+  currentUserId,
+  projectUserRole,
+  aiEnabled = false,
+  onAskAi,
+}) {
   const [filter, setFilter] = useState('all')
   const summary = results.summary || {}
   const findings = results.findings || []
@@ -334,8 +346,48 @@ function FindingsPanel({ results, aiEnabled, onAskAi }) {
       <div className="flex flex-col gap-2">
         {filtered.map((f, i) => {
           const cfg = SEVERITY_CONFIG[f.severity] || SEVERITY_CONFIG.info
+          const recommendation = f.recommendation || RECOMMENDATIONS[f.rule_id]
+
+          if (!workflowEnabled) {
+            return (
+              <FindingRow
+                key={f.id || i}
+                finding={f}
+                cfg={cfg}
+                recommendation={recommendation}
+                aiEnabled={aiEnabled}
+                onAskAi={onAskAi}
+              />
+            )
+          }
+
+          const fingerprint = buildFindingFingerprint(f)
+          const workflowTask = workflowTaskByFingerprint[fingerprint] || null
+          const canAdjustStatus =
+            canManageWorkflowTask ||
+            projectUserRole === 'owner' ||
+            projectUserRole === 'editor' ||
+            workflowTask?.assignee_id === currentUserId
+          const canComment = canAdjustStatus || workflowTask?.assignee_id === currentUserId
+
           return (
-            <FindingRow key={f.id || i} finding={f} cfg={cfg} recommendation={f.recommendation || RECOMMENDATIONS[f.rule_id]} aiEnabled={aiEnabled} onAskAi={onAskAi} />
+            <CurrentFindingRow
+              key={f.id || i}
+              finding={f}
+              cfg={cfg}
+              isRecurring={false}
+              recommendation={recommendation}
+              workflowTask={workflowTask}
+              assignees={assignees}
+              canManageTask={canManageWorkflowTask}
+              canAdjustStatus={canAdjustStatus}
+              canComment={canComment}
+              onSaveTask={onSaveTask}
+              onSendComment={onSendComment}
+              currentUserId={currentUserId}
+              aiEnabled={aiEnabled}
+              onAskAi={onAskAi}
+            />
           )
         })}
       </div>
@@ -751,7 +803,25 @@ function CurrentFindingRow({
 
 // ─── Scan Row ────────────────────────────────────────────────────────────────
 
-const ScanRow = memo(function ScanRow({ scan, onRescan, rescanning, resultsJson, resultsSummary, onLoadResults, autoExpand, aiEnabled, onAskAi }) {
+const ScanRow = memo(function ScanRow({
+  scan,
+  onRescan,
+  rescanning,
+  resultsJson,
+  resultsSummary,
+  onLoadResults,
+  autoExpand,
+  workflowEnabled,
+  workflowTaskByFingerprint,
+  assignees,
+  canManageWorkflowTask,
+  onSaveTask,
+  onSendComment,
+  currentUserId,
+  projectUserRole,
+  aiEnabled,
+  onAskAi,
+}) {
   const [expanded, setExpanded] = useState(false)
   const status = STATUS_CONFIG[scan.status] || STATUS_CONFIG.pending
   const method = METHOD_CONFIG[scan.method] || METHOD_CONFIG.cli
@@ -896,7 +966,19 @@ const ScanRow = memo(function ScanRow({ scan, onRescan, rescanning, resultsJson,
       {/* Expanded results */}
       {expanded && results && (
         <div className="px-5 pb-5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-          <FindingsPanel results={results} aiEnabled={aiEnabled} onAskAi={onAskAi} />
+          <FindingsPanel
+            results={results}
+            workflowEnabled={workflowEnabled}
+            workflowTaskByFingerprint={workflowTaskByFingerprint}
+            assignees={assignees}
+            canManageWorkflowTask={canManageWorkflowTask}
+            onSaveTask={onSaveTask}
+            onSendComment={onSendComment}
+            currentUserId={currentUserId}
+            projectUserRole={projectUserRole}
+            aiEnabled={aiEnabled}
+            onAskAi={onAskAi}
+          />
         </div>
       )}
       {isLoadingResults && (
@@ -2423,20 +2505,34 @@ export default function ProjectDetail() {
                 )}
               </div>
             ) : (
-              scans.map(scan => (
-                <ScanRow
-                  key={scan.id}
-                  scan={scan}
-                  onRescan={canEdit ? handleRescan : null}
-                  rescanning={rescanning}
-                  resultsJson={scanResultsById[scan.id] ?? scan.results_json ?? null}
-                  resultsSummary={scan.results_summary}
-                  onLoadResults={fetchScanResults}
-                  autoExpand={scan.id === autoExpandScanId}
-                  aiEnabled={aiEnabled}
-                  onAskAi={handleAskAi}
-                />
-              ))
+              scans.map((scan) => {
+                const workflowEnabled = Boolean(
+                  vulnerabilityWorkflow.scan_id &&
+                  String(scan.id) === String(vulnerabilityWorkflow.scan_id)
+                )
+                return (
+                  <ScanRow
+                    key={scan.id}
+                    scan={scan}
+                    onRescan={canEdit ? handleRescan : null}
+                    rescanning={rescanning}
+                    resultsJson={scanResultsById[scan.id] ?? scan.results_json ?? null}
+                    resultsSummary={scan.results_summary}
+                    onLoadResults={fetchScanResults}
+                    autoExpand={scan.id === autoExpandScanId}
+                    workflowEnabled={workflowEnabled}
+                    workflowTaskByFingerprint={workflowTaskByFingerprint}
+                    assignees={vulnerabilityWorkflow.assignees || []}
+                    canManageWorkflowTask={canManageWorkflowTask}
+                    onSaveTask={saveVulnerabilityTask}
+                    onSendComment={sendVulnerabilityComment}
+                    currentUserId={user?.id}
+                    projectUserRole={project?.user_role}
+                    aiEnabled={aiEnabled}
+                    onAskAi={handleAskAi}
+                  />
+                )
+              })
             )}
           </div>
 

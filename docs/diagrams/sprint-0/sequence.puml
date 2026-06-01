@@ -1,0 +1,36 @@
+@startuml
+title Sprint 0 - Demarrage plateforme et seed
+actor "Admin/DevOps" as ADM
+boundary "Setup CLI" as CLI
+control "AppLifespan" as APP
+control "MigrationRunner" as MIG
+control "SeedScript" as SEED
+entity "RoleModel" as ROLE
+entity "UserModel" as USER
+database "Base de donnees" as DB
+participant "Scheduler" as SCHED
+
+ADM -> CLI: lancer docker-compose / uvicorn
+CLI -> APP: demarrer application
+APP -> APP: validate_encryption_configuration()
+APP -> SCHED: start()
+
+opt migrations activees
+APP -> MIG: run_migrations()
+MIG -> DB: alembic upgrade head
+DB --> MIG: ok
+end
+
+opt seed initial
+ADM -> SEED: python -m app.db.seed
+SEED -> ROLE: verifier/creer roles
+ROLE -> DB: SELECT/INSERT roles
+DB --> ROLE: role id
+SEED -> USER: verifier/creer users
+USER -> DB: SELECT/INSERT users
+DB --> USER: user id
+end
+
+ADM -> APP: GET /
+APP --> ADM: API ready + version
+@enduml
