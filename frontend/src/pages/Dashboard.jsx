@@ -748,7 +748,7 @@ export default function Dashboard() {
                     className="px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
                     style={{ background: 'linear-gradient(135deg,#FF6B2B,#C13A00)' }}
                   >
-                    {briefingLoading ? 'Loading...' : 'Generate Daily Briefing'}
+                    {briefingLoading ? 'Loading...' : 'View Latest AI Briefing'}
                   </button>
                 </div>
               </div>
@@ -929,6 +929,7 @@ function SevPill({ n, c, label }) {
 }
 
 function AiBriefingModal({ summary, onClose }) {
+  const navigate = useNavigate()
   if (!summary) return null
 
   return (
@@ -947,22 +948,39 @@ function AiBriefingModal({ summary, onClose }) {
             <h3 className="text-lg font-semibold text-white">AI Security Briefing</h3>
             <p className="text-sm text-white/45 mt-1">Generated {formatBriefingDate(summary.generated_at)}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}
-          >
-            Close
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { onClose(); navigate('/summaries') }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:bg-white/10"
+              style={{ background: 'rgba(255,107,43,0.1)', border: '1px solid rgba(255,107,43,0.25)', color: '#FF8C5A' }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              View all summaries
+            </button>
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}
+            >
+              Close
+            </button>
+          </div>
         </div>
 
         <div className="p-6 flex flex-col gap-4">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] uppercase tracking-[0.16em] text-white/40">Model</span>
             <span className="text-xs text-white/70">{summary.model || 'AI Summary'}</span>
             {summary.scan_id && (
               <span className="text-xs text-white/35">Scan {String(summary.scan_id).slice(0, 8)}</span>
             )}
+            <span className="ml-auto flex items-center gap-1 text-[10px] text-green-400/70">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Saved in Summaries
+            </span>
           </div>
           <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <p className="text-sm text-white/75 whitespace-pre-wrap leading-relaxed">

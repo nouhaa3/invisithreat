@@ -130,6 +130,8 @@ def _row_to_response(row: ScanSummaryModel):
     return ScanSummaryResponse(
         id=row.id,
         scan_id=row.scan_id,
+        project_id=row.project_id,
+        project_name=row.project.name if row.project else None,
         model=row.model or '',
         summary=row.summary or '',
         priorities=priorities,

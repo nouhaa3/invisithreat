@@ -15,6 +15,8 @@ class ScanSummaryRequest(BaseModel):
 class ScanSummaryResponse(BaseModel):
     id: Optional[uuid.UUID] = None
     scan_id: uuid.UUID
+    project_id: Optional[uuid.UUID] = None
+    project_name: Optional[str] = None
     model: str
     summary: str
     priorities: List[str] = Field(default_factory=list)
