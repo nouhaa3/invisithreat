@@ -17,6 +17,7 @@ from app.api.routes import totp
 from app.api.routes import integrations
 from app.api.routes import dast
 from app.api.routes import llm
+from app.api.routes import daily_insights
 
 api_router = APIRouter()
 
@@ -36,3 +37,4 @@ api_router.include_router(totp.router)
 api_router.include_router(integrations.router)
 api_router.include_router(dast.router, prefix="/dast", tags=["dast"])
 api_router.include_router(llm.router)
+api_router.include_router(daily_insights.router)

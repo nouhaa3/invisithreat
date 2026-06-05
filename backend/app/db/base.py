@@ -27,6 +27,7 @@ MODEL_MODULES = (
     "recommendation",
     "scan_summary",
     "llm_chat_thread",
+    "daily_security_insight",
 )
 
 

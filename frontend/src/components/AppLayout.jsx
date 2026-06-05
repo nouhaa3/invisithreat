@@ -193,6 +193,17 @@ export default function AppLayout({ children }) {
             </NavItem>
           )}
 
+          {check('use_ai_summaries') && (
+            <NavItem to="/insights" icon={
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.44-4.16Z"/>
+                <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.44-4.16Z"/>
+              </svg>
+            } label="Daily Insights" collapsed={!sidebarOpen} onNavigate={() => setMobileOpen(false)}>
+              Daily Insights
+            </NavItem>
+          )}
+
           {/* ── Activity ──────────────────────────────── */}
           <SectionLabel collapsed={!sidebarOpen}>Activity</SectionLabel>
 
