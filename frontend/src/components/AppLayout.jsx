@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import usePermissions from '../hooks/usePermissions'
 import { ProfileAvatar } from './ProfileAvatar'
 import NotificationBell from './NotificationBell'
+import SessionWarningPopup from './SessionWarningPopup'
 import logo from '../assets/logo_invisithreat.png'
 
 function SectionLabel({ children, collapsed }) {
@@ -296,6 +297,9 @@ export default function AppLayout({ children }) {
         </div>
         {children}
       </div>
+
+      {/* Session expiry warning — rendered at app-shell level, always on top */}
+      <SessionWarningPopup />
     </div>
   )
 }

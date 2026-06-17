@@ -8,6 +8,7 @@ import { getDashboardStats, getSecurityManagerProjects } from '../services/proje
 import { getAdminDashboardStats } from '../services/adminDashboardService'
 import { listAllSummaries } from '../services/summaryService'
 import { can, PERMISSIONS } from '../utils/permissions'
+import useExportReport from '../hooks/useExportReport'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -278,6 +279,9 @@ function SecurityManagerDashboard({
   onOpenProjects,
   onOpenProject,
   onExportSnapshot,
+  onExportPDF,
+  onExportExcel,
+  exporting,
 }) {
   if (loading) {
     return (
@@ -357,11 +361,22 @@ function SecurityManagerDashboard({
             Security Portfolio
           </button>
           <button
-            onClick={onExportSnapshot}
-            className="px-4 py-2 rounded-xl text-sm font-semibold text-white/85"
+            onClick={onExportPDF}
+            disabled={exporting}
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-white/85 flex items-center gap-1.5 disabled:opacity-40"
             style={{ border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.02)' }}
           >
-            Export Snapshot
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            {exporting ? 'Exporting…' : 'PDF Report'}
+          </button>
+          <button
+            onClick={onExportExcel}
+            disabled={exporting}
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-white/85 flex items-center gap-1.5 disabled:opacity-40"
+            style={{ border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.02)' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            {exporting ? 'Exporting…' : 'Excel Export'}
           </button>
           <button
             onClick={onOpenNotifications}
@@ -581,11 +596,15 @@ export default function Dashboard() {
       ? `project: ${maxRiskProjectName}`
       : 'no scored projects yet'
 
-  const exportSecuritySnapshot = () => {
-    if (!stats) return
-    const source = securityPortfolio.projects?.length ? securityPortfolio.projects : (stats.top_risky_projects || [])
-    const rows = source.map((p) => [
-      p.name,
+  const { exportPDF, exportExcel, exporting } = useExportReport()
+
+  // ── Build project rows (shared between SM and Developer exports) ──────────
+  const _projectRows = () => {
+    const source = securityPortfolio.projects?.length
+      ? securityPortfolio.projects
+      : (stats?.top_risky_projects || [])
+    return source.map(p => [
+      p.name || '—',
       Number(p.risk_score || 0).toFixed(2),
       p.critical || 0,
       p.high || 0,
@@ -593,21 +612,192 @@ export default function Dashboard() {
       p.low || 0,
       getPriorityInfo(p).label,
     ])
+  }
 
-    if (rows.length === 0) {
-      rows.push(['No projects', '0.00', 0, 0, 0, 0, 'P3'])
-    }
-
+  const exportSecuritySnapshot = () => {
+    if (!stats) return
+    const rows = _projectRows()
+    if (rows.length === 0) rows.push(['No projects', '0.00', 0, 0, 0, 0, 'P3'])
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
     downloadCsv(`security-snapshot-${stamp}.csv`, [
-      'project_name',
-      'risk_score',
-      'critical_findings',
-      'high_findings',
-      'medium_findings',
-      'low_findings',
-      'priority',
+      'project_name', 'risk_score', 'critical_findings',
+      'high_findings', 'medium_findings', 'low_findings', 'priority',
     ], rows)
+  }
+
+  // ── Security Manager — PDF ────────────────────────────────────────────────
+  const handleExportPDF = () => {
+    if (!stats) return
+    const rows = _projectRows()
+    exportPDF({
+      title: 'Security Portfolio Report',
+      user,
+      subtitle: `Data window: last ${stats.scan_trend?.length || 14} days  •  Portfolio: ${securityPortfolio.projects?.length || stats.top_risky_projects?.length || 0} projects`,
+      sections: [
+        {
+          heading: 'Executive Summary',
+          pairs: [
+            ['Security Score',       stats.security_score ?? '—'],
+            ['Total Findings',       stats.total_findings ?? 0],
+            ['Critical Findings',    stats.by_severity?.critical ?? 0],
+            ['High Findings',        stats.by_severity?.high ?? 0],
+            ['Medium Findings',      stats.by_severity?.medium ?? 0],
+            ['Low Findings',         stats.by_severity?.low ?? 0],
+            ['Average Risk Score',   stats.risk_overview?.avg_score?.toFixed(2) ?? '—'],
+            ['Max Risk Score',       stats.risk_overview?.max_score?.toFixed(2) ?? '—'],
+            ['Total Scans',          stats.total_scans ?? 0],
+            ['Active Scans',         stats.active_scans ?? 0],
+          ],
+        },
+        {
+          heading: 'Project Risk Prioritization Queue',
+          columns: ['Project', 'Risk Score', 'Critical', 'High', 'Medium', 'Low', 'Priority'],
+          rows: rows.length ? rows : [['No projects available', '—', '—', '—', '—', '—', '—']],
+          columnStyles: {
+            0: { cellWidth: 55 },
+            1: { halign: 'center' },
+            2: { halign: 'center', textColor: [248, 113, 113] },
+            3: { halign: 'center', textColor: [251, 146, 60] },
+            4: { halign: 'center', textColor: [234, 179, 8] },
+            5: { halign: 'center', textColor: [96, 165, 250] },
+            6: { halign: 'center' },
+          },
+        },
+        {
+          heading: 'Scan Activity (Last 14 Days)',
+          columns: ['Date', 'Scans'],
+          rows: (stats.scan_trend || []).map(d => [d.date, d.count]),
+        },
+      ],
+    })
+  }
+
+  // ── Security Manager — Excel ──────────────────────────────────────────────
+  const handleExportExcel = () => {
+    if (!stats) return
+    const rows = _projectRows()
+    exportExcel({
+      title: 'Security Portfolio Report',
+      user,
+      sheets: [
+        {
+          name: 'Executive Summary',
+          heading: 'Executive Summary',
+          pairs: [
+            ['Security Score',       stats.security_score ?? '—'],
+            ['Total Findings',       stats.total_findings ?? 0],
+            ['Critical Findings',    stats.by_severity?.critical ?? 0],
+            ['High Findings',        stats.by_severity?.high ?? 0],
+            ['Medium Findings',      stats.by_severity?.medium ?? 0],
+            ['Low Findings',         stats.by_severity?.low ?? 0],
+            ['Average Risk Score',   stats.risk_overview?.avg_score?.toFixed(2) ?? '—'],
+            ['Max Risk Score',       stats.risk_overview?.max_score?.toFixed(2) ?? '—'],
+            ['Total Scans',          stats.total_scans ?? 0],
+            ['Active Scans',         stats.active_scans ?? 0],
+          ],
+          colWidths: [28, 20],
+        },
+        {
+          name: 'Project Risk Queue',
+          heading: 'Project Risk Prioritization Queue',
+          columns: ['Project', 'Risk Score', 'Critical', 'High', 'Medium', 'Low', 'Priority'],
+          rows: rows.length ? rows : [['No projects', '—', '—', '—', '—', '—', '—']],
+          colWidths: [40, 12, 10, 10, 10, 10, 12],
+        },
+        {
+          name: 'Scan Trend',
+          heading: 'Scan Activity (Last 14 Days)',
+          columns: ['Date', 'Scans Count'],
+          rows: (stats.scan_trend || []).map(d => [d.date, d.count]),
+          colWidths: [18, 16],
+        },
+      ],
+    })
+  }
+
+  // ── Developer — PDF ───────────────────────────────────────────────────────
+  const handleDevExportPDF = () => {
+    if (!stats) return
+    const rows = _projectRows()
+    exportPDF({
+      title: 'My Security Overview',
+      user,
+      subtitle: 'Personal workspace scan & finding summary',
+      sections: [
+        {
+          heading: 'Workspace Metrics',
+          pairs: [
+            ['Projects',        stats.total_projects ?? 0],
+            ['Total Scans',     stats.total_scans ?? 0],
+            ['Active Scans',    stats.active_scans ?? 0],
+            ['Total Findings',  stats.total_findings ?? 0],
+            ['Critical',        stats.by_severity?.critical ?? 0],
+            ['High',            stats.by_severity?.high ?? 0],
+            ['Medium',          stats.by_severity?.medium ?? 0],
+            ['Low',             stats.by_severity?.low ?? 0],
+            ['Security Score',  stats.security_score ?? '—'],
+            ['Max Risk',        `${maxRisk.toFixed(1)}/10`],
+          ],
+        },
+        {
+          heading: 'Riskiest Projects',
+          columns: ['Project', 'Risk Score', 'Critical', 'High', 'Medium', 'Low', 'Priority'],
+          rows: rows.length ? rows : [['No scan data yet', '—', '—', '—', '—', '—', '—']],
+          columnStyles: {
+            0: { cellWidth: 55 },
+            2: { halign: 'center', textColor: [248, 113, 113] },
+            3: { halign: 'center', textColor: [251, 146, 60] },
+          },
+        },
+        {
+          heading: 'Scan Trend (Last 14 Days)',
+          columns: ['Date', 'Scans'],
+          rows: (stats.scan_trend || []).map(d => [d.date, d.count]),
+        },
+      ],
+    })
+  }
+
+  // ── Developer — Excel ─────────────────────────────────────────────────────
+  const handleDevExportExcel = () => {
+    if (!stats) return
+    const rows = _projectRows()
+    exportExcel({
+      title: 'My Security Overview',
+      user,
+      sheets: [
+        {
+          name: 'Summary',
+          heading: 'Workspace Metrics',
+          pairs: [
+            ['Projects',       stats.total_projects ?? 0],
+            ['Total Scans',    stats.total_scans ?? 0],
+            ['Total Findings', stats.total_findings ?? 0],
+            ['Critical',       stats.by_severity?.critical ?? 0],
+            ['High',           stats.by_severity?.high ?? 0],
+            ['Medium',         stats.by_severity?.medium ?? 0],
+            ['Low',            stats.by_severity?.low ?? 0],
+            ['Security Score', stats.security_score ?? '—'],
+            ['Max Risk',       `${maxRisk.toFixed(1)}/10`],
+          ],
+          colWidths: [24, 14],
+        },
+        {
+          name: 'Projects',
+          heading: 'Riskiest Projects',
+          columns: ['Project', 'Risk Score', 'Critical', 'High', 'Medium', 'Low', 'Priority'],
+          rows: rows.length ? rows : [['No data', '—', '—', '—', '—', '—', '—']],
+          colWidths: [40, 12, 10, 10, 10, 10, 12],
+        },
+        {
+          name: 'Scan Trend',
+          heading: 'Scan Activity (Last 14 Days)',
+          columns: ['Date', 'Scans Count'],
+          rows: (stats.scan_trend || []).map(d => [d.date, d.count]),
+          colWidths: [18, 16],
+        },
+      ],
+    })
   }
 
   const handleBriefingRequest = async () => {
@@ -663,6 +853,9 @@ export default function Dashboard() {
             onOpenProjects={() => navigate('/projects')}
             onOpenProject={(projectId) => navigate(`/projects/${projectId}`)}
             onExportSnapshot={exportSecuritySnapshot}
+            onExportPDF={handleExportPDF}
+            onExportExcel={handleExportExcel}
+            exporting={exporting}
           />
         )}
         
@@ -690,11 +883,20 @@ export default function Dashboard() {
                 </button>
               )}
               <button
-                onClick={() => navigate('/notifications')}
-                className="px-4 py-2 rounded-xl text-sm font-semibold text-white/85"
+                onClick={handleDevExportPDF}
+                disabled={exporting || loading || !stats}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white/85 flex items-center gap-1.5 disabled:opacity-40"
                 style={{ border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.02)' }}
               >
-                Review Alerts
+                {exporting ? 'Exporting…' : 'PDF Report'}
+              </button>
+              <button
+                onClick={handleDevExportExcel}
+                disabled={exporting || loading || !stats}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white/85 flex items-center gap-1.5 disabled:opacity-40"
+                style={{ border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.02)' }}
+              >
+                {exporting ? 'Exporting…' : 'Excel Export'}
               </button>
             </div>
           </div>
