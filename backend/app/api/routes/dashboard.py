@@ -428,3 +428,138 @@ async def get_ai_analytics(
         "usage_trend": usage_trend,
     }
 
+
+@router.get("/learning")
+async def get_developer_learning(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(P.VIEW_LEARNING_DASHBOARD)),
+    days: int = Query(default=30, ge=1, le=365),
+):
+    """Developer Learning Dashboard — shows the requesting user's own AI usage patterns."""
+    now = datetime.now(UTC)
+    since = now - timedelta(days=days)
+
+    logs = (
+        db.query(AIUsageLog)
+        .filter(
+            AIUsageLog.user_id == current_user.id,
+            AIUsageLog.created_at >= since,
+        )
+        .order_by(AIUsageLog.created_at.asc())
+        .all()
+    )
+
+    total_requests = len(logs)
+
+    # ── Most requested vulnerability types ────────────────────────────────────
+    vuln_counts: dict = defaultdict(int)
+    for log in logs:
+        vuln_counts[log.vulnerability_type or "Unknown"] += 1
+    top_vulnerability_types = [
+        {"vulnerability_type": k, "count": v}
+        for k, v in sorted(vuln_counts.items(), key=lambda x: x[1], reverse=True)
+    ][:10]
+
+    # ── Repeated requests — same vuln type requested ≥ 2 times ───────────────
+    repeated = [
+        {"vulnerability_type": k, "count": v}
+        for k, v in sorted(vuln_counts.items(), key=lambda x: x[1], reverse=True)
+        if v >= 2
+    ]
+
+    # ── Weekly usage buckets (evolution over time) ─────────────────────────────
+    weekly: dict = defaultdict(int)
+    for log in logs:
+        ts = log.created_at if log.created_at.tzinfo else log.created_at.replace(tzinfo=UTC)
+        # ISO-week label: "2026-W24"
+        iso = ts.isocalendar()
+        label = f"{iso[0]}-W{iso[1]:02d}"
+        weekly[label] += 1
+
+    # Build a contiguous weekly series for the window
+    num_weeks = max(1, (days + 6) // 7)
+    weekly_trend = []
+    for w in range(num_weeks - 1, -1, -1):
+        ref = now - timedelta(weeks=w)
+        iso = ref.isocalendar()
+        label = f"{iso[0]}-W{iso[1]:02d}"
+        weekly_trend.append({"week": label, "count": weekly.get(label, 0)})
+
+    # ── Daily trend ────────────────────────────────────────────────────────────
+    daily_map: dict = defaultdict(int)
+    for log in logs:
+        ts = log.created_at if log.created_at.tzinfo else log.created_at.replace(tzinfo=UTC)
+        daily_map[ts.strftime("%b %d")] += 1
+
+    daily_trend = []
+    for i in range(days - 1, -1, -1):
+        day = now - timedelta(days=i)
+        label = day.strftime("%b %d")
+        daily_trend.append({"date": label, "count": daily_map.get(label, 0)})
+
+    # ── Autonomy score ─────────────────────────────────────────────────────────
+    # Score = 100 − penalty.
+    # Penalty per repeated type: log2(count) * 10, capped at 30 per type.
+    # Rationale: asking the same thing twice is mild; 10+ times is a red flag.
+    # A developer who asks about many *distinct* types scores well.
+    import math
+    penalty = 0.0
+    for entry in repeated:
+        repeat_penalty = min(math.log2(entry["count"]) * 10, 30)
+        penalty += repeat_penalty
+
+    # Bonus for breadth — distinct types explored
+    distinct_types = len(vuln_counts)
+    breadth_bonus = min(distinct_types * 5, 30)  # up to +30
+
+    autonomy_score = round(max(0, min(100, 70 - penalty + breadth_bonus)), 1)
+
+    # Trend in autonomy: compare first-half vs second-half of window
+    if logs and len(logs) >= 4:
+        mid = since + (now - since) / 2
+        first_half = [l for l in logs if (l.created_at if l.created_at.tzinfo else l.created_at.replace(tzinfo=UTC)) < mid]
+        second_half = [l for l in logs if (l.created_at if l.created_at.tzinfo else l.created_at.replace(tzinfo=UTC)) >= mid]
+
+        def _repeat_ratio(half_logs: list) -> float:
+            c: dict = defaultdict(int)
+            for ll in half_logs:
+                c[ll.vulnerability_type or "Unknown"] += 1
+            repeats = sum(v for v in c.values() if v > 1)
+            return repeats / max(len(half_logs), 1)
+
+        r1 = _repeat_ratio(first_half)
+        r2 = _repeat_ratio(second_half)
+        if r2 < r1 - 0.1:
+            autonomy_trend = "Improving"
+        elif r2 > r1 + 0.1:
+            autonomy_trend = "Worsening"
+        else:
+            autonomy_trend = "Stable"
+    else:
+        autonomy_trend = "Stable"
+
+    # ── Usage by scan type ─────────────────────────────────────────────────────
+    scan_type_counts: dict = defaultdict(int)
+    for log in logs:
+        scan_type_counts[log.scan_type or "Unknown"] += 1
+    usage_by_scan_type = [
+        {"scan_type": k, "count": v}
+        for k, v in sorted(scan_type_counts.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    return {
+        "days": days,
+        "total_requests": total_requests,
+        "top_vulnerability_types": top_vulnerability_types,
+        "repeated_requests": repeated,
+        "daily_trend": daily_trend,
+        "weekly_trend": weekly_trend,
+        "usage_by_scan_type": usage_by_scan_type,
+        "autonomy": {
+            "score": autonomy_score,
+            "trend": autonomy_trend,
+            "distinct_types": distinct_types,
+            "repeated_type_count": len(repeated),
+        },
+    }
+

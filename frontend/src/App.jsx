@@ -27,6 +27,7 @@ import DocsPage from './pages/DocsPage'
 import Summaries from './pages/Summaries'
 import DailyInsights from './pages/DailyInsights'
 import AIAnalyticsPage from './pages/AIAnalyticsPage'
+import DeveloperLearningPage from './pages/DeveloperLearningPage'
 
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth()
@@ -87,6 +88,7 @@ export default function App() {
             <Route path="/summaries" element={<PermissionRoute permission={PERMISSIONS.USE_AI_SUMMARIES}><Summaries /></PermissionRoute>} />
             <Route path="/insights" element={<PermissionRoute permission={PERMISSIONS.USE_AI_SUMMARIES}><DailyInsights /></PermissionRoute>} />
             <Route path="/ai-analytics" element={<PermissionRoute permission={PERMISSIONS.VIEW_AI_ANALYTICS}><AIAnalyticsPage /></PermissionRoute>} />
+            <Route path="/learning" element={<PermissionRoute permission={PERMISSIONS.VIEW_LEARNING_DASHBOARD}><DeveloperLearningPage /></PermissionRoute>} />
             <Route path="/admin" element={<PermissionRoute permission={PERMISSIONS.MANAGE_USERS}><AdminPage /></PermissionRoute>} />
             <Route path="/audit-logs" element={<PermissionRoute permission={PERMISSIONS.VIEW_AUDIT_LOGS}><AuditLogsPage /></PermissionRoute>} />
             <Route path="/settings" element={<PrivateRoute><SettingsPage /></PrivateRoute>} />

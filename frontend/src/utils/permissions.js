@@ -32,6 +32,7 @@ export const PERMISSIONS = {
   PRIORITIZE_VULNERABILITIES: 'prioritize_vulnerabilities',
   VIEW_SECURITY_METRICS:      'view_security_metrics',
   VIEW_AI_ANALYTICS:          'view_ai_analytics',
+  VIEW_LEARNING_DASHBOARD:     'view_learning_dashboard',
 }
 
 export const ROLE_PERMISSIONS = {
@@ -59,6 +60,7 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.USE_AI_SUMMARIES,
     PERMISSIONS.VIEW_SCAN_RESULTS,
     PERMISSIONS.VIEW_VULNERABILITIES,
+    PERMISSIONS.VIEW_LEARNING_DASHBOARD,
   ],
   'Security Manager': [
     PERMISSIONS.VIEW_DASHBOARD,

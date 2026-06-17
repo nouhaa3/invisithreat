@@ -37,10 +37,13 @@ class P:
     VIEW_VULNERABILITIES       = "view_vulnerabilities"
 
     # Security-lead exclusive actions
-    GENERATE_REPORTS           = "generate_reports"
-    PRIORITIZE_VULNERABILITIES = "prioritize_vulnerabilities"
-    VIEW_SECURITY_METRICS      = "view_security_metrics"
-    VIEW_AI_ANALYTICS          = "view_ai_analytics"
+    GENERATE_REPORTS             = "generate_reports"
+    PRIORITIZE_VULNERABILITIES   = "prioritize_vulnerabilities"
+    VIEW_SECURITY_METRICS        = "view_security_metrics"
+    VIEW_AI_ANALYTICS            = "view_ai_analytics"
+
+    # Developer self-improvement
+    VIEW_LEARNING_DASHBOARD      = "view_learning_dashboard"
 
 
 # ── Role → permissions map ────────────────────────────────────────────────────
@@ -71,6 +74,7 @@ ROLE_PERMISSIONS: dict = {
         P.USE_AI_SUMMARIES,
         P.VIEW_SCAN_RESULTS,
         P.VIEW_VULNERABILITIES,
+        P.VIEW_LEARNING_DASHBOARD,
     ],
     "Security Manager": [
         P.VIEW_DASHBOARD,

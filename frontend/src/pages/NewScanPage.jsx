@@ -1152,7 +1152,7 @@ export default function NewScanPage() {
 
                   <StepCmd n={2} label="Authenticate once with your API key">
                     <CodeBlock>
-                      {`.\\invisithreat.exe login --server ${getApiBase()} --token "${exeNewKeyData?.plaintext || 'YOUR_API_KEY'}"`}
+                      {`.\\invisithreat.exe login --server ${getApiBase()} --token= "${exeNewKeyData?.plaintext || 'YOUR_API_KEY'}"`}
                     </CodeBlock>
                   </StepCmd>
 
@@ -1398,7 +1398,7 @@ export default function NewScanPage() {
 
                         <StepCmd n={2} label="Run the scan (pass your project path)">
                           <CodeBlock>
-                            {`python invisithreat-scan.py /path/to/your/project --token "${cliToken.upload_token}" --api-url "${getApiBase()}"`}
+                            {`python invisithreat-scan.py /path/to/your/project --token= "${cliToken.upload_token}" --api-url "${getApiBase()}"`}
                           </CodeBlock>
                         </StepCmd>
 
