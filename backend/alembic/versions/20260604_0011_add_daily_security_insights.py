@@ -1,15 +1,15 @@
 """add daily_security_insights table
 
-Revision ID: 20260604_0011_add_daily_security_insights
-Revises: 20260531_0010_add_llm_chat_threads
+Revision ID: 20260604_0011_daily_insights
+Revises: 20260531_0010_llm_threads
 Create Date: 2026-06-04 00:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision = '20260604_0011_add_daily_security_insights'
-down_revision = '20260531_0010_add_llm_chat_threads'
+revision = '20260604_0011_daily_insights'
+down_revision = '20260531_0010_llm_threads'
 branch_labels = None
 depends_on = None
 
@@ -33,7 +33,7 @@ def upgrade():
         sa.Column('date', sa.Date(), nullable=False),
         sa.Column('generated_insight', sa.Text(), nullable=False),
         sa.Column('trend_status',
-                  sa.Enum('Improving', 'Stable', 'Worsening', name='trend_status_enum'),
+                  postgresql.ENUM('Improving', 'Stable', 'Worsening', name='trend_status_enum', create_type=False),
                   nullable=False, server_default='Stable'),
         sa.Column('model_used', sa.String(100), nullable=True),
         sa.Column('context_summary', sa.Text(), nullable=True),

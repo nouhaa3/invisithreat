@@ -16,6 +16,7 @@ from app.models.scan import Scan as ScanModel, ScanStatus
 from app.models.vulnerability import Vulnerability as VulnerabilityModel
 from app.models.vulnerability_workflow import VulnerabilityTask as VulnerabilityTaskModel
 from app.models.recommendation import Recommendation as RecommendationModel
+from app.models.ai_usage_log import AIUsageLog
 from app.schemas.llm import (
     LLMChatThreadCreateRequest,
     LLMChatThreadResponse,
@@ -563,6 +564,30 @@ async def llm_vulnerability_assist(
                     yield f"data: {chunk}\n\n"
         except LLMError:
             yield "data: AI assistant is temporarily unavailable. Please try again.\n\n"
+
+    # Determine scan_type from the scan that owns the vulnerability
+    scan_type = None
+    if vulnerability and vulnerability.scan_id:
+        parent_scan = db.query(ScanModel).filter(ScanModel.id == vulnerability.scan_id).first()
+        if parent_scan:
+            scan_type = str(getattr(parent_scan, "analysis_type", None) or "SAST")
+    elif task:
+        scan_type = "SAST"
+
+    # Persist AI usage record (best-effort; never fail the request)
+    try:
+        usage_log = AIUsageLog(
+            user_id=current_user.id,
+            user_role=current_user.role.name if current_user.role else None,
+            project_id=project.id if project else None,
+            vulnerability_id=parsed_uuid,
+            vulnerability_type=title,
+            scan_type=scan_type,
+        )
+        db.add(usage_log)
+        db.commit()
+    except Exception as _log_exc:  # pragma: no cover  # noqa: BLE001
+        db.rollback()
 
     return StreamingResponse(
         event_stream(),

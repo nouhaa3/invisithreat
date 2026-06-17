@@ -1,6 +1,6 @@
 """add llm_chat_threads table
 
-Revision ID: 20260531_0010_llm_threads
+revision = "20260531_0010_llm_threads"
 Revises: 20260521_0001_add_scan_summary
 Create Date: 2026-05-31 00:10:00.000000
 """

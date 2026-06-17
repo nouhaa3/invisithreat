@@ -31,6 +31,7 @@ export const PERMISSIONS = {
   GENERATE_REPORTS:           'generate_reports',
   PRIORITIZE_VULNERABILITIES: 'prioritize_vulnerabilities',
   VIEW_SECURITY_METRICS:      'view_security_metrics',
+  VIEW_AI_ANALYTICS:          'view_ai_analytics',
 }
 
 export const ROLE_PERMISSIONS = {
@@ -66,6 +67,7 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.GENERATE_REPORTS,
     PERMISSIONS.PRIORITIZE_VULNERABILITIES,
     PERMISSIONS.VIEW_SECURITY_METRICS,
+    PERMISSIONS.VIEW_AI_ANALYTICS,
   ],
   Viewer: [
     PERMISSIONS.VIEW_DASHBOARD,

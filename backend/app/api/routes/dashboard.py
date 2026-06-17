@@ -1,7 +1,7 @@
 ﻿"""
 Dashboard statistics endpoint
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, UTC, timedelta
@@ -15,6 +15,7 @@ from app.models.scan import Project, Scan, ScanStatus
 from app.models.security_report import SecurityReport
 from app.models.member import ProjectMember
 from app.models.risk_score import RiskScore
+from app.models.ai_usage_log import AIUsageLog
 from app.services.scan_summary_cache import get_scan_summary
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -337,3 +338,93 @@ async def get_admin_dashboard_stats(
         },
         "usage_trend": usage_trend,
     }
+
+
+@router.get("/ai-analytics")
+async def get_ai_analytics(
+    db: Session = Depends(get_db),
+    _current_user: User = Depends(require_permission(P.VIEW_AI_ANALYTICS)),
+    days: int = Query(default=30, ge=1, le=365),
+):
+    """AI Usage Analytics — Security Manager only."""
+    now = datetime.now(UTC)
+    since = now - timedelta(days=days)
+
+    logs = (
+        db.query(AIUsageLog)
+        .filter(AIUsageLog.created_at >= since)
+        .all()
+    )
+
+    total_usages = len(logs)
+
+    # Top developers using AI (by user_id)
+    usage_by_user: dict = defaultdict(lambda: {"count": 0, "user_role": None, "user_id": None})
+    for log in logs:
+        key = str(log.user_id) if log.user_id else "unknown"
+        usage_by_user[key]["count"] += 1
+        usage_by_user[key]["user_id"] = key
+        if log.user_role:
+            usage_by_user[key]["user_role"] = log.user_role
+
+    # Enrich with user names
+    user_ids = [log.user_id for log in logs if log.user_id]
+    users_by_id: dict = {}
+    if user_ids:
+        user_rows = db.query(User).filter(User.id.in_(user_ids)).all()
+        users_by_id = {str(u.id): u for u in user_rows}
+
+    top_developers = []
+    for uid, data in usage_by_user.items():
+        user_obj = users_by_id.get(uid)
+        top_developers.append({
+            "user_id": uid,
+            "user_name": user_obj.nom if user_obj else "Unknown",
+            "user_email": user_obj.email if user_obj else None,
+            "user_role": data["user_role"],
+            "count": data["count"],
+        })
+    top_developers.sort(key=lambda x: x["count"], reverse=True)
+    top_developers = top_developers[:10]
+
+    # Most requested vulnerability types
+    vuln_type_counts: dict = defaultdict(int)
+    for log in logs:
+        vtype = log.vulnerability_type or "Unknown"
+        vuln_type_counts[vtype] += 1
+    top_vulnerability_types = [
+        {"vulnerability_type": k, "count": v}
+        for k, v in sorted(vuln_type_counts.items(), key=lambda x: x[1], reverse=True)
+    ][:10]
+
+    # Usage by scan type (SAST / DAST / etc.)
+    scan_type_counts: dict = defaultdict(int)
+    for log in logs:
+        stype = log.scan_type or "Unknown"
+        scan_type_counts[stype] += 1
+    usage_by_scan_type = [
+        {"scan_type": k, "count": v}
+        for k, v in sorted(scan_type_counts.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    # Daily usage trend
+    trend_map: dict = defaultdict(int)
+    for log in logs:
+        ts = log.created_at if log.created_at.tzinfo else log.created_at.replace(tzinfo=UTC)
+        trend_map[ts.strftime("%b %d")] += 1
+
+    usage_trend = []
+    for i in range(days - 1, -1, -1):
+        day = now - timedelta(days=i)
+        label = day.strftime("%b %d")
+        usage_trend.append({"date": label, "count": trend_map.get(label, 0)})
+
+    return {
+        "total_usages": total_usages,
+        "days": days,
+        "top_developers": top_developers,
+        "top_vulnerability_types": top_vulnerability_types,
+        "usage_by_scan_type": usage_by_scan_type,
+        "usage_trend": usage_trend,
+    }
+

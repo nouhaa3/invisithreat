@@ -28,6 +28,7 @@ MODEL_MODULES = (
     "scan_summary",
     "llm_chat_thread",
     "daily_security_insight",
+    "ai_usage_log",
 )
 
 

@@ -40,6 +40,7 @@ class P:
     GENERATE_REPORTS           = "generate_reports"
     PRIORITIZE_VULNERABILITIES = "prioritize_vulnerabilities"
     VIEW_SECURITY_METRICS      = "view_security_metrics"
+    VIEW_AI_ANALYTICS          = "view_ai_analytics"
 
 
 # ── Role → permissions map ────────────────────────────────────────────────────
@@ -78,6 +79,7 @@ ROLE_PERMISSIONS: dict = {
         P.GENERATE_REPORTS,
         P.PRIORITIZE_VULNERABILITIES,
         P.VIEW_SECURITY_METRICS,
+        P.VIEW_AI_ANALYTICS,
     ],
     "Viewer": [
         P.VIEW_DASHBOARD,
