@@ -354,7 +354,7 @@ def _get_existing_task_ids_for_scan(db: Session, project_id: uuid.UUID, scan_id:
 
 
 def _deadline_state(task: VulnerabilityTask) -> tuple[bool, bool]:
-    if not task.due_date or task.status in {VulnerabilityTaskStatus.fixed, VulnerabilityTaskStatus.verified}:
+    if not task.due_date or task.status in {VulnerabilityTaskStatus.fixed, VulnerabilityTaskStatus.verified, VulnerabilityTaskStatus.false_positive}:
         return False, False
 
     today = date.today()
@@ -408,7 +408,7 @@ def _serialize_task(task: VulnerabilityTask) -> dict:
 def _notify_deadline_if_needed(db: Session, project: ProjectModel, task: VulnerabilityTask) -> bool:
     if not task.assignee_id or not task.due_date:
         return False
-    if task.status in {VulnerabilityTaskStatus.fixed, VulnerabilityTaskStatus.verified}:
+    if task.status in {VulnerabilityTaskStatus.fixed, VulnerabilityTaskStatus.verified, VulnerabilityTaskStatus.false_positive}:
         return False
     if task.deadline_alert_sent_at is not None:
         return False
@@ -743,8 +743,8 @@ async def update_vulnerability_task(
     if not is_security_actor and any([data.assignee_id is not None, data.clear_assignee, data.due_date is not None, data.clear_due_date]):
         raise HTTPException(status_code=403, detail="Only Security Manager/Admin can change assignment or deadline")
 
-    if not is_security_actor and data.status == "verified":
-        raise HTTPException(status_code=403, detail="Only Security Manager/Admin can mark a task as verified")
+    if not is_security_actor and data.status in {"verified", "false_positive"}:
+        raise HTTPException(status_code=403, detail="Only Security Manager/Admin can mark a task as verified or false positive")
 
     available_assignees = _project_assignable_users(db, project)
     available_assignee_ids = {entry["user_id"] for entry in available_assignees}
@@ -816,6 +816,17 @@ async def update_vulnerability_task(
                 message=f'{current_user.nom} verified this vulnerability in "{project.name}".',
                 link=f"/projects/{project.id}",
             )
+        elif current_status == "false_positive":
+            security_recipients = {user_id for user_id in _security_team_user_ids(db) if user_id != current_user.id}
+            for recipient_id in security_recipients:
+                create_notification(
+                    db,
+                    user_id=recipient_id,
+                    type="system",
+                    title=f'Marked as false positive: "{task.title}"',
+                    message=f'{current_user.nom} marked this vulnerability as a false positive in "{project.name}".',
+                    link=f"/projects/{project.id}",
+                )
 
     if created_comment and task.assignee_id and task.assignee_id != current_user.id:
         create_notification(

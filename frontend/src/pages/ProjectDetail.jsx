@@ -243,6 +243,12 @@ const TASK_STATUS_CONFIG = {
     bg: 'rgba(34,197,94,0.12)',
     border: 'rgba(34,197,94,0.3)',
   },
+  false_positive: {
+    label: 'False Positive',
+    color: '#a78bfa',
+    bg: 'rgba(167,139,250,0.12)',
+    border: 'rgba(167,139,250,0.3)',
+  },
 }
 
 const DARK_SELECT_STYLE = {
@@ -534,7 +540,7 @@ function CurrentFindingRow({
     : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.55)' }
   const statusOptions = canManageTask
     ? Object.entries(TASK_STATUS_CONFIG)
-    : Object.entries(TASK_STATUS_CONFIG).filter(([value]) => value !== 'verified')
+    : Object.entries(TASK_STATUS_CONFIG).filter(([value]) => !['verified', 'false_positive'].includes(value))
 
   const submitTaskChanges = async () => {
     if (!hasWorkflowTask) return
